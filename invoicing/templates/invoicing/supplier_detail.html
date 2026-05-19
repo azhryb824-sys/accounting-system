@@ -1,0 +1,63 @@
+{% extends 'core/base.html' %}
+
+{% block title %}بيانات المورد{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+
+    <h2 class="mb-4">بيانات المورد</h2>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <p><strong>الاسم:</strong> {{ supplier.name }}</p>
+            <p><strong>الرقم الضريبي:</strong> {{ supplier.vat_number }}</p>
+            <p><strong>العنوان:</strong> {{ supplier.address }}</p>
+            <p><strong>الدولة:</strong> {{ supplier.country }}</p>
+        </div>
+    </div>
+
+    <h4 class="mb-3">إحصائيات</h4>
+    <div class="card mb-4">
+        <div class="card-body">
+            <p><strong>عدد فواتير الشراء:</strong> {{ invoice_count }}</p>
+            <p><strong>إجمالي المشتريات:</strong> {{ total_spent }} ريال</p>
+        </div>
+    </div>
+
+    <h4 class="mb-3">فواتير المورد</h4>
+
+    <table class="table table-bordered">
+        <thead class="table-dark">
+            <tr>
+                <th>#</th>
+                <th>رقم الفاتورة</th>
+                <th>التاريخ</th>
+                <th>الإجمالي</th>
+                <th>إجراءات</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in purchases %}
+            <tr>
+                <td>{{ forloop.counter }}</td>
+                <td>{{ p.invoice_number }}</td>
+                <td>{{ p.issue_date }}</td>
+                <td>{{ p.total_with_vat }} ريال</td>
+                <td>
+                    <a href="{% url 'purchase_edit' p.id %}" class="btn btn-sm btn-warning">تعديل</a>
+                    <a href="{% url 'purchase_delete' p.id %}" class="btn btn-sm btn-danger"
+                       onclick="return confirm('هل أنت متأكد من الحذف؟')">حذف</a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="5" class="text-center text-muted">لا توجد فواتير شراء</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <a href="{% url 'supplier_list' %}" class="btn btn-secondary mt-3">رجوع</a>
+
+</div>
+{% endblock %}

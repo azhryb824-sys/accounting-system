@@ -1,0 +1,96 @@
+{% extends 'core/base.html' %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-5">
+        <h2 class="fw-bold text-white"><i class="fa-solid fa-gauge-high me-2 text-primary"></i>{{ title }}</h2>
+        <div>
+            <button onclick="history.back()" class="btn btn-outline-light shadow-sm me-2">
+                <i class="fa-solid fa-arrow-right me-1"></i> رجوع
+            </button>
+            <a href="{% url 'admin_user_create' %}" class="btn btn-primary shadow-sm">
+                <i class="fa-solid fa-plus me-1"></i> إضافة مستخدم
+            </a>
+        </div>
+    </div>
+
+    <!-- بطاقات الإحصائيات السريعة -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-4">
+            <div class="glass-card p-4 text-center border-bottom border-primary border-3">
+                <div class="glass-icon mx-auto mb-3 border-primary text-primary" style="width: 50px; height: 50px; line-height: 50px;">
+                    <i class="fa-solid fa-users"></i>
+                </div>
+                <p class="text-muted-soft mb-1 fw-bold small text-uppercase">إجمالي المستخدمين</p>
+                <h3 class="fw-bold text-white mb-0">{{ total_users }}</h3>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="glass-card p-4 text-center border-bottom border-warning border-3">
+                <div class="glass-icon mx-auto mb-3 border-warning text-warning" style="width: 50px; height: 50px; line-height: 50px;">
+                    <i class="fa-solid fa-clock-rotate-left"></i>
+                </div>
+                <p class="text-muted-soft mb-1 fw-bold small text-uppercase">طلبات اشتراك معلقة</p>
+                <h3 class="fw-bold text-white mb-0">{{ pending_requests }}</h3>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="glass-card p-4 text-center border-bottom border-success border-3">
+                <div class="glass-icon mx-auto mb-3 border-success text-success" style="width: 50px; height: 50px; line-height: 50px;">
+                    <i class="fa-solid fa-gem"></i>
+                </div>
+                <p class="text-muted-soft mb-1 fw-bold small text-uppercase">الباقات النشطة</p>
+                <h3 class="fw-bold text-white mb-0">{{ active_plans }}</h3>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- جدول آخر المستخدمين -->
+        <div class="col-lg-8">
+            <div class="glass-card p-4 h-100">
+                <h5 class="fw-bold mb-4 text-white border-bottom border-secondary pb-2">آخر المستخدمين المنضمين</h5>
+                <div class="table-responsive">
+                    <table class="table table-dark table-hover align-middle mb-0 bg-transparent">
+                        <thead>
+                            <tr class="text-muted-soft">
+                                <th>اسم المستخدم</th>
+                                <th>رقم الهوية</th>
+                                <th>تاريخ الانضمام</th>
+                            </tr>
+                        </thead>
+                        <tbody class="border-top-0">
+                            {% for u in latest_users %}
+                            <tr>
+                                <td><span class="fw-bold text-white">{{ u.username }}</span></td>
+                                <td><code class="text-info">{{ u.profile.national_id|default:"-" }}</code></td>
+                                <td>{{ u.date_joined|date:"Y/m/d" }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="3" class="text-center text-muted">لا يوجد مستخدمون حالياً</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- قائمة الروابط السريعة -->
+        <div class="col-lg-4">
+            <div class="glass-card p-4 h-100">
+                <h5 class="fw-bold mb-4 text-white border-bottom border-secondary pb-2">إدارة سريعة</h5>
+                <div class="d-grid gap-2">
+                    <a href="{% url 'admin_users' %}" class="btn btn-outline-light text-start border-0 py-2"><i class="fa-solid fa-users me-2 text-primary"></i> قائمة المستخدمين</a>
+                    <a href="{% url 'admin_subscription_requests' %}" class="btn btn-outline-light text-start border-0 py-2"><i class="fa-solid fa-file-invoice-dollar me-2 text-primary"></i> مراجعة الاشتراكات</a>
+                    <a href="{% url 'admin_roles' %}" class="btn btn-outline-light text-start border-0 py-2"><i class="fa-solid fa-user-tag me-2 text-primary"></i> الأدوار والصلاحيات</a>
+                    <a href="{% url 'admin_plans' %}" class="btn btn-outline-light text-start border-0 py-2"><i class="fa-solid fa-boxes-stacked me-2 text-primary"></i> باقات الاشتراك</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

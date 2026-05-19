@@ -1,0 +1,24 @@
+{% extends 'core/base.html' %}
+
+{% block title %}بيانات العميل{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+
+    <h2 class="mb-4">بيانات العميل</h2>
+
+    <div class="card">
+        <div class="card-body">
+
+            <p><strong>الاسم:</strong> {{ customer.name }}</p>
+            <p><strong>الرقم الضريبي:</strong> {{ customer.vat_number }}</p>
+            <p><strong>العنوان:</strong> {{ customer.address }}</p>
+            <p><strong>الدولة:</strong> {{ customer.country }}</p>
+
+        </div>
+    </div>
+
+    <a href="{% url 'customer_list' %}" class="btn btn-secondary mt-3">رجوع</a>
+
+</div>
+{% endblock %}

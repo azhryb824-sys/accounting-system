@@ -1,0 +1,56 @@
+{% extends 'core/base.html' %}
+
+{% block title %}قائمة الفواتير{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>قائمة الفواتير</h2>
+        <a href="{% url 'invoice_create' %}" class="btn btn-primary">إنشاء فاتورة جديدة</a>
+    </div>
+
+    <table class="table table-striped table-bordered">
+        <thead class="table-dark">
+            <tr>
+                <th>#</th>
+                <th>رقم الفاتورة</th>
+                <th>العميل</th>
+                <th>النوع</th>
+                <th>التاريخ</th>
+                <th>الإجمالي شامل الضريبة</th>
+                <th>عرض</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            {% for invoice in invoices %}
+            <tr>
+                <td>{{ forloop.counter }}</td>
+                <td>{{ invoice.invoice_number }}</td>
+                <td>{{ invoice.customer.name }}</td>
+                <td>
+                    {% if invoice.invoice_type == 'standard' %}
+                        فاتورة ضريبية
+                    {% else %}
+                        فاتورة مبسطة
+                    {% endif %}
+                </td>
+                <td>{{ invoice.issue_date|date:"Y-m-d H:i" }}</td>
+                <td>{{ invoice.total_with_vat }} ريال</td>
+                <td>
+                    <a href="{% url 'invoice_detail' invoice.id %}" class="btn btn-sm btn-info">
+                        عرض
+                    </a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="7" class="text-center text-muted">لا توجد فواتير حتى الآن</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+</div>
+{% endblock %}

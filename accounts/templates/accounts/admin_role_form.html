@@ -1,0 +1,418 @@
+{% extends 'core/base.html' %}
+
+{% block title %}{{ title }}{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+{% block page_subtitle %}إدارة الدور والصلاحيات المرتبطة به من مكان واحد{% endblock %}
+
+{% block content %}
+<div class="role-page">
+    <div class="role-toolbar">
+        <div>
+            <div class="role-eyebrow">إدارة النظام</div>
+            <h2 class="role-title">
+                <i class="fa-solid fa-user-shield"></i>
+                {{ title }}
+            </h2>
+            <p class="role-note">حدد اسم الدور، ثم اختر الصلاحيات المناسبة لكل قسم في النظام.</p>
+        </div>
+        <a href="{% url 'admin_roles' %}" class="btn btn-outline-light">
+            <i class="fa-solid fa-arrow-right"></i>
+            العودة للأدوار
+        </a>
+    </div>
+
+    <form method="post" class="role-form">
+        {% csrf_token %}
+        <div class="row g-4 align-items-start">
+            <div class="col-xl-4 col-lg-5">
+                <div class="glass-card role-card role-details-card">
+                    <div class="role-card-header">
+                        <div class="role-card-icon"><i class="fa-solid fa-id-badge"></i></div>
+                        <div>
+                            <h5>بيانات الدور</h5>
+                            <span>المعلومات الأساسية التي تظهر للإدارة والمستخدمين</span>
+                        </div>
+                    </div>
+
+                    {% if form.non_field_errors %}
+                    <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                    {% endif %}
+
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ form.name.id_for_label }}">اسم الدور</label>
+                        {{ form.name }}
+                        {% if form.name.errors %}<div class="text-danger small mt-1">{{ form.name.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ form.description.id_for_label }}">وصف مختصر</label>
+                        {{ form.description }}
+                        {% if form.description.errors %}<div class="text-danger small mt-1">{{ form.description.errors }}</div>{% endif %}
+                    </div>
+
+                    <label class="role-switch" for="{{ form.requires_subscription.id_for_label }}">
+                        {{ form.requires_subscription }}
+                        <span>
+                            <strong>يتطلب اشتراكاً مدفوعاً</strong>
+                            <small>فعّل هذا الخيار إذا كان الدور مرتبطاً بباقة اشتراك.</small>
+                        </span>
+                    </label>
+                    {% if form.requires_subscription.errors %}<div class="text-danger small mt-1">{{ form.requires_subscription.errors }}</div>{% endif %}
+
+                    <button type="submit" class="btn btn-primary w-100 role-save-btn">
+                        <i class="fa-solid fa-floppy-disk"></i>
+                        حفظ الدور
+                    </button>
+                </div>
+            </div>
+
+            <div class="col-xl-8 col-lg-7">
+                <div class="glass-card role-card permissions-card">
+                    <div class="role-card-header permissions-header">
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="role-card-icon"><i class="fa-solid fa-list-check"></i></div>
+                            <div>
+                                <h5>الصلاحيات</h5>
+                                <span>اختر ما يستطيع أصحاب هذا الدور عرضه أو إضافته أو تعديله أو حذفه.</span>
+                            </div>
+                        </div>
+                        <div class="permission-actions">
+                            <button type="button" class="btn btn-sm btn-outline-light" id="selectAllPermissions">
+                                <i class="fa-solid fa-check-double"></i>
+                                تحديد الكل
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-light" id="clearAllPermissions">
+                                <i class="fa-solid fa-eraser"></i>
+                                إلغاء الكل
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="permission-search">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="search" id="permissionSearch" placeholder="ابحث باسم القسم أو نوع الصلاحية">
+                    </div>
+
+                    {% if form.permissions.errors %}<div class="text-danger small mb-3">{{ form.permissions.errors }}</div>{% endif %}
+
+                    <div class="permission-grid">
+                        {% regroup form.permissions.field.queryset by content_type as perm_groups %}
+                        {% for group in perm_groups %}
+                        <section class="permission-group" data-group-card>
+                            <div class="permission-group-head">
+                                <div>
+                                    <div class="permission-app">
+                                        {% if group.grouper.app_label == 'core' %}المحاسبة والشركات
+                                        {% elif group.grouper.app_label == 'accounts' %}المستخدمون والاشتراكات
+                                        {% elif group.grouper.app_label == 'invoicing' %}الفواتير والمخزون
+                                        {% else %}قسم النظام
+                                        {% endif %}
+                                    </div>
+                                    <h6>
+                                        {% if group.grouper.model == 'account' %}دليل الحسابات
+                                        {% elif group.grouper.model == 'company' %}الشركات
+                                        {% elif group.grouper.model == 'branch' %}الفروع
+                                        {% elif group.grouper.model == 'journalentry' %}القيود اليومية
+                                        {% elif group.grouper.model == 'journalentryline' %}بنود القيود
+                                        {% elif group.grouper.model == 'role' %}الأدوار
+                                        {% elif group.grouper.model == 'userprofile' %}ملفات المستخدمين
+                                        {% elif group.grouper.model == 'subscriptionplan' %}باقات الاشتراك
+                                        {% elif group.grouper.model == 'subscriptionrequest' %}طلبات الاشتراك
+                                        {% elif group.grouper.model == 'userwarning' %}تنبيهات المستخدمين
+                                        {% elif group.grouper.model == 'fingerprintcredential' %}بصمة الدخول
+                                        {% elif group.grouper.model == 'customer' %}العملاء
+                                        {% elif group.grouper.model == 'supplier' %}الموردون
+                                        {% elif group.grouper.model == 'invoice' %}فواتير البيع
+                                        {% elif group.grouper.model == 'invoiceitem' %}بنود فواتير البيع
+                                        {% elif group.grouper.model == 'purchaseinvoice' %}فواتير الشراء
+                                        {% elif group.grouper.model == 'purchaseitem' %}بنود فواتير الشراء
+                                        {% elif group.grouper.model == 'item' %}الأصناف
+                                        {% elif group.grouper.model == 'stockmovement' %}حركة المخزون
+                                        {% elif group.grouper.model == 'tax' %}الضرائب
+                                        {% else %}{{ group.grouper.model }}
+                                        {% endif %}
+                                    </h6>
+                                </div>
+                                <label class="group-select">
+                                    <input type="checkbox" class="form-check-input select-all-group">
+                                    <span>كل الصلاحيات</span>
+                                </label>
+                            </div>
+
+                            <div class="permission-options">
+                                {% for perm in group.list %}
+                                <label class="permission-option" for="perm_{{ perm.pk }}" data-permission-option>
+                                    <input type="checkbox" name="permissions" value="{{ perm.pk }}"
+                                           class="form-check-input perm-checkbox"
+                                           id="perm_{{ perm.pk }}"
+                                           {% if perm in form.instance.permissions.all %}checked{% endif %}>
+                                    <span class="permission-icon">
+                                        {% if perm.codename|slice:":4" == "add_" %}<i class="fa-solid fa-plus"></i>
+                                        {% elif perm.codename|slice:":7" == "change_" %}<i class="fa-solid fa-pen"></i>
+                                        {% elif perm.codename|slice:":7" == "delete_" %}<i class="fa-solid fa-trash"></i>
+                                        {% elif perm.codename|slice:":5" == "view_" %}<i class="fa-solid fa-eye"></i>
+                                        {% else %}<i class="fa-solid fa-key"></i>{% endif %}
+                                    </span>
+                                    <span class="permission-text">
+                                        {% if perm.codename|slice:":4" == "add_" %}إضافة
+                                        {% elif perm.codename|slice:":7" == "change_" %}تعديل
+                                        {% elif perm.codename|slice:":7" == "delete_" %}حذف
+                                        {% elif perm.codename|slice:":5" == "view_" %}عرض
+                                        {% else %}صلاحية خاصة{% endif %}
+                                    </span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </section>
+                        {% empty %}
+                        <div class="empty-permissions">لا توجد صلاحيات متاحة حالياً.</div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<style>
+    .role-page { max-width: 1260px; margin: 0 auto 32px; }
+    .role-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 18px;
+        margin-bottom: 22px;
+    }
+    .role-eyebrow {
+        color: var(--accent);
+        font-size: 12px;
+        font-weight: 700;
+        margin-bottom: 7px;
+    }
+    .role-title {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 0;
+        font-size: 27px;
+        letter-spacing: 0;
+    }
+    .role-note { color: var(--text-muted); margin: 8px 0 0; font-size: 14px; }
+    .role-card { padding: 22px; border-radius: 14px; }
+    .role-details-card { position: sticky; top: 92px; }
+    .role-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 14px;
+        margin-bottom: 20px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid rgba(255,255,255,0.12);
+    }
+    .role-card-header h5 { margin: 0 0 4px; font-weight: 800; font-size: 18px; }
+    .role-card-header span { color: var(--text-muted); font-size: 12px; }
+    .role-card-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        display: grid;
+        place-items: center;
+        flex: 0 0 44px;
+        background: rgba(56,189,248,0.13);
+        color: var(--accent);
+        border: 1px solid rgba(56,189,248,0.24);
+    }
+    .role-switch {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        padding: 14px;
+        border: 1px solid rgba(255,255,255,0.14);
+        border-radius: 12px;
+        background: rgba(255,255,255,0.06);
+        cursor: pointer;
+        margin-bottom: 18px;
+    }
+    .role-switch strong { display: block; color: #fff; font-size: 14px; margin-bottom: 3px; }
+    .role-switch small { color: var(--text-muted); font-size: 12px; line-height: 1.7; }
+    .role-save-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; font-weight: 800; }
+    .permissions-header { align-items: flex-start; }
+    .permission-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .permission-search {
+        position: relative;
+        margin-bottom: 18px;
+    }
+    .permission-search i {
+        position: absolute;
+        inset-inline-start: 14px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-muted);
+    }
+    .permission-search input {
+        width: 100%;
+        min-height: 44px;
+        border: 1px solid rgba(255,255,255,0.18);
+        border-radius: 10px;
+        background: rgba(255,255,255,0.08);
+        color: #fff;
+        padding: 10px 42px 10px 14px;
+        outline: none;
+    }
+    .permission-search input::placeholder { color: rgba(229,231,235,0.52); }
+    .permission-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 14px;
+    }
+    .permission-group {
+        border: 1px solid rgba(255,255,255,0.13);
+        background: rgba(2,6,23,0.28);
+        border-radius: 12px;
+        overflow: hidden;
+        transition: border-color 0.18s ease, transform 0.18s ease, background 0.18s ease;
+    }
+    .permission-group:hover {
+        border-color: rgba(56,189,248,0.35);
+        background: rgba(15,23,42,0.54);
+    }
+    .permission-group-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 14px;
+        border-bottom: 1px solid rgba(255,255,255,0.10);
+    }
+    .permission-app { color: var(--accent); font-size: 11px; font-weight: 800; margin-bottom: 5px; }
+    .permission-group h6 { margin: 0; font-size: 15px; font-weight: 800; }
+    .group-select {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        white-space: nowrap;
+        color: var(--text-muted);
+        font-size: 12px;
+        cursor: pointer;
+    }
+    .permission-options {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 9px;
+        padding: 14px;
+    }
+    .permission-option {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        min-height: 42px;
+        padding: 9px;
+        border-radius: 10px;
+        border: 1px solid rgba(255,255,255,0.10);
+        background: rgba(255,255,255,0.055);
+        color: #fff;
+        cursor: pointer;
+        transition: 0.16s ease;
+    }
+    .permission-option:hover { border-color: rgba(56,189,248,0.35); background: rgba(56,189,248,0.10); }
+    .permission-option:has(input:checked) {
+        border-color: rgba(56,189,248,0.58);
+        background: rgba(14,165,233,0.18);
+        box-shadow: inset 0 0 0 1px rgba(56,189,248,0.10);
+    }
+    .permission-icon {
+        width: 24px;
+        height: 24px;
+        border-radius: 8px;
+        display: grid;
+        place-items: center;
+        background: rgba(255,255,255,0.09);
+        color: var(--accent);
+        font-size: 12px;
+    }
+    .permission-text { font-size: 13px; font-weight: 700; }
+    .empty-permissions {
+        grid-column: 1 / -1;
+        padding: 28px;
+        text-align: center;
+        color: var(--text-muted);
+        border: 1px dashed rgba(255,255,255,0.18);
+        border-radius: 12px;
+    }
+    .is-hidden { display: none; }
+
+    @media (max-width: 1100px) {
+        .role-details-card { position: static; }
+    }
+    @media (max-width: 720px) {
+        .role-toolbar, .permissions-header { flex-direction: column; }
+        .permission-actions { width: 100%; }
+        .permission-options {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 6px;
+            padding: 10px;
+        }
+        .permission-option {
+            flex-direction: column;
+            justify-content: center;
+            gap: 5px;
+            padding: 8px 4px;
+            text-align: center;
+        }
+        .permission-text { font-size: 12px; }
+        .role-title { font-size: 22px; }
+    }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const permissionCheckboxes = Array.from(document.querySelectorAll('.perm-checkbox'));
+    const groupCards = Array.from(document.querySelectorAll('[data-group-card]'));
+    const searchInput = document.getElementById('permissionSearch');
+
+    function updateGroupState(card) {
+        const groupChecks = Array.from(card.querySelectorAll('.perm-checkbox'));
+        const selectAll = card.querySelector('.select-all-group');
+        const checkedCount = groupChecks.filter((checkbox) => checkbox.checked).length;
+
+        selectAll.checked = checkedCount === groupChecks.length && groupChecks.length > 0;
+        selectAll.indeterminate = checkedCount > 0 && checkedCount < groupChecks.length;
+    }
+
+    groupCards.forEach((card) => {
+        const selectAll = card.querySelector('.select-all-group');
+        selectAll.addEventListener('change', function() {
+            card.querySelectorAll('.perm-checkbox').forEach((checkbox) => {
+                checkbox.checked = this.checked;
+            });
+            updateGroupState(card);
+        });
+        updateGroupState(card);
+    });
+
+    permissionCheckboxes.forEach((checkbox) => {
+        checkbox.addEventListener('change', function() {
+            updateGroupState(this.closest('[data-group-card]'));
+        });
+    });
+
+    document.getElementById('selectAllPermissions').addEventListener('click', function() {
+        permissionCheckboxes.forEach((checkbox) => checkbox.checked = true);
+        groupCards.forEach(updateGroupState);
+    });
+
+    document.getElementById('clearAllPermissions').addEventListener('click', function() {
+        permissionCheckboxes.forEach((checkbox) => checkbox.checked = false);
+        groupCards.forEach(updateGroupState);
+    });
+
+    searchInput.addEventListener('input', function() {
+        const term = this.value.trim().toLowerCase();
+        groupCards.forEach((card) => {
+            const text = card.textContent.toLowerCase();
+            card.classList.toggle('is-hidden', term && !text.includes(term));
+        });
+    });
+});
+</script>
+{% endblock %}

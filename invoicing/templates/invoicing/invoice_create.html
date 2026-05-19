@@ -1,0 +1,58 @@
+{% extends 'core/base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container mt-4">
+
+    <h2 class="mb-4">إنشاء فاتورة جديدة</h2>
+
+    <form method="POST">
+        {% csrf_token %}
+
+        <div class="card mb-4">
+            <div class="card-header bg-dark text-white">بيانات الفاتورة</div>
+            <div class="card-body">
+                {{ form.as_p }}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header bg-secondary text-white">عناصر الفاتورة</div>
+            <div class="card-body">
+                {{ formset.management_form }}
+
+                <table class="table table-bordered">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>الصنف</th>
+                            <th>الوصف</th>
+                            <th>الكمية</th>
+                            <th>السعر</th>
+                            <th>الضريبة</th>
+                            <th>حذف</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        {% for form in formset %}
+                        <tr>
+                            <td>{{ form.item }}</td>
+                            <td>{{ form.description }}</td>
+                            <td>{{ form.quantity }}</td>
+                            <td>{{ form.unit_price }}</td>
+                            <td>{{ form.tax }}</td>
+                            <td>{{ form.DELETE }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+                <button type="submit" class="btn btn-success">حفظ الفاتورة</button>
+                <a href="{% url 'invoice_list' %}" class="btn btn-secondary">رجوع</a>
+            </div>
+        </div>
+
+    </form>
+
+</div>
+{% endblock %}

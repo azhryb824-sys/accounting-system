@@ -1,0 +1,40 @@
+{% extends 'core/base.html' %}
+
+{% block page_title %}المخزون{% endblock %}
+{% block page_subtitle %}الأرصدة الحالية للأصناف في المستودع{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+    <div class="glass-table-container">
+        <table class="table-glass align-middle">
+            <thead>
+                <tr class="text-muted">
+                <th>#</th>
+                <th>الصنف</th>
+                <th>الكمية</th>
+                <th>التكلفة</th>
+                <th>القيمة الإجمالية</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td>{{ forloop.counter }}</td>
+                <td>{{ item.name }}</td>
+                <td>{{ item.quantity }}</td>
+                <td>{{ item.cost }}</td>
+                <td>{{ item.quantity|floatformat:2|add:item.cost }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="5" class="text-center text-muted">لا توجد أصناف</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+
+</div>
+{% endblock %}

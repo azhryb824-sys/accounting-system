@@ -1,0 +1,43 @@
+{% extends 'core/base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+
+    <h2 class="mb-4">حركة المخزون</h2>
+
+    <table class="table table-bordered table-striped">
+        <thead class="table-dark">
+            <tr>
+                <th>#</th>
+                <th>الصنف</th>
+                <th>الكمية</th>
+                <th>النوع</th>
+                <th>التاريخ</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            {% for move in movements %}
+            <tr>
+                <td>{{ forloop.counter }}</td>
+                <td>{{ move.item.name }}</td>
+                <td>{{ move.quantity }}</td>
+                <td>
+                    {% if move.movement_type == "IN" %}
+                        <span class="text-success">دخول</span>
+                    {% else %}
+                        <span class="text-danger">خروج</span>
+                    {% endif %}
+                </td>
+                <td>{{ move.date }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="5" class="text-center text-muted">لا توجد حركات</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+</div>
+{% endblock %}

@@ -1,0 +1,50 @@
+{% extends 'core/base.html' %}
+
+{% block title %}قيود اليومية{% endblock %}
+{% block page_title %}قيود اليومية{% endblock %}
+{% block page_subtitle %}عرض جميع القيود المحاسبية للفرع الحالي{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="text-light mb-0">قائمة القيود</h5>
+    <a href="{% url 'journal_add' %}" class="btn btn-primary px-4">
+        <i class="fa-solid fa-plus"></i> إضافة قيد
+    </a>
+</div>
+<div class="glass-card p-0">
+    <div class="table-responsive">
+        <table class="table table-dark table-hover mb-0 align-middle">
+            <thead>
+                <tr class="text-muted">
+                    <th>رقم القيد</th>
+                    <th>التاريخ</th>
+                    <th>الوصف</th>
+                    <th>إجمالي المدين</th>
+                    <th>إجمالي الدائن</th>
+                    <th>الإجراءات</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in entries %}
+                <tr>
+                    <td>{{ entry.id }}</td>
+                    <td>{{ entry.date }}</td>
+                    <td>{{ entry.description|default:"-" }}</td>
+                    <td>{{ entry.total_debit }}</td>
+                    <td>{{ entry.total_credit }}</td>
+                    <td>
+                        <a href="{% url 'journal_edit' entry.id %}" class="btn btn-sm btn-outline-light">تعديل</a>
+                        <a href="{% url 'journal_copy' entry.id %}" class="btn btn-sm btn-outline-info">نسخ</a>
+                        <a href="{% url 'journal_pdf' entry.id %}" class="btn btn-sm btn-outline-secondary">طباعة</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center text-muted py-4">لا توجد قيود</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

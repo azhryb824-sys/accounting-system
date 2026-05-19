@@ -1,0 +1,86 @@
+{% extends 'core/base.html' %}
+{% load i18n %}
+
+{% block title %}{{ title }}{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+{% block page_subtitle %}إدارة متطلبات الفوترة الإلكترونية - المرحلة الثانية (الربط والتكامل){% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- ملخص الحالة -->
+    <div class="row g-4 mb-5">
+        <div class="col-md-4">
+            <div class="glass-card p-4 text-center h-100">
+                <div class="glass-icon mx-auto mb-3 border-success text-success">
+                    <i class="fa-solid fa-certificate"></i>
+                </div>
+                <h5 class="fw-bold">شهادة الامتثال (CSR)</h5>
+                <p class="text-muted-soft small">حالة الشهادة الحالية في النظام</p>
+                <span class="badge bg-success px-3 py-2">مُصدرة ونشطة</span>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="glass-card p-4 text-center h-100">
+                <div class="glass-icon mx-auto mb-3 border-info text-info">
+                    <i class="fa-solid fa-server"></i>
+                </div>
+                <h5 class="fw-bold">بيئة الربط</h5>
+                <p class="text-muted-soft small">نوع الاتصال بخوادم الهيئة</p>
+                <span class="badge bg-info px-3 py-2">بيئة المحاكاة (Sandbox)</span>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="glass-card p-4 text-center h-100">
+                <div class="glass-icon mx-auto mb-3 border-warning text-warning">
+                    <i class="fa-solid fa-signal"></i>
+                </div>
+                <h5 class="fw-bold">إرسال الفواتير</h5>
+                <p class="text-muted-soft small">حالة التزامن اللحظي للفواتير</p>
+                <span class="badge bg-warning px-3 py-2 text-dark">بانتظار الربط النهائي</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- لوحة التحكم التقنية -->
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="glass-card p-4 h-100">
+                <h5 class="text-light mb-4 border-bottom border-secondary pb-2">سجل عمليات الإرسال الأخيرة</h5>
+                <div class="table-responsive">
+                    <table class="table table-dark table-hover align-middle mb-0">
+                        <thead>
+                            <tr class="text-muted">
+                                <th>رقم الفاتورة</th>
+                                <th>التاريخ</th>
+                                <th>الحالة في الهيئة</th>
+                                <th>الاستجابة</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td colspan="4" class="text-center py-5 text-muted">
+                                    <i class="fa-solid fa-inbox fa-3x mb-3 d-block"></i>
+                                    لا توجد سجلات إرسال حالياً. ابدأ بإصدار فاتورة ضريبية.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="glass-card p-4 h-100">
+                <h5 class="text-light mb-4 border-bottom border-secondary pb-2">أدوات الربط</h5>
+                <div class="d-grid gap-3">
+                    <button class="btn btn-outline-primary text-start p-3">
+                        <i class="fa-solid fa-key me-2"></i> توليد شهادة CSR جديدة
+                    </button>
+                    <button class="btn btn-outline-info text-start p-3">
+                        <i class="fa-solid fa-vial-circle-check me-2"></i> فحص الامتثال (Compliance)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

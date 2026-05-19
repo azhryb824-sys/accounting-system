@@ -1,0 +1,9 @@
+{% extends 'core/base.html' %}
+{% block title %}طلب اشتراك{% endblock %}
+{% block page_title %}طلب اشتراك{% endblock %}
+{% block content %}
+<div class="glass-card p-4"><form method="post" enctype="multipart/form-data">{% csrf_token %}
+{% for field in form %}<div class="mb-3">{{ field.label_tag }}{{ field }}</div>{% endfor %}
+<button class="btn btn-primary">إرسال للمراجعة</button>
+</form></div>
+{% endblock %}

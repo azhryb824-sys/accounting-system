@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>طباعة القيد رقم {{ entry.id }}</title>
+    <style>
+        body { font-family: Tahoma, Arial, sans-serif; color: #111827; margin: 32px; }
+        h1 { font-size: 22px; margin-bottom: 8px; }
+        .muted { color: #6b7280; margin-bottom: 24px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #d1d5db; padding: 10px; text-align: right; }
+        th { background: #f3f4f6; }
+        .totals { margin-top: 20px; display: flex; gap: 30px; font-weight: bold; }
+        @media print { body { margin: 12mm; } }
+    </style>
+</head>
+<body>
+    <h1>قيد يومية رقم {{ entry.id }}</h1>
+    <div class="muted">التاريخ: {{ entry.date }} | الوصف: {{ entry.description|default:"-" }}</div>
+    <table>
+        <thead>
+            <tr>
+                <th>الحساب</th>
+                <th>مدين</th>
+                <th>دائن</th>
+                <th>ملاحظة</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for line in entry.lines.all %}
+            <tr>
+                <td>{{ line.account.code }} - {{ line.account.name }}</td>
+                <td>{{ line.debit }}</td>
+                <td>{{ line.credit }}</td>
+                <td>{{ line.note|default:"-" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div class="totals">
+        <div>إجمالي المدين: {{ entry.total_debit }}</div>
+        <div>إجمالي الدائن: {{ entry.total_credit }}</div>
+    </div>
+</body>
+</html>

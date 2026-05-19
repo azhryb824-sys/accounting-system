@@ -1,0 +1,35 @@
+{% extends 'core/base.html' %}
+
+{% block title %}{{ title }}{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+{% block page_subtitle %}إدارة دليل الحسابات{% endblock %}
+
+{% block content %}
+<div class="glass-card p-4">
+    <form method="post">
+        {% csrf_token %}
+        <div class="row">
+            <div class="col-md-4 mb-3">
+                <label class="form-label" for="{{ form.code.id_for_label }}">الكود</label>
+                {{ form.code }}
+            </div>
+            <div class="col-md-8 mb-3">
+                <label class="form-label" for="{{ form.name.id_for_label }}">اسم الحساب</label>
+                {{ form.name }}
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label" for="{{ form.type.id_for_label }}">نوع الحساب</label>
+                {{ form.type }}
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label" for="{{ form.parent.id_for_label }}">الحساب الأب</label>
+                {{ form.parent }}
+            </div>
+        </div>
+        <div class="mt-3 d-flex gap-2">
+            <button class="btn btn-primary px-4">حفظ</button>
+            <a href="{% url 'accounts_list' %}" class="btn btn-secondary px-4">رجوع</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

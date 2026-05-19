@@ -1,0 +1,54 @@
+{% extends 'core/base.html' %}
+
+{% block title %}عرض القيد رقم {{ entry.id }}{% endblock %}
+{% block page_title %}عرض القيد{% endblock %}
+{% block page_subtitle %}تفاصيل القيد رقم {{ entry.id }}{% endblock %}
+
+{% block content %}
+<div class="glass-card p-4 mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="text-light mb-0">معلومات القيد</h4>
+        <div class="d-flex gap-2">
+            <a href="{% url 'journal_edit' entry.id %}" class="btn btn-primary"><i class="fa-solid fa-pen"></i> تعديل</a>
+            <a href="{% url 'journal_copy' entry.id %}" class="btn btn-info"><i class="fa-solid fa-copy"></i> نسخ القيد</a>
+            <a href="{% url 'journal_pdf' entry.id %}" class="btn btn-danger"><i class="fa-solid fa-file-pdf"></i> طباعة</a>
+        </div>
+    </div>
+    <div class="row text-light">
+        <div class="col-md-4 mb-3"><span class="text-muted-soft">رقم القيد</span><div class="fs-5">{{ entry.id }}</div></div>
+        <div class="col-md-4 mb-3"><span class="text-muted-soft">التاريخ</span><div class="fs-5">{{ entry.date }}</div></div>
+        <div class="col-md-4 mb-3"><span class="text-muted-soft">الوصف</span><div class="fs-5">{{ entry.description|default:"-" }}</div></div>
+    </div>
+</div>
+
+<div class="glass-card p-4">
+    <h4 class="text-light mb-3">تفاصيل الأسطر</h4>
+    <div class="table-responsive">
+        <table class="table table-dark table-hover align-middle">
+            <thead>
+                <tr class="text-muted">
+                    <th>الحساب</th>
+                    <th>مدين</th>
+                    <th>دائن</th>
+                    <th>ملاحظة</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for line in entry.lines.all %}
+                <tr>
+                    <td>{{ line.account.code }} - {{ line.account.name }}</td>
+                    <td>{{ line.debit }}</td>
+                    <td>{{ line.credit }}</td>
+                    <td>{{ line.note|default:"-" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <hr class="border-secondary">
+    <div class="row text-light">
+        <div class="col-md-6"><span class="text-muted-soft">إجمالي المدين</span><div class="fs-4 text-success">{{ entry.total_debit }}</div></div>
+        <div class="col-md-6"><span class="text-muted-soft">إجمالي الدائن</span><div class="fs-4 text-danger">{{ entry.total_credit }}</div></div>
+    </div>
+</div>
+{% endblock %}

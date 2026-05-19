@@ -1,0 +1,28 @@
+{% extends 'core/base.html' %}
+
+{% block title %}اختيار الشركة والفرع{% endblock %}
+{% block page_title %}اختيار الشركة والفرع{% endblock %}
+{% block page_subtitle %}حدد الشركة والفرع للعمل عليهما{% endblock %}
+
+{% block content %}
+<div class="glass-card p-4" style="max-width: 560px; margin: auto;">
+    <form method="post">
+        {% csrf_token %}
+        <label class="form-label">الشركة</label>
+        <select name="company_id" class="form-select mb-3" required>
+            <option value="">اختر الشركة</option>
+            {% for c in companies %}
+            <option value="{{ c.id }}">{{ c.name }}</option>
+            {% endfor %}
+        </select>
+        <label class="form-label">الفرع</label>
+        <select name="branch_id" class="form-select mb-3" required>
+            <option value="">اختر الفرع</option>
+            {% for b in branches %}
+            <option value="{{ b.id }}">{{ b.name }} - {{ b.company.name }}</option>
+            {% endfor %}
+        </select>
+        <button class="btn btn-primary w-100 py-2">متابعة</button>
+    </form>
+</div>
+{% endblock %}

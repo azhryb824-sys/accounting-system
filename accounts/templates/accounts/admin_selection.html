@@ -1,0 +1,40 @@
+{% extends 'core/base.html' %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="glass-card p-5 shadow-lg text-center">
+                <div class="glass-icon mx-auto mb-4 border-primary text-primary">
+                    <i class="fa-solid fa-user-shield fa-2x"></i>
+                </div>
+                <h3 class="fw-bold mb-3">مرحباً بك، أيها المشرف</h3>
+                <p class="text-muted-soft mb-5">يرجى اختيار الوجهة المطلوبة للمتابعة</p>
+
+                <div class="mb-4">
+                    <button onclick="history.back()" class="btn btn-link text-muted-soft text-decoration-none p-0">
+                        <i class="fa-solid fa-arrow-right me-1"></i> العودة للخلف
+                    </button>
+                </div>
+                
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <a href="{% url 'admin_home' %}" class="btn btn-outline-primary w-100 py-3 d-flex flex-column align-items-center">
+                            <i class="fa-solid fa-gauge-high mb-2 fa-2x"></i>
+                            <span>لوحة تحكم الإدارة</span>
+                        </a>
+                    </div>
+                    <div class="col-md-6">
+                        <a href="{% url 'dashboard' %}" class="btn btn-primary w-100 py-3 d-flex flex-column align-items-center">
+                            <i class="fa-solid fa-desktop mb-2 fa-2x"></i>
+                            <span>الدخول إلى النظام</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,58 @@
+{% extends 'core/base.html' %}
+
+{% load i18n %}
+
+{% block content %}
+<div class="container mt-5">
+
+    <div class="row justify-content-center">
+        <div class="col-md-7">
+
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white text-center">
+                    <h4 class="mb-0">{% trans "Session Setup - Select Branch" %}</h4>
+                </div>
+
+                <div class="card-body">
+
+                    <form method="post">
+                        {% csrf_token %}
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">{% trans "Company" %}</label>
+                            <select name="company_id" class="form-select shadow-sm" required>
+                                <option value="">{% trans "Select Company..." %}</option>
+                                {% for company in companies %}
+                                    <option value="{{ company.id }}">{{ company.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">{% trans "Branch" %}</label>
+                            <select name="branch_id" class="form-select shadow-sm" required>
+                                <option value="">{% trans "Select Branch..." %}</option>
+                                {% for branch in branches %}
+                                    <option value="{{ branch.id }}">
+                                        {{ branch.name }} ({{ branch.company.name }})
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="d-grid mt-4">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                {% trans "Enter System" %}
+                            </button>
+                        </div>
+
+                    </form>
+
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+</div>
+{% endblock %}

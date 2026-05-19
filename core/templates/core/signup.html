@@ -1,0 +1,25 @@
+{% extends 'core/base.html' %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-5">
+            <div class="glass-card p-4">
+                <h3 class="text-center mb-4">إنشاء حساب جديد</h3>
+                <form method="post">
+                    {% csrf_token %}
+                    {% for field in form %}
+                        <div class="mb-3">
+                            <label class="form-label">{{ field.label }}</label>
+                            {{ field }}
+                            <small class="text-muted d-block">{{ field.help_text }}</small>
+                        </div>
+                    {% endfor %}
+                    <button type="submit" class="btn btn-primary w-100 py-2">تسجيل الحساب</button>
+                </form>
+                <p class="text-center mt-3">لديك حساب بالفعل؟ <a href="{% url 'login' %}">سجل دخولك هنا</a></p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

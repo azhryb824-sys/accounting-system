@@ -1,0 +1,50 @@
+{% extends 'core/base.html' %}
+
+{% block content %}
+<div class="container text-center py-5">
+    <div class="row py-lg-5">
+        <div class="col-lg-8 col-md-10 mx-auto">
+            <h1 class="display-3 fw-bold text-light mb-4">نظام المحاسبة المتكامل</h1>
+            <p class="lead text-muted-soft mb-5">
+                الحل الأمثل لإدارة الشركات، الفروع، والقيود المحاسبية بكل سهولة وأمان. 
+                متوافق تماماً مع متطلبات هيئة الزكاة والضريبة والجمارك.
+            </p>
+            <div class="d-grid gap-3 d-sm-flex justify-content-sm-center">
+                <a href="{% url 'login' %}" class="btn btn-primary btn-lg px-5">تسجيل الدخول</a>
+                <a href="{% url 'signup' %}" class="btn btn-outline-light btn-lg px-5">إنشاء حساب جديد</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-5">
+        <div class="col-md-4 mb-4">
+            <div class="glass-card p-4 h-100">
+                <i class="fa-solid fa-file-invoice-dollar fa-3x mb-3 text-primary"></i>
+                <h3>الفوترة الإلكترونية</h3>
+                <p class="text-muted-soft">إصدار فواتير ضريبية متوافقة مع المرحلة الثانية (الربط والتكامل).</p>
+            </div>
+        </div>
+        <div class="col-md-4 mb-4">
+            <div class="glass-card p-4 h-100">
+                <i class="fa-solid fa-code-branch fa-3x mb-3 text-info"></i>
+                <h3>تعدد الفروع</h3>
+                <p class="text-muted-soft">إدارة عدة شركات وفروع من خلال لوحة تحكم واحدة وبصلاحيات مستقلة.</p>
+            </div>
+        </div>
+        <div class="col-md-4 mb-4">
+            <div class="glass-card p-4 h-100">
+                <i class="fa-solid fa-chart-line fa-3x mb-3 text-success"></i>
+                <h3>تقارير ذكية</h3>
+                <p class="text-muted-soft">ميزان مراجعة، دفاتر يومية، وتقارير ضريبية دقيقة بضغطة زر.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .text-muted-soft { color: #a0a0a0; }
+    .display-3 { text-shadow: 0px 4px 10px rgba(0,0,0,0.5); }
+    .btn-lg { border-radius: 12px; font-weight: 600; transition: 0.3s; }
+    .btn-lg:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+</style>
+{% endblock %}

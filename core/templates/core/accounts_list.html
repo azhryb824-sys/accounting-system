@@ -1,0 +1,43 @@
+{% extends 'core/base.html' %}
+
+{% block title %}دليل الحسابات{% endblock %}
+{% block page_title %}دليل الحسابات{% endblock %}
+{% block page_subtitle %}عرض جميع الحسابات المحاسبية{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="text-light mb-0">قائمة الحسابات</h5>
+    <a href="{% url 'account_add' %}" class="btn btn-primary px-4">
+        <i class="fa-solid fa-plus"></i> إضافة حساب
+    </a>
+</div>
+
+<div class="glass-card p-0">
+    <div class="table-responsive">
+        <table class="table table-dark table-hover mb-0 align-middle">
+            <thead>
+                <tr class="text-muted">
+                    <th>الكود</th>
+                    <th>الحساب</th>
+                    <th>النوع</th>
+                    <th>الحساب الأب</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for a in accounts %}
+                <tr>
+                    <td>{{ a.code }}</td>
+                    <td>{{ a.name }}</td>
+                    <td>{{ a.get_type_display }}</td>
+                    <td>{{ a.parent.name|default:"-" }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4" class="text-center text-muted py-4">لا توجد حسابات</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends 'core/base.html' %}
+
+{% block title %}اختيار الشركة والفرع{% endblock %}
+{% block page_title %}اختيار الشركة والفرع{% endblock %}
+{% block page_subtitle %}حدد الشركة والفرع قبل الدخول إلى لوحة التحكم{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <div class="glass-card p-4">
+            <h4 class="text-center text-white mb-4">إعداد الجلسة</h4>
+            <form method="post">
+                {% csrf_token %}
+                <div class="mb-4">
+                    <label class="form-label fw-bold">الشركة</label>
+                    <select name="company_id" class="form-select form-select-lg" required>
+                        <option value="">اختر الشركة</option>
+                        {% for company in companies %}
+                            <option value="{{ company.id }}">{{ company.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label fw-bold">الفرع</label>
+                    <select name="branch_id" class="form-select form-select-lg" required>
+                        <option value="">اختر الفرع</option>
+                        {% for branch in branches %}
+                            <option value="{{ branch.id }}">{{ branch.name }} - {{ branch.company.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="d-grid">
+                    <button type="submit" class="btn btn-primary btn-lg py-2">الدخول إلى النظام</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

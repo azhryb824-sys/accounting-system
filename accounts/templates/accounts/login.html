@@ -1,0 +1,51 @@
+{% extends 'core/base.html' %}
+
+{% block title %}تسجيل الدخول{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-4">
+            <div class="glass-card p-4 shadow-lg border-0">
+                <div class="mb-2">
+                    <button onclick="history.back()" class="btn btn-sm text-muted-soft">
+                        <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </div>
+                <div class="text-center mb-4">
+                    <div class="glass-icon mx-auto mb-3">
+                        <i class="fa-solid fa-lock text-primary"></i>
+                    </div>
+                    <h3 class="fw-bold">تسجيل الدخول</h3>
+                    <p class="text-muted small">أدخل بياناتك للوصول إلى النظام المحاسبي</p>
+                </div>
+
+                <form method="post">
+                    {% csrf_token %}
+
+                    {% if form.errors %}
+                    <div class="alert alert-danger bg-danger border-0 text-white py-2 small mb-3">
+                        <i class="fa-solid fa-triangle-exclamation me-2"></i>
+                        بيانات الدخول غير صحيحة، يرجى المحاولة مرة أخرى.
+                    </div>
+                    {% endif %}
+
+                    <div class="mb-3">
+                        <label class="form-label">رقم الهوية</label>
+                        <input type="text" name="national_id" class="form-control shadow-none" placeholder="أدخل رقم الهوية" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">كلمة المرور</label>
+                        <input type="password" name="password" class="form-control shadow-none" placeholder="أدخل كلمة المرور" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 py-2">دخول</button>
+                </form>
+
+                <div class="text-center mt-4">
+                    <p class="text-muted small">ليس لديك حساب؟ <a href="{% url 'signup' %}" class="text-primary text-decoration-none fw-bold">أنشئ حساباً جديداً</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

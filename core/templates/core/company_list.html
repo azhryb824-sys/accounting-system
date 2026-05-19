@@ -1,0 +1,42 @@
+{% extends 'core/base.html' %}
+
+{% block title %}الشركات{% endblock %}
+{% block page_title %}الشركات{% endblock %}
+{% block page_subtitle %}إدارة الشركات المسجلة في النظام{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="text-light mb-0">قائمة الشركات</h5>
+    <a href="{% url 'company_add' %}" class="btn btn-primary px-4">
+        <i class="fa-solid fa-plus"></i> إضافة شركة
+    </a>
+</div>
+<div class="glass-card p-0">
+    <div class="table-responsive">
+        <table class="table table-dark table-hover mb-0 align-middle">
+            <thead>
+                <tr class="text-muted">
+                    <th>الاسم</th>
+                    <th>الرقم الموحد</th>
+                    <th>السجل التجاري</th>
+                    <th>الرقم الضريبي</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in companies %}
+                <tr>
+                    <td>{{ c.name }}</td>
+                    <td>{{ c.unified_number }}</td>
+                    <td>{{ c.commercial_number|default:"-" }}</td>
+                    <td>{{ c.vat_number|default:"-" }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4" class="text-center text-muted py-4">لا توجد شركات</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

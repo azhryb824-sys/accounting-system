@@ -1,0 +1,13 @@
+{% extends 'core/base.html' %}
+{% block title %}بصمة الدخول{% endblock %}
+{% block page_title %}بصمة الدخول{% endblock %}
+{% block page_subtitle %}إعداد الدخول بالبصمة أو مفاتيح الأمان المدعومة من الجهاز{% endblock %}
+{% block content %}
+<div class="glass-card p-4">
+    {% for message in messages %}<div class="alert alert-info">{{ message }}</div>{% endfor %}
+    <p class="text-muted-soft">هذا الخيار يجهز الحساب لاستخدام WebAuthn/FIDO2. التخزين الفعلي للبصمة يبقى على جهاز المستخدم ولا يتم حفظ البصمة نفسها داخل النظام.</p>
+    <form method="post">{% csrf_token %}
+        <button class="btn btn-primary"><i class="fa-solid fa-fingerprint"></i> تفعيل خيار البصمة</button>
+    </form>
+</div>
+{% endblock %}

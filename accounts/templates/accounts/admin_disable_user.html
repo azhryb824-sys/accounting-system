@@ -1,0 +1,4 @@
+{% extends 'core/base.html' %}
+{% block title %}تعطيل حساب{% endblock %}
+{% block page_title %}تعطيل حساب {{ target.username }}{% endblock %}
+{% block content %}<div class="glass-card p-4"><form method="post">{% csrf_token %}{% for field in form %}<div class="mb-3">{{ field.label_tag }}{{ field }}</div>{% endfor %}<button class="btn btn-danger">حفظ الحالة</button></form></div>{% endblock %}

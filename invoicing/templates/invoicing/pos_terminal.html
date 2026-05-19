@@ -1,0 +1,220 @@
+{% extends 'core/base.html' %}
+
+{% block title %}الكاشير{% endblock %}
+{% block page_title %}الكاشير{% endblock %}
+{% block page_subtitle %}نقطة بيع سريعة تدعم قارئ الباركود وسلة احترافية{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <div class="col-lg-7">
+        <div class="glass-card p-4 mb-4">
+            <div class="d-flex gap-2">
+                <input id="barcodeInput" class="form-control form-control-lg" placeholder="امسح باركود المنتج أو اكتب اسمه" autofocus>
+                <button id="searchBtn" class="btn btn-primary px-4"><i class="fa-solid fa-magnifying-glass"></i></button>
+            </div>
+            <div id="scanMessage" class="text-muted-soft mt-2">جاهز للمسح</div>
+        </div>
+
+        <div class="glass-card p-0">
+            <table class="table table-dark table-hover align-middle mb-0">
+                <thead>
+                    <tr class="text-muted">
+                        <th>المنتج</th>
+                        <th>الكمية</th>
+                        <th>السعر</th>
+                        <th>الإجمالي</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="cartBody">
+                    <tr><td colspan="5" class="text-center text-muted py-4">السلة فارغة</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="col-lg-5">
+        <div class="glass-card p-4">
+            <h5 class="mb-3">ملخص البيع</h5>
+            <div class="mb-3">
+                <label class="form-label">العميل</label>
+                <select id="customerSelect" class="form-select">
+                    <option value="">عميل نقدي</option>
+                    {% for customer in customers %}
+                    <option value="{{ customer.id }}">{{ customer.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">طريقة الدفع</label>
+                <select id="paymentMethod" class="form-select">
+                    <option>نقدي</option>
+                    <option>بطاقة</option>
+                    <option>تحويل</option>
+                </select>
+            </div>
+            <div class="d-flex justify-content-between py-2 border-bottom border-secondary">
+                <span class="text-muted-soft">الإجمالي قبل الضريبة</span>
+                <strong id="subtotal">0.00</strong>
+            </div>
+            <div class="d-flex justify-content-between py-2 border-bottom border-secondary">
+                <span class="text-muted-soft">ضريبة القيمة المضافة</span>
+                <strong id="vat">0.00</strong>
+            </div>
+            <div class="d-flex justify-content-between py-3 fs-4">
+                <span>المستحق</span>
+                <strong id="grandTotal">0.00</strong>
+            </div>
+            <button id="checkoutBtn" class="btn btn-primary btn-lg w-100 py-3">
+                <i class="fa-solid fa-check"></i> إتمام البيع
+            </button>
+            <a id="lastInvoiceLink" class="btn btn-outline-light w-100 mt-2 d-none" href="#">عرض آخر فاتورة</a>
+        </div>
+
+        <div class="glass-card p-4 mt-4">
+            <h6 class="mb-3">منتجات سريعة</h6>
+            <div class="row g-2">
+                {% for product in products %}
+                <div class="col-md-6">
+                    <button class="btn btn-outline-light w-100 quick-product"
+                            data-id="{{ product.id }}"
+                            data-name="{{ product.name }}"
+                            data-price="{{ product.selling_price|default:product.cost }}"
+                            data-stock="{{ product.quantity }}">
+                        {{ product.name }}
+                    </button>
+                </div>
+                {% empty %}
+                <div class="text-muted-soft">لا توجد منتجات متاحة للبيع.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const cart = new Map();
+const taxRate = 0.15;
+const cartBody = document.getElementById("cartBody");
+const barcodeInput = document.getElementById("barcodeInput");
+const scanMessage = document.getElementById("scanMessage");
+
+function money(value) {
+    return Number(value || 0).toFixed(2);
+}
+
+function addToCart(product) {
+    const existing = cart.get(product.id);
+    if (existing) {
+        existing.quantity += 1;
+    } else {
+        cart.set(product.id, {
+            id: product.id,
+            name: product.name,
+            price: Number(product.price || 0),
+            quantity: 1,
+            stock: Number(product.quantity || product.stock || 0)
+        });
+    }
+    renderCart();
+}
+
+function renderCart() {
+    if (cart.size === 0) {
+        cartBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">السلة فارغة</td></tr>';
+    } else {
+        cartBody.innerHTML = Array.from(cart.values()).map(item => `
+            <tr>
+                <td>${item.name}<div class="text-muted-soft">المتاح: ${money(item.stock)}</div></td>
+                <td><input class="form-control qty-input" data-id="${item.id}" type="number" min="1" step="1" value="${item.quantity}"></td>
+                <td><input class="form-control price-input" data-id="${item.id}" type="number" min="0" step="0.01" value="${money(item.price)}"></td>
+                <td>${money(item.quantity * item.price)}</td>
+                <td><button class="btn btn-sm btn-outline-danger remove-item" data-id="${item.id}"><i class="fa-solid fa-trash"></i></button></td>
+            </tr>
+        `).join("");
+    }
+    const subtotal = Array.from(cart.values()).reduce((sum, item) => sum + item.quantity * item.price, 0);
+    const vat = subtotal * taxRate;
+    document.getElementById("subtotal").textContent = money(subtotal);
+    document.getElementById("vat").textContent = money(vat);
+    document.getElementById("grandTotal").textContent = money(subtotal + vat);
+}
+
+async function lookupProduct() {
+    const value = barcodeInput.value.trim();
+    if (!value) return;
+    const url = value.length >= 6 ? `{% url 'pos_product_lookup' %}?barcode=${encodeURIComponent(value)}` : `{% url 'pos_product_lookup' %}?q=${encodeURIComponent(value)}`;
+    try {
+        const response = await fetch(url);
+        const data = await response.json();
+        if (!data.ok) throw new Error(data.message);
+        addToCart(data.product);
+        scanMessage.textContent = `تمت إضافة ${data.product.name}`;
+        barcodeInput.value = "";
+    } catch (error) {
+        scanMessage.textContent = error.message || "لم يتم العثور على المنتج";
+    }
+}
+
+document.getElementById("searchBtn").addEventListener("click", lookupProduct);
+barcodeInput.addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+        event.preventDefault();
+        lookupProduct();
+    }
+});
+
+document.querySelectorAll(".quick-product").forEach(button => {
+    button.addEventListener("click", () => addToCart(button.dataset));
+});
+
+cartBody.addEventListener("input", event => {
+    const id = Number(event.target.dataset.id);
+    const item = cart.get(id);
+    if (!item) return;
+    if (event.target.classList.contains("qty-input")) item.quantity = Number(event.target.value || 1);
+    if (event.target.classList.contains("price-input")) item.price = Number(event.target.value || 0);
+    renderCart();
+});
+
+cartBody.addEventListener("click", event => {
+    const button = event.target.closest(".remove-item");
+    if (!button) return;
+    cart.delete(Number(button.dataset.id));
+    renderCart();
+});
+
+document.getElementById("checkoutBtn").addEventListener("click", async () => {
+    if (cart.size === 0) {
+        scanMessage.textContent = "السلة فارغة";
+        return;
+    }
+    const response = await fetch("{% url 'pos_checkout' %}", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": "{{ csrf_token }}"
+        },
+        body: JSON.stringify({
+            customer_id: document.getElementById("customerSelect").value,
+            payment_method: document.getElementById("paymentMethod").value,
+            lines: Array.from(cart.values())
+        })
+    });
+    const data = await response.json();
+    if (!data.ok) {
+        scanMessage.textContent = data.message || "تعذر إتمام البيع";
+        return;
+    }
+    cart.clear();
+    renderCart();
+    scanMessage.textContent = `تم إصدار الفاتورة ${data.invoice_number} - حالة الهيئة: ${data.zatca_status}`;
+    const link = document.getElementById("lastInvoiceLink");
+    link.href = data.detail_url;
+    link.classList.remove("d-none");
+    barcodeInput.focus();
+});
+</script>
+{% endblock %}
