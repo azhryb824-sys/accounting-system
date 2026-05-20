@@ -13,7 +13,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 SECRET_KEY = 'django-insecure-ryg^9b$=3g#3$znjv=5@0ia5^@gi!@m(sj-6@5dt3k&k)isbl$'
 DEBUG = True
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    'accounting-system-t740.onrender.com',
+    'localhost',
+    '127.0.0.1',
+]
 
 
 # Application definition
