@@ -8,5 +8,5 @@ urlpatterns = [
     path('<int:id>/delete/', purchase_views.purchase_delete, name='purchase_delete'),
     path('inventory/', purchase_views.inventory_list, name='inventory_list'),
     #path('inventory/add/', purchase_views.item_add, name='item_add'),
-    path('inventory/<int:item_id>/edit/', purchase_views.item_edit, name='item_edit'),
+    #path('inventory/<int:item_id>/edit/', purchase_views.item_edit, name='item_edit'),
 ]
