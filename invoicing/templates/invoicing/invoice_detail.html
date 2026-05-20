@@ -1,97 +1,102 @@
 {% extends 'core/base.html' %}
 
+{% block page_title %}فاتورة رقم {{ invoice.invoice_number }}{% endblock %}
+{% block page_subtitle %}تفاصيل الفاتورة وحالة جاهزيتها لمتطلبات هيئة الزكاة والضريبة والجمارك{% endblock %}
+
 {% block content %}
-<div class="container mt-4">
-
+<div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="mb-0">تفاصيل الفاتورة رقم {{ invoice.invoice_number }}</h2>
-        <button onclick="history.back()" class="btn btn-outline-secondary">
-            <i class="fa-solid fa-arrow-right me-1"></i> رجوع
-        </button>
+        <div>
+            {% if invoice.is_posted %}
+                <span class="badge bg-success">الفاتورة مرحلة</span>
+            {% else %}
+                <span class="badge bg-secondary">مسودة</span>
+            {% endif %}
+            {% if invoice.zatca_status == "جاهزة للإرسال" %}
+                <span class="badge bg-info">جاهزة للإرسال</span>
+            {% else %}
+                <span class="badge bg-warning text-dark">غير مستوفية</span>
+            {% endif %}
+        </div>
+        <div class="d-flex gap-2">
+            {% if not invoice.is_posted %}
+                <a href="{% url 'post_invoice' invoice.id %}" class="btn btn-success">
+                    <i class="fa-solid fa-check"></i> ترحيل الفاتورة
+                </a>
+            {% endif %}
+            <a href="{% url 'invoice_list' %}" class="btn btn-outline-light">رجوع</a>
+        </div>
     </div>
 
-    <!-- ⭐ زر الترحيل -->
-    {% if not invoice.is_posted %}
-        <a href="{% url 'post_invoice' invoice.id %}" class="btn btn-success mb-3">
-            ترحيل الفاتورة
-        </a>
-    {% else %}
-        <span class="badge bg-success mb-3">الفاتورة مُرحّلة</span>
+    {% if zatca_warnings %}
+    <div class="alert alert-warning">
+        <strong>يجب تصحيح المتطلبات التالية قبل الترحيل:</strong>
+        {% for warning in zatca_warnings %}
+            <div class="mt-1">{{ warning }}</div>
+        {% endfor %}
+    </div>
     {% endif %}
-    <div class="glass-soft p-3 mb-4">
-        <div class="d-flex justify-content-between align-items-center">
-            <div>
-                <div class="text-muted-soft">حالة جاهزية هيئة الزكاة والضريبة والجمارك</div>
-                <strong>{{ invoice.zatca_status }}</strong>
+
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="glass-card p-4 mb-4">
+                <h5 class="mb-3">بيانات الفاتورة</h5>
+                <div class="row g-3">
+                    <div class="col-md-6"><span class="text-muted-soft">العميل</span><div>{{ invoice.customer.name }}</div></div>
+                    <div class="col-md-6"><span class="text-muted-soft">الرقم الضريبي للعميل</span><div>{{ invoice.customer.vat_number|default:"-" }}</div></div>
+                    <div class="col-md-6"><span class="text-muted-soft">التاريخ</span><div>{{ invoice.issue_date|date:"Y-m-d H:i" }}</div></div>
+                    <div class="col-md-6"><span class="text-muted-soft">النوع</span><div>{{ invoice.get_invoice_type_display }}</div></div>
+                    <div class="col-md-6"><span class="text-muted-soft">UUID</span><div class="small text-break">{{ invoice.uuid }}</div></div>
+                    <div class="col-md-6"><span class="text-muted-soft">بصمة XML</span><div class="small text-break">{{ invoice.zatca_hash|default:"-" }}</div></div>
+                </div>
             </div>
-            <div class="text-muted-soft">بصمة الفاتورة: {{ invoice.zatca_hash|default:"لم تنشأ بعد" }}</div>
-        </div>
-        {% if zatca_warnings %}
-        <div class="alert alert-warning mt-3 mb-0">
-            {% for warning in zatca_warnings %}
-                <div>{{ warning }}</div>
-            {% endfor %}
-        </div>
-        {% endif %}
-    </div>
 
-    <div class="card mb-4">
-        <div class="card-header bg-dark text-white">بيانات الفاتورة</div>
-        <div class="card-body">
-            <p><strong>العميل:</strong> {{ invoice.customer.name }}</p>
-            <p><strong>التاريخ:</strong> {{ invoice.issue_date }}</p>
-            <p><strong>النوع:</strong> {{ invoice.get_invoice_type_display }}</p>
+            <div class="glass-card p-4">
+                <h5 class="mb-3">البنود</h5>
+                <div class="table-responsive">
+                    <table class="table table-dark table-hover align-middle">
+                        <thead>
+                            <tr>
+                                <th>الصنف</th>
+                                <th>الوصف</th>
+                                <th>الكمية</th>
+                                <th>السعر</th>
+                                <th>الضريبة</th>
+                                <th>الإجمالي</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in items %}
+                            <tr>
+                                <td>{{ item.item.name }}</td>
+                                <td>{{ item.description }}</td>
+                                <td>{{ item.quantity }}</td>
+                                <td>{{ item.unit_price }}</td>
+                                <td>{{ item.line_vat }}</td>
+                                <td>{{ item.line_total_with_vat }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="row g-3 mt-3">
+                    <div class="col-md-4"><span class="text-muted-soft">قبل الضريبة</span><div class="fs-5">{{ invoice.total_amount }}</div></div>
+                    <div class="col-md-4"><span class="text-muted-soft">ضريبة القيمة المضافة</span><div class="fs-5">{{ invoice.total_vat }}</div></div>
+                    <div class="col-md-4"><span class="text-muted-soft">شامل الضريبة</span><div class="fs-5 fw-bold">{{ invoice.total_with_vat }}</div></div>
+                </div>
+            </div>
         </div>
-    </div>
 
-    <div class="card mb-4">
-        <div class="card-header bg-secondary text-white">العناصر</div>
-        <div class="card-body">
-            <table class="table table-bordered">
-                <thead class="table-dark">
-                    <tr>
-                        <th>الصنف</th>
-                        <th>الوصف</th>
-                        <th>الكمية</th>
-                        <th>السعر</th>
-                        <th>الضريبة</th>
-                        <th>الإجمالي</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in items %}
-                    <tr>
-                        <td>{{ item.item.name }}</td>
-                        <td>{{ item.description }}</td>
-                        <td>{{ item.quantity }}</td>
-                        <td>{{ item.unit_price }}</td>
-                        <td>{{ item.line_vat }}</td>
-                        <td>{{ item.line_total_with_vat }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-
-            <h4 class="mt-3">الإجماليات</h4>
-            <p><strong>الإجمالي قبل الضريبة:</strong> {{ invoice.total_amount }}</p>
-            <p><strong>الضريبة:</strong> {{ invoice.total_vat }}</p>
-            <p><strong>الإجمالي مع الضريبة:</strong> {{ invoice.total_with_vat }}</p>
+        <div class="col-lg-4">
+            <div class="glass-card p-4 mb-4 text-center">
+                <h5 class="mb-3">رمز الاستجابة السريعة</h5>
+                <img class="img-fluid bg-white rounded p-2" src="data:image/png;base64,{{ qr }}" alt="رمز الاستجابة السريعة">
+            </div>
+            <div class="glass-card p-4">
+                <h5 class="mb-3">ملف XML</h5>
+                <pre class="small text-light mb-0" style="max-height: 420px; overflow:auto; white-space: pre-wrap;">{{ xml_data }}</pre>
+            </div>
         </div>
     </div>
-
-    <div class="card mb-4">
-        <div class="card-header bg-info text-white">رمز الاستجابة السريعة</div>
-        <div class="card-body text-center">
-            <img src="data:image/png;base64,{{ qr }}" alt="رمز الاستجابة السريعة">
-        </div>
-    </div>
-
-    <div class="card">
-        <div class="card-header bg-warning">ملف الفاتورة الإلكتروني</div>
-        <div class="card-body">
-            <pre>{{ xml_data }}</pre>
-        </div>
-    </div>
-
 </div>
 {% endblock %}

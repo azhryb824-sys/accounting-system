@@ -5,6 +5,9 @@ from django.contrib.auth.decorators import login_required
 from .models import PurchaseInvoice, PurchaseItem, Supplier, Item, StockMovement
 from django.utils.translation import gettext_lazy as _
 from .forms import PurchaseInvoiceForm
+from accounts.views import role_required
+from core.models import Branch
+from core.services.monthly_close import assert_month_open
 
 # ============================
 #  قائمة فواتير المشتريات حسب الفرع
@@ -32,6 +35,8 @@ def purchase_add(request):
         if form.is_valid():
             invoice = form.save(commit=False)
             invoice.branch_id = branch_id
+            branch = get_object_or_404(Branch, id=branch_id)
+            assert_month_open(branch.company, invoice.issue_date)
             invoice.save()
 
             items = request.POST.getlist("item_id")
@@ -67,7 +72,9 @@ def purchase_add(request):
         form = PurchaseInvoiceForm()
 
     return render(request, 'invoicing/purchase_form.html', {
-        "form": form, "title": _("Add Purchase Invoice")
+        "form": form,
+        "items": Item.objects.filter(branch_id=branch_id, is_active=True).order_by("name"),
+        "title": _("Add Purchase Invoice")
     })
 
 
@@ -81,7 +88,9 @@ def purchase_edit(request, id):
     if request.method == 'POST':
         form = PurchaseInvoiceForm(request.POST, instance=purchase)
         if form.is_valid():
-            form.save()
+            edited_purchase = form.save(commit=False)
+            assert_month_open(edited_purchase.branch.company, edited_purchase.issue_date)
+            edited_purchase.save()
             messages.success(request, _("Purchase invoice updated successfully."))
             return redirect('purchase_list')
 
@@ -89,7 +98,9 @@ def purchase_edit(request, id):
         form = PurchaseInvoiceForm(instance=purchase)
 
     return render(request, 'invoicing/purchase_form.html', {
-        "form": form, "title": _("Edit Purchase Invoice")
+        "form": form,
+        "items": Item.objects.filter(branch_id=request.session.get('branch_id'), is_active=True).order_by("name"),
+        "title": _("Edit Purchase Invoice")
     })
 
 
@@ -99,6 +110,7 @@ def purchase_edit(request, id):
 @login_required(login_url='login')
 def purchase_delete(request, id):
     purchase = get_object_or_404(PurchaseInvoice, id=id)
+    assert_month_open(purchase.branch.company, purchase.issue_date)
     purchase.delete()
     messages.success(request, _("Purchase invoice deleted successfully."))
     return redirect('purchase_list')
@@ -107,6 +119,7 @@ def purchase_delete(request, id):
 #  قائمة المخزون حسب الفرع
 # ============================
 @login_required(login_url='login')
+@role_required('view_item')
 def inventory_list(request):
     branch_id = request.session.get('branch_id')
     items = Item.objects.filter(branch_id=branch_id)

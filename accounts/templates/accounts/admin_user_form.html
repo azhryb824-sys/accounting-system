@@ -1,4 +1,51 @@
 {% extends 'core/base.html' %}
-{% block title %}إضافة مستخدم{% endblock %}
-{% block page_title %}إضافة مستخدم{% endblock %}
-{% block content %}<div class="glass-card p-4"><form method="post">{% csrf_token %}{% for field in form %}<div class="mb-3">{{ field.label_tag }}{{ field }}</div>{% endfor %}<button class="btn btn-primary">حفظ</button></form></div>{% endblock %}
+
+{% block title %}{% if mode == 'edit' %}تعديل مستخدم{% else %}إضافة مستخدم{% endif %}{% endblock %}
+{% block page_title %}{% if mode == 'edit' %}تعديل مستخدم{% else %}إضافة مستخدم{% endif %}{% endblock %}
+{% block page_subtitle %}إدارة بيانات المستخدم والدور وصلاحيات الإشراف{% endblock %}
+
+{% block content %}
+<form class="glass-card p-4" method="post">
+    {% csrf_token %}
+    {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <h5 class="mb-3">بيانات الحساب</h5>
+            {% for field in form %}
+                {% if field.name != 'is_active' and field.name != 'is_staff' and field.name != 'is_superuser' and field.name != 'user_permissions' %}
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {{ field }}
+                        {% if field.help_text %}<div class="text-muted-soft mt-1">{{ field.help_text }}</div>{% endif %}
+                        {{ field.errors }}
+                    </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+        <div class="col-lg-6">
+            <h5 class="mb-3">الإدارة والإشراف</h5>
+            {% if can_manage_admins %}
+                {% if form.is_active %}
+                <label class="form-check-label d-flex align-items-center gap-2 mb-3">{{ form.is_active }} {{ form.is_active.label }}</label>
+                {% endif %}
+                <label class="form-check-label d-flex align-items-center gap-2 mb-3">{{ form.is_staff }} {{ form.is_staff.label }}</label>
+                <label class="form-check-label d-flex align-items-center gap-2 mb-3">{{ form.is_superuser }} {{ form.is_superuser.label }}</label>
+                <div class="mb-3">
+                    <label class="form-label" for="{{ form.user_permissions.id_for_label }}">{{ form.user_permissions.label }}</label>
+                    {{ form.user_permissions }}
+                    <div class="text-muted-soft mt-1">اختر الصلاحيات التفصيلية للمشرف غير كامل الصلاحيات.</div>
+                    {{ form.user_permissions.errors }}
+                </div>
+            {% else %}
+                <div class="alert alert-info mb-0">تعيين المشرفين وصلاحيات الإدارة متاح فقط للمشرف الرئيسي.</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mt-4">
+        <a class="btn btn-outline-light" href="{% url 'admin_users' %}"><i class="fa-solid fa-arrow-right"></i> رجوع</a>
+        <button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> حفظ</button>
+    </div>
+</form>
+{% endblock %}

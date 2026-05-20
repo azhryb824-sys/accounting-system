@@ -2,32 +2,61 @@
 
 {% block title %}لوحة التحكم{% endblock %}
 {% block page_title %}لوحة التحكم{% endblock %}
-{% block page_subtitle %}نظرة عامة على النظام المحاسبي{% endblock %}
+{% block page_subtitle %}نظرة تشغيلية على الفرع الحالي والمبيعات والمخزون{% endblock %}
 
 {% block content %}
 <div class="row g-4 mb-4">
     <div class="col-md-3">
         <div class="glass-soft p-3 h-100 d-flex align-items-center gap-3">
-            <div class="glass-icon"><i class="fa-solid fa-file-invoice"></i></div>
-            <div><div class="text-muted-soft mb-1">عدد القيود</div><div class="fs-3 fw-semibold text-white">{{ entries_count }}</div></div>
+            <div class="glass-icon"><i class="fa-solid fa-receipt"></i></div>
+            <div><div class="text-muted-soft mb-1">إجمالي المبيعات</div><div class="fs-3 fw-semibold text-white">{{ sales_total|floatformat:2 }}</div></div>
         </div>
     </div>
     <div class="col-md-3">
         <div class="glass-soft p-3 h-100 d-flex align-items-center gap-3">
-            <div class="glass-icon"><i class="fa-solid fa-book"></i></div>
-            <div><div class="text-muted-soft mb-1">عدد الحسابات</div><div class="fs-3 fw-semibold text-white">{{ accounts_count }}</div></div>
+            <div class="glass-icon"><i class="fa-solid fa-cart-shopping"></i></div>
+            <div><div class="text-muted-soft mb-1">إجمالي المشتريات</div><div class="fs-3 fw-semibold text-white">{{ purchases_total|floatformat:2 }}</div></div>
         </div>
     </div>
     <div class="col-md-3">
         <div class="glass-soft p-3 h-100 d-flex align-items-center gap-3">
-            <div class="glass-icon"><i class="fa-solid fa-building"></i></div>
-            <div><div class="text-muted-soft mb-1">الشركة الحالية</div><div class="h6 fw-semibold text-white mb-0">{{ company_name|default:"-" }}</div></div>
+            <div class="glass-icon"><i class="fa-solid fa-boxes-stacked"></i></div>
+            <div><div class="text-muted-soft mb-1">قيمة المخزون</div><div class="fs-3 fw-semibold text-white">{{ inventory_value|floatformat:2 }}</div></div>
         </div>
     </div>
     <div class="col-md-3">
         <div class="glass-soft p-3 h-100 d-flex align-items-center gap-3">
-            <div class="glass-icon"><i class="fa-solid fa-code-branch"></i></div>
-            <div><div class="text-muted-soft mb-1">الفرع الحالي</div><div class="h6 fw-semibold text-white mb-0">{{ branch_name|default:"-" }}</div></div>
+            <div class="glass-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            <div><div class="text-muted-soft mb-1">تنبيهات المخزون</div><div class="fs-3 fw-semibold {% if low_stock_count %}text-warning{% else %}text-white{% endif %}">{{ low_stock_count }}</div></div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-3">
+        <div class="glass-soft p-3 h-100">
+            <div class="text-muted-soft mb-1">فواتير البيع</div>
+            <div class="h4 fw-semibold mb-0">{{ invoices_count }}</div>
+            <div class="text-muted-soft">اليوم: {{ today_invoices_count }}</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="glass-soft p-3 h-100">
+            <div class="text-muted-soft mb-1">القيود اليومية</div>
+            <div class="h4 fw-semibold mb-0">{{ entries_count }}</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="glass-soft p-3 h-100">
+            <div class="text-muted-soft mb-1">دليل الحسابات</div>
+            <div class="h4 fw-semibold mb-0">{{ accounts_count }}</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="glass-soft p-3 h-100">
+            <div class="text-muted-soft mb-1">الشركة / الفرع</div>
+            <div class="h6 fw-semibold mb-0">{{ company_name|default:"-" }}</div>
+            <div class="text-muted-soft">{{ branch_name|default:"-" }}</div>
         </div>
     </div>
 </div>
@@ -36,24 +65,31 @@
     <div class="col-lg-8">
         <div class="glass-card p-4 h-100">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <h5 class="text-light mb-0">الاختصارات</h5>
+                <h5 class="text-light mb-0">الخدمات السريعة</h5>
+                <a class="btn btn-sm btn-outline-light" href="{% url 'reports_center' %}"><i class="fa-solid fa-chart-pie"></i> مركز التقارير</a>
             </div>
             <div class="row g-3">
-                <div class="col-md-6"><a class="btn btn-outline-light w-100 py-3" href="{% url 'journal_add' %}"><i class="fa-solid fa-plus"></i> إضافة قيد جديد</a></div>
-                <div class="col-md-6"><a class="btn btn-outline-light w-100 py-3" href="{% url 'account_add' %}"><i class="fa-solid fa-book-medical"></i> إضافة حساب</a></div>
-                <div class="col-md-6"><a class="btn btn-outline-light w-100 py-3" href="{% url 'company_add' %}"><i class="fa-solid fa-building"></i> إضافة شركة</a></div>
-                <div class="col-md-6"><a class="btn btn-outline-light w-100 py-3" href="{% url 'branch_add' %}"><i class="fa-solid fa-sitemap"></i> إضافة فرع</a></div>
+                <div class="col-md-6"><a class="btn btn-outline-light w-100 py-3" href="{% url 'invoice_create' %}"><i class="fa-solid fa-file-circle-plus"></i> إنشاء فاتورة بيع</a></div>
+                <div class="col-md-6"><a class="btn btn-outline-light w-100 py-3" href="{% url 'pos_terminal' %}"><i class="fa-solid fa-cash-register"></i> الكاشير</a></div>
+                <div class="col-md-6"><a class="btn btn-outline-light w-100 py-3" href="{% url 'journal_add' %}"><i class="fa-solid fa-circle-plus"></i> إضافة قيد</a></div>
+                <div class="col-md-6"><a class="btn btn-outline-light w-100 py-3" href="{% url 'inventory_list' %}"><i class="fa-solid fa-box-open"></i> إدارة المخزون</a></div>
+                <div class="col-md-6"><a class="btn btn-outline-light w-100 py-3" href="{% url 'customer_list' %}"><i class="fa-solid fa-users"></i> العملاء</a></div>
+                <div class="col-md-6"><a class="btn btn-outline-light w-100 py-3" href="{% url 'purchase_add' %}"><i class="fa-solid fa-cart-plus"></i> إضافة شراء</a></div>
             </div>
         </div>
     </div>
     <div class="col-lg-4">
         <div class="glass-card p-4 h-100">
-            <h5 class="text-light mb-3">ملخص سريع</h5>
+            <h5 class="text-light mb-3">أصناف تحتاج متابعة</h5>
             <ul class="list-unstyled text-light mb-0">
-                <li class="mb-2"><span class="text-muted-soft">الشركة:</span> <span class="fw-semibold">{{ company_name|default:"-" }}</span></li>
-                <li class="mb-2"><span class="text-muted-soft">الفرع:</span> <span class="fw-semibold">{{ branch_name|default:"-" }}</span></li>
-                <li class="mb-2"><span class="text-muted-soft">الحسابات:</span> <span class="fw-semibold">{{ accounts_count }}</span></li>
-                <li><span class="text-muted-soft">القيود:</span> <span class="fw-semibold">{{ entries_count }}</span></li>
+                {% for item in low_stock_items %}
+                    <li class="d-flex justify-content-between border-bottom border-secondary-subtle py-2">
+                        <span>{{ item.name }}</span>
+                        <span class="text-warning">{{ item.quantity|floatformat:2 }}</span>
+                    </li>
+                {% empty %}
+                    <li class="text-muted-soft">لا توجد تنبيهات مخزون حالية.</li>
+                {% endfor %}
             </ul>
         </div>
     </div>

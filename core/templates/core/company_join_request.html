@@ -1,0 +1,48 @@
+{% extends 'core/base.html' %}
+
+{% block title %}طلب الانضمام إلى شركة{% endblock %}
+{% block page_title %}طلب الانضمام إلى شركة{% endblock %}
+{% block page_subtitle %}ابحث بالرقم الموحد ثم أرسل الطلب إلى مالك الشركة{% endblock %}
+
+{% block content %}
+<form class="glass-card p-4" method="post">
+    {% csrf_token %}
+    <div class="row g-3">
+        <div class="col-md-5">
+            <label class="form-label" for="{{ form.unified_number.id_for_label }}">{{ form.unified_number.label }}</label>
+            {{ form.unified_number }}
+            {{ form.unified_number.errors }}
+        </div>
+        <div class="col-md-4">
+            <label class="form-label" for="{{ form.requested_role.id_for_label }}">{{ form.requested_role.label }}</label>
+            {{ form.requested_role }}
+            {{ form.requested_role.errors }}
+        </div>
+        <div class="col-md-3 d-flex align-items-end">
+            <button class="btn btn-outline-light w-100" type="submit" name="lookup"><i class="fa-solid fa-magnifying-glass"></i> بحث</button>
+        </div>
+        <div class="col-12">
+            <label class="form-label" for="{{ form.note.id_for_label }}">{{ form.note.label }}</label>
+            {{ form.note }}
+            {{ form.note.errors }}
+        </div>
+    </div>
+
+    {% if found_company %}
+    <div class="glass-soft p-3 mt-4">
+        <div class="d-flex justify-content-between align-items-center gap-3">
+            <div>
+                <div class="text-muted-soft">الشركة المطابقة</div>
+                <div class="h5 mb-0">{{ found_company.name }}</div>
+                <div class="text-muted-soft">المالك: {% if found_company.owner %}{{ found_company.owner.get_full_name|default:found_company.owner.username }}{% else %}-{% endif %}</div>
+            </div>
+            <button class="btn btn-primary" type="submit" name="submit_request"><i class="fa-solid fa-paper-plane"></i> إرسال الطلب</button>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="mt-4">
+        <a class="btn btn-outline-light" href="{% url 'company_access' %}"><i class="fa-solid fa-arrow-right"></i> رجوع</a>
+    </div>
+</form>
+{% endblock %}

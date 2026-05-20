@@ -1,0 +1,75 @@
+{% extends 'core/base.html' %}
+{% load permission_tags %}
+
+{% block page_title %}القفل الشهري{% endblock %}
+{% block page_subtitle %}إدارة إغلاق الأشهر المحاسبية ومنع التعديل على العمليات المقفلة{% endblock %}
+
+{% block content %}
+{% can_access request 'close_month' as can_close_month %}
+{% can_access request 'reopen_month' as can_reopen_month %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <form method="get" class="d-flex gap-2 align-items-center">
+            <select name="company" class="form-select" onchange="this.form.submit()">
+                <option value="">كل الشركات</option>
+                {% for company in companies %}
+                    <option value="{{ company.id }}" {% if selected_company_id == company.id|stringformat:"s" %}selected{% endif %}>{{ company.name }}</option>
+                {% endfor %}
+            </select>
+        </form>
+        {% if can_close_month %}
+        <a href="{% url 'monthly_close_add' %}" class="btn btn-primary">
+            <i class="fa-solid fa-lock"></i> قفل شهر
+        </a>
+        {% endif %}
+    </div>
+
+    <div class="glass-card p-4">
+        <div class="table-responsive">
+            <table class="table table-dark table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>الشركة</th>
+                        <th>الفترة</th>
+                        <th>الحالة</th>
+                        <th>قفل بواسطة</th>
+                        <th>تاريخ القفل</th>
+                        <th>ملاحظة</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for close in closes %}
+                    <tr>
+                        <td>{{ close.company.name }}</td>
+                        <td>{{ close.period_label }}</td>
+                        <td>
+                            {% if close.is_closed %}
+                                <span class="badge bg-danger">مقفل</span>
+                            {% else %}
+                                <span class="badge bg-success">مفتوح</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ close.closed_by.get_full_name|default:close.closed_by.username|default:"-" }}</td>
+                        <td>{{ close.closed_at|date:"Y-m-d H:i" }}</td>
+                        <td>{{ close.note|default:"-" }}</td>
+                        <td class="text-end">
+                            {% if close.is_closed and can_reopen_month %}
+                            <form method="post" action="{% url 'monthly_close_reopen' close.id %}">
+                                {% csrf_token %}
+                                <button class="btn btn-sm btn-outline-warning" type="submit">فتح الشهر</button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center py-5 text-muted">لا توجد أشهر مقفلة حتى الآن.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

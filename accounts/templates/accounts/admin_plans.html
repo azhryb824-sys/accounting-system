@@ -1,7 +1,125 @@
 {% extends 'core/base.html' %}
-{% block title %}باقات الاشتراك{% endblock %}
-{% block page_title %}باقات الاشتراك{% endblock %}
+
+{% block title %}إدارة الباقات{% endblock %}
+{% block page_title %}إدارة الباقات{% endblock %}
+{% block page_subtitle %}إنشاء وتعديل وتسعير باقات الاشتراك من حساب المشرف{% endblock %}
+
 {% block content %}
-<div class="d-flex justify-content-end mb-3"><a class="btn btn-primary" href="{% url 'admin_plan_add' %}">إضافة باقة</a></div>
-<div class="glass-card p-0"><table class="table table-dark mb-0"><thead><tr><th>الباقة</th><th>الدور</th><th>السعر</th><th>نشطة</th><th>إجراءات</th></tr></thead><tbody>{% for plan in plans %}<tr><td>{{ plan.name }}</td><td>{{ plan.role.name }}</td><td>{{ plan.price }}</td><td>{% if plan.is_active %}نعم{% else %}لا{% endif %}</td><td><a class="btn btn-sm btn-outline-light" href="{% url 'admin_plan_edit' plan.id %}">تعديل</a></td></tr>{% endfor %}</tbody></table></div>
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="glass-soft p-3 h-100">
+            <div class="text-muted-soft mb-1">الباقات النشطة</div>
+            <div class="fs-3 fw-semibold text-white">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="glass-soft p-3 h-100">
+            <div class="text-muted-soft mb-1">الباقات غير النشطة</div>
+            <div class="fs-3 fw-semibold text-white">{{ inactive_count }}</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <a class="btn btn-primary w-100 h-100 d-flex align-items-center justify-content-center gap-2" href="{% url 'admin_plan_add' %}">
+            <i class="fa-solid fa-circle-plus"></i> إضافة باقة جديدة
+        </a>
+    </div>
+</div>
+
+<form class="glass-card p-3 mb-4" method="get">
+    <div class="row g-3 align-items-end">
+        <div class="col-lg-5">
+            <label class="form-label" for="plan-search">بحث</label>
+            <input class="form-control" id="plan-search" type="search" name="q" value="{{ query }}" placeholder="اسم الباقة، الدور، الوصف أو المزايا">
+        </div>
+        <div class="col-lg-3">
+            <label class="form-label" for="plan-status">الحالة</label>
+            <select class="form-select" id="plan-status" name="status">
+                <option value="all" {% if status == 'all' %}selected{% endif %}>كل الحالات</option>
+                <option value="active" {% if status == 'active' %}selected{% endif %}>نشطة</option>
+                <option value="inactive" {% if status == 'inactive' %}selected{% endif %}>غير نشطة</option>
+            </select>
+        </div>
+        <div class="col-lg-3">
+            <label class="form-label" for="plan-role">الدور</label>
+            <select class="form-select" id="plan-role" name="role">
+                <option value="">كل الأدوار</option>
+                {% for role in roles %}
+                    <option value="{{ role.id }}" {% if selected_role == role.id|stringformat:'s' %}selected{% endif %}>{{ role.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-lg-1">
+            <button class="btn btn-outline-light w-100" type="submit" title="تطبيق"><i class="fa-solid fa-filter"></i></button>
+        </div>
+    </div>
+</form>
+
+<div class="glass-card p-0">
+    <div class="table-responsive">
+        <table class="table table-dark table-hover mb-0 align-middle">
+            <thead>
+                <tr>
+                    <th>الباقة</th>
+                    <th>الدور</th>
+                    <th>السعر</th>
+                    <th>المدة</th>
+                    <th>الشركات</th>
+                    <th>المستخدمون</th>
+                    <th>الحالة</th>
+                    <th>الإجراءات</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for plan in plans %}
+                    <tr>
+                        <td>
+                            <div class="fw-semibold text-white">
+                                {{ plan.display_order }}. {{ plan.name }}
+                                {% if plan.is_featured %}<span class="badge text-bg-info ms-1">مميزة</span>{% endif %}
+                            </div>
+                            <div class="text-muted-soft">{{ plan.description|default:"بدون وصف"|truncatechars:90 }}</div>
+                        </td>
+                        <td>{{ plan.role.name }}</td>
+                        <td>
+                            <div>{{ plan.price|floatformat:2 }}</div>
+                            <div class="text-muted-soft">
+                                شهري: {{ plan.monthly_price|default:"-" }} / سنوي: {{ plan.yearly_price|default:"-" }}
+                            </div>
+                        </td>
+                        <td>
+                            <div>{{ plan.duration_days }} يوم</div>
+                            {% if plan.trial_days %}<div class="text-muted-soft">تجربة {{ plan.trial_days }} يوم</div>{% endif %}
+                        </td>
+                        <td>{{ plan.max_companies }}</td>
+                        <td>{% if plan.max_users %}{{ plan.max_users }}{% else %}غير محدود{% endif %}</td>
+                        <td>
+                            {% if plan.is_active %}
+                                <span class="badge text-bg-success">نشطة</span>
+                            {% else %}
+                                <span class="badge text-bg-secondary">غير نشطة</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="d-flex gap-2 flex-wrap">
+                                <a class="btn btn-sm btn-outline-light" href="{% url 'admin_plan_edit' plan.id %}" title="تعديل"><i class="fa-solid fa-pen"></i></a>
+                                <form method="post" action="{% url 'admin_plan_duplicate' plan.id %}">
+                                    {% csrf_token %}
+                                    <button class="btn btn-sm btn-outline-light" type="submit" title="نسخ"><i class="fa-solid fa-copy"></i></button>
+                                </form>
+                                <form method="post" action="{% url 'admin_plan_toggle' plan.id %}">
+                                    {% csrf_token %}
+                                    <button class="btn btn-sm btn-outline-light" type="submit" title="تفعيل أو تعطيل">
+                                        {% if plan.is_active %}<i class="fa-solid fa-toggle-on"></i>{% else %}<i class="fa-solid fa-toggle-off"></i>{% endif %}
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="8" class="text-center text-muted-soft py-4">لا توجد باقات مطابقة.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
 {% endblock %}

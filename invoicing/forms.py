@@ -94,6 +94,9 @@ class PurchaseInvoiceForm(forms.ModelForm):
             'vat_amount',
             'total_with_vat'
         ]
+        widgets = {
+            'issue_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+        }
 
 
 # ============================

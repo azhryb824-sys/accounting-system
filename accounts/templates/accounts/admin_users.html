@@ -1,14 +1,65 @@
 {% extends 'core/base.html' %}
+
 {% block title %}إدارة المستخدمين{% endblock %}
 {% block page_title %}إدارة المستخدمين{% endblock %}
+{% block page_subtitle %}إدارة الحسابات وتعيين أدوار وصلاحيات الإشراف{% endblock %}
+
 {% block content %}
-<div class="d-flex justify-content-end mb-3"><a class="btn btn-primary" href="{% url 'admin_user_create' %}">إضافة مستخدم</a></div>
-<div class="glass-card p-0"><table class="table table-dark table-hover mb-0"><thead><tr><th>المستخدم</th><th>رقم الهوية</th><th>الدور</th><th>الإعفاء</th><th>الحالة</th><th>إجراءات</th></tr></thead><tbody>
-{% for user in users %}<tr>
-<td>{{ user.get_full_name|default:user.username }}</td><td>{{ user.profile.national_id|default:"-" }}</td><td>{{ user.profile.role.name|default:"-" }}</td>
-<td>{% if user.profile.is_subscription_exempt %}معفى{% else %}غير معفى{% endif %}</td>
-<td>{% if user.profile.is_disabled_by_admin %}<span class="badge bg-danger">معطل</span>{% else %}<span class="badge bg-success">نشط</span>{% endif %}</td>
-<td><a class="btn btn-sm btn-outline-warning" href="{% url 'admin_warning_create' user.id %}">إنذار</a> <a class="btn btn-sm btn-outline-danger" href="{% url 'admin_user_disable' user.id %}">تعطيل</a> <a class="btn btn-sm btn-outline-info" href="{% url 'admin_user_exempt' user.id %}">إعفاء</a></td>
-</tr>{% endfor %}
-</tbody></table></div>
+<div class="d-flex justify-content-end mb-3">
+    <a class="btn btn-primary" href="{% url 'admin_user_create' %}"><i class="fa-solid fa-user-plus"></i> إضافة مستخدم</a>
+</div>
+
+<div class="glass-card p-0">
+    <div class="table-responsive">
+        <table class="table table-dark table-hover mb-0 align-middle">
+            <thead>
+                <tr>
+                    <th>المستخدم</th>
+                    <th>رقم الهوية</th>
+                    <th>الدور</th>
+                    <th>الإشراف</th>
+                    <th>الإعفاء</th>
+                    <th>الحالة</th>
+                    <th>إجراءات</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                    <tr>
+                        <td>{{ user.get_full_name|default:user.username }}</td>
+                        <td>{{ user.profile.national_id|default:"-" }}</td>
+                        <td>{{ user.profile.role.name|default:"-" }}</td>
+                        <td>
+                            {% if user.is_superuser %}
+                                <span class="badge text-bg-warning">مشرف كامل</span>
+                            {% elif user.is_staff %}
+                                <span class="badge text-bg-info">مشرف إدارة</span>
+                            {% else %}
+                                <span class="badge text-bg-secondary">مستخدم</span>
+                            {% endif %}
+                        </td>
+                        <td>{% if user.profile.is_subscription_exempt %}معفى{% else %}غير معفى{% endif %}</td>
+                        <td>{% if user.profile.is_disabled_by_admin %}<span class="badge bg-danger">معطل</span>{% else %}<span class="badge bg-success">نشط</span>{% endif %}</td>
+                        <td>
+                            <div class="d-flex gap-2 flex-wrap">
+                                <a class="btn btn-sm btn-outline-light" href="{% url 'admin_user_edit' user.id %}" title="تعديل"><i class="fa-solid fa-pen"></i></a>
+                                <a class="btn btn-sm btn-outline-warning" href="{% url 'admin_warning_create' user.id %}" title="إنذار"><i class="fa-solid fa-triangle-exclamation"></i></a>
+                                <a class="btn btn-sm btn-outline-danger" href="{% url 'admin_user_disable' user.id %}" title="تعطيل"><i class="fa-solid fa-ban"></i></a>
+                                <a class="btn btn-sm btn-outline-info" href="{% url 'admin_user_exempt' user.id %}" title="إعفاء"><i class="fa-solid fa-shield-halved"></i></a>
+                                {% if request.user.profile.national_id == '2572280689' and user.profile.national_id != '2572280689' and user.is_staff %}
+                                    <form method="post" action="{% url 'admin_user_remove_admin' user.id %}">
+                                        {% csrf_token %}
+                                        <button class="btn btn-sm btn-outline-secondary" type="submit" title="إزالة الإشراف"><i class="fa-solid fa-user-minus"></i></button>
+                                    </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="7" class="text-center text-muted-soft py-4">لا يوجد مستخدمون.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
 {% endblock %}

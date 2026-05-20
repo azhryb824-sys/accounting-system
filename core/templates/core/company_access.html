@@ -1,0 +1,40 @@
+{% extends 'core/base.html' %}
+
+{% block title %}الوصول إلى شركة{% endblock %}
+{% block page_title %}الوصول إلى شركة{% endblock %}
+{% block page_subtitle %}أضف شركتك أو اطلب الانضمام إلى شركة مسجلة{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <div class="col-lg-6">
+        <div class="glass-card p-4 h-100">
+            <div class="glass-icon mb-3"><i class="fa-solid fa-building-circle-plus"></i></div>
+            <h5>إضافة شركة جديدة</h5>
+            <p class="text-muted-soft">أنشئ شركة جديدة وأرسل طلب الاشتراك مع إيصال التحويل.</p>
+            <a class="btn btn-primary" href="{% url 'company_add' %}"><i class="fa-solid fa-plus"></i> إضافة شركة</a>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="glass-card p-4 h-100">
+            <div class="glass-icon mb-3"><i class="fa-solid fa-right-to-bracket"></i></div>
+            <h5>الانضمام إلى شركة مسجلة</h5>
+            <p class="text-muted-soft">أدخل الرقم الموحد للشركة، ثم أرسل طلب الانضمام لمالكها.</p>
+            <a class="btn btn-outline-light" href="{% url 'company_join_request' %}"><i class="fa-solid fa-magnifying-glass"></i> طلب انضمام</a>
+        </div>
+    </div>
+</div>
+
+{% if pending_requests %}
+<div class="glass-card p-4 mt-4">
+    <h5 class="mb-3">طلباتك قيد المراجعة</h5>
+    <ul class="list-unstyled mb-0">
+        {% for req in pending_requests %}
+            <li class="d-flex justify-content-between border-bottom border-secondary-subtle py-2">
+                <span>{{ req.company.name }}</span>
+                <span class="text-muted-soft">{{ req.get_status_display }}</span>
+            </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+{% endblock %}

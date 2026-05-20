@@ -9,6 +9,11 @@ urlpatterns = [
     # ============================
     path('', views.home, name='home'),
     path('dashboard/', views.dashboard, name='dashboard'),
+    path('reports/', views.reports_center, name='reports_center'),
+    path('reports/sales.csv', views.export_sales_csv, name='export_sales_csv'),
+    path('monthly-close/', views.monthly_close_list, name='monthly_close_list'),
+    path('monthly-close/add/', views.monthly_close_add, name='monthly_close_add'),
+    path('monthly-close/<int:close_id>/reopen/', views.monthly_close_reopen, name='monthly_close_reopen'),
     path('signup/', views.signup, name='signup'),
 
     # ============================
@@ -29,7 +34,11 @@ urlpatterns = [
     # Companies
     # ============================
     path('companies/', views.company_list, name='company_list'),
+    path('companies/access/', views.company_access, name='company_access'),
     path('companies/add/', views.company_add, name='company_add'),
+    path('companies/join/', views.company_join_request, name='company_join_request'),
+    path('companies/join-requests/', views.company_join_requests, name='company_join_requests'),
+    path('companies/join-requests/<int:request_id>/<str:decision>/', views.company_join_review, name='company_join_review'),
 
     # ============================
     # Branches

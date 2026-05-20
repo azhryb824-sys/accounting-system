@@ -14,6 +14,11 @@ class Role(models.Model):
 
 
 class UserProfile(models.Model):
+    CALENDAR_CHOICES = [
+        ("gregorian", "ميلادي"),
+        ("hijri", "هجري"),
+    ]
+
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="profile")
     national_id = models.CharField(max_length=20, unique=True, verbose_name="رقم الهوية")
     phone = models.CharField(max_length=30, blank=True, verbose_name="رقم الجوال")
@@ -23,6 +28,7 @@ class UserProfile(models.Model):
     disabled_reason = models.TextField(blank=True)
     privacy_acknowledged_at = models.DateTimeField(null=True, blank=True)
     fingerprint_enabled = models.BooleanField(default=False)
+    calendar_preference = models.CharField(max_length=20, choices=CALENDAR_CHOICES, default="gregorian")
 
     def __str__(self):
         return f"{self.user.get_full_name() or self.user.username} - {self.national_id}"
@@ -31,10 +37,19 @@ class UserProfile(models.Model):
 class SubscriptionPlan(models.Model):
     name = models.CharField(max_length=120)
     role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name="plans")
+    permissions = models.ManyToManyField(Permission, blank=True, related_name="subscription_plans")
     price = models.DecimalField(max_digits=10, decimal_places=2)
+    monthly_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    yearly_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     duration_days = models.PositiveIntegerField(default=30)
+    trial_days = models.PositiveIntegerField(default=7)
+    max_companies = models.PositiveIntegerField(default=1)
+    max_users = models.PositiveIntegerField(null=True, blank=True)
+    display_order = models.PositiveIntegerField(default=0)
+    is_featured = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     description = models.TextField(blank=True)
+    features = models.TextField(blank=True)
 
     def __str__(self):
         return f"{self.name} - {self.price}"
@@ -48,6 +63,8 @@ class SubscriptionRequest(models.Model):
     ]
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="subscription_requests")
     plan = models.ForeignKey(SubscriptionPlan, on_delete=models.PROTECT)
+    company = models.ForeignKey("core.Company", on_delete=models.CASCADE, null=True, blank=True, related_name="subscription_requests")
+    requested_role = models.ForeignKey(Role, on_delete=models.SET_NULL, null=True, blank=True, related_name="subscription_requests")
     bank_name = models.CharField(max_length=120)
     transfer_reference = models.CharField(max_length=120, blank=True)
     transfer_notice = models.FileField(upload_to="subscription_notices/", blank=True, null=True)

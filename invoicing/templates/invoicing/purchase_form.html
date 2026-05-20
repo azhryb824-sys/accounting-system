@@ -1,72 +1,90 @@
 {% extends 'core/base.html' %}
-{% load static %}
+
+{% block title %}{{ title }}{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+{% block page_subtitle %}تسجيل فاتورة شراء وتحديث المخزون تلقائيًا{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
+<form class="glass-card p-4" method="post">
+    {% csrf_token %}
+    {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
 
-    <h2 class="mb-4">{{ title }}</h2>
+    <div class="row g-4">
+        <div class="col-lg-5">
+            <h5 class="mb-3">بيانات الفاتورة</h5>
+            <div class="row g-3">
+                {% for field in form %}
+                    <div class="col-12">
+                        <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {{ field }}
+                        {{ field.errors }}
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="col-lg-7">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0">الأصناف</h5>
+                <button type="button" id="add-row" class="btn btn-sm btn-outline-light"><i class="fa-solid fa-plus"></i> إضافة صنف</button>
+            </div>
+            <div class="table-responsive glass-soft">
+                <table class="table table-dark table-hover mb-0 align-middle" id="items-table">
+                    <thead>
+                        <tr>
+                            <th>الصنف</th>
+                            <th>الكمية</th>
+                            <th>السعر</th>
+                            <th>حذف</th>
+                        </tr>
+                    </thead>
+                    <tbody id="items-body">
+                        <tr>
+                            <td>
+                                <select name="item_id" class="form-select" required>
+                                    {% for item in items %}
+                                        <option value="{{ item.id }}">{{ item.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td><input type="number" name="quantity" class="form-control" step="0.01" min="0.01" required></td>
+                            <td><input type="number" name="price" class="form-control" step="0.01" min="0" required></td>
+                            <td><button type="button" class="btn btn-sm btn-outline-danger remove-row"><i class="fa-solid fa-trash"></i></button></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 
-    <form method="POST">
-        {% csrf_token %}
-        {{ form.as_p }}
-
-        <h4 class="mt-4">الأصناف</h4>
-
-        <table class="table table-bordered" id="items-table">
-            <thead class="table-dark">
-                <tr>
-                    <th>الصنف</th>
-                    <th>الكمية</th>
-                    <th>السعر</th>
-                    <th>إزالة</th>
-                </tr>
-            </thead>
-            <tbody id="items-body">
-                <tr>
-                    <td>
-                        <select name="item_id" class="form-select">
-                            {% for item in items %}
-                                <option value="{{ item.id }}">{{ item.name }}</option>
-                            {% endfor %}
-                        </select>
-                    </td>
-                    <td><input type="number" name="quantity" class="form-control" step="0.01"></td>
-                    <td><input type="number" name="price" class="form-control" step="0.01"></td>
-                    <td><button type="button" class="btn btn-danger remove-row">حذف</button></td>
-                </tr>
-            </tbody>
-        </table>
-
-        <button type="button" id="add-row" class="btn btn-secondary">إضافة صنف</button>
-        <br><br>
-
-        <button type="submit" class="btn btn-success">حفظ</button>
-        <a href="{% url 'purchase_list' %}" class="btn btn-secondary">رجوع</a>
-    </form>
-</div>
+    <div class="d-flex justify-content-between align-items-center mt-4">
+        <a href="{% url 'purchase_list' %}" class="btn btn-outline-light"><i class="fa-solid fa-arrow-right"></i> رجوع</a>
+        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> حفظ الفاتورة</button>
+    </div>
+</form>
 
 <script>
 document.getElementById("add-row").addEventListener("click", function () {
-    let row = `
+    const row = `
         <tr>
             <td>
-                <select name="item_id" class="form-select">
+                <select name="item_id" class="form-select" required>
                     {% for item in items %}
                         <option value="{{ item.id }}">{{ item.name }}</option>
                     {% endfor %}
                 </select>
             </td>
-            <td><input type="number" name="quantity" class="form-control" step="0.01"></td>
-            <td><input type="number" name="price" class="form-control" step="0.01"></td>
-            <td><button type="button" class="btn btn-danger remove-row">حذف</button></td>
+            <td><input type="number" name="quantity" class="form-control" step="0.01" min="0.01" required></td>
+            <td><input type="number" name="price" class="form-control" step="0.01" min="0" required></td>
+            <td><button type="button" class="btn btn-sm btn-outline-danger remove-row"><i class="fa-solid fa-trash"></i></button></td>
         </tr>
     `;
     document.getElementById("items-body").insertAdjacentHTML("beforeend", row);
 });
 
-document.addEventListener("click", function (e) {
-    if (e.target.classList.contains("remove-row")) {
-        e.target.closest("tr").remove();
+document.addEventListener("click", function (event) {
+    const button = event.target.closest(".remove-row");
+    if (button && document.querySelectorAll("#items-body tr").length > 1) {
+        button.closest("tr").remove();
     }
 });
 </script>

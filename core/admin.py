@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Account, JournalEntry, JournalEntryLine
+from .models import Account, JournalEntry, JournalEntryLine, MonthlyClose
 
 
 @admin.register(Account)
@@ -27,3 +27,10 @@ class JournalEntryLineAdmin(admin.ModelAdmin):
     list_display = ('entry', 'account', 'debit', 'credit', 'note')
     list_filter = ('account',)
     search_fields = ('account__name',)
+
+
+@admin.register(MonthlyClose)
+class MonthlyCloseAdmin(admin.ModelAdmin):
+    list_display = ('company', 'year', 'month', 'is_closed', 'closed_by', 'closed_at')
+    list_filter = ('is_closed', 'year', 'month', 'company')
+    search_fields = ('company__name', 'note')

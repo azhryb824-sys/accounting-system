@@ -1,4 +1,5 @@
 {% load static %}
+{% load permission_tags %}
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -146,6 +147,32 @@
         }
         .topbar-title { font-size: 19px; font-weight: 700; }
         .topbar-sub, .topbar-session, .text-muted-soft { color: var(--text-muted); font-size: 12px; }
+        .topbar-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+        .calendar-switch {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px;
+            border: 1px solid rgba(255,255,255,0.16);
+            border-radius: 10px;
+            background: rgba(255,255,255,0.07);
+        }
+        .calendar-switch button {
+            border: 0;
+            min-height: 30px;
+            padding: 4px 10px;
+            border-radius: 8px;
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 12px;
+            transition: 0.18s ease;
+        }
+        .calendar-switch button.active {
+            background: var(--accent-strong);
+            color: #fff;
+        }
+        .calendar-alt-input { margin-top: 6px; direction: ltr; text-align: center; }
+        .calendar-input-note { display: block; margin-top: 4px; color: var(--text-muted); font-size: 11px; }
         .content { padding: 24px 26px 32px; }
         .glass-card, .glass-soft {
             background: var(--bg-soft);
@@ -224,6 +251,7 @@
             .topbar-title { font-size: 17px; line-height: 1.5; }
             .topbar-sub { margin-top: 4px; line-height: 1.7; }
             .topbar-session { margin-top: 8px; line-height: 1.6; }
+            .topbar-tools { margin-top: 10px; justify-content: flex-start; }
             .content { padding: 16px 12px 28px; }
             .container, .container-fluid { max-width: 100%; padding-inline: 0; }
             .glass-card, .glass-soft, .card { border-radius: 12px; }
@@ -280,10 +308,45 @@
             </div>
         </div>
 
+        {% if request.resolver_match.url_name in 'admin_selection admin_home admin_users admin_user_create admin_user_edit admin_user_disable admin_user_exempt admin_user_remove_admin admin_warning_create admin_roles admin_role_add admin_role_edit admin_plans admin_plan_add admin_plan_edit admin_plan_toggle admin_plan_duplicate admin_subscription_requests admin_subscription_review' %}
+        <div class="sidebar-section-title">إدارة النظام</div>
+        <a href="{% url 'admin_home' %}" class="nav-link-custom {% if request.resolver_match.url_name == 'admin_home' %}active{% endif %}">
+            <i class="fa-solid fa-gauge-high"></i><span>لوحة الإدارة</span>
+        </a>
+        <a href="{% url 'admin_users' %}" class="nav-link-custom {% if request.resolver_match.url_name in 'admin_users admin_user_create admin_user_edit admin_user_disable admin_user_exempt admin_user_remove_admin admin_warning_create' %}active{% endif %}">
+            <i class="fa-solid fa-user-gear"></i><span>إدارة المستخدمين</span>
+        </a>
+        <a href="{% url 'admin_roles' %}" class="nav-link-custom {% if request.resolver_match.url_name in 'admin_roles admin_role_add admin_role_edit' %}active{% endif %}">
+            <i class="fa-solid fa-users-gear"></i><span>الأدوار والصلاحيات</span>
+        </a>
+        <a href="{% url 'admin_plans' %}" class="nav-link-custom {% if request.resolver_match.url_name in 'admin_plans admin_plan_add admin_plan_edit admin_plan_toggle admin_plan_duplicate' %}active{% endif %}">
+            <i class="fa-solid fa-tags"></i><span>باقات الاشتراك</span>
+        </a>
+        <a href="{% url 'admin_subscription_requests' %}" class="nav-link-custom {% if request.resolver_match.url_name in 'admin_subscription_requests admin_subscription_review' %}active{% endif %}">
+            <i class="fa-solid fa-building-columns"></i><span>طلبات التحويل</span>
+        </a>
+
+        <div class="sidebar-section-title">التنقل</div>
+        <a href="{% url 'dashboard' %}" class="nav-link-custom">
+            <i class="fa-solid fa-right-left"></i><span>التبديل إلى النظام</span>
+        </a>
+        <a href="{% url 'logout' %}" class="nav-link-custom">
+            <i class="fa-solid fa-arrow-right-from-bracket"></i><span>تسجيل الخروج</span>
+        </a>
+        {% else %}
         <div class="sidebar-section-title">الرئيسية</div>
         <a href="{% url 'dashboard' %}" class="nav-link-custom {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
             <i class="fa-solid fa-chart-line"></i><span>لوحة التحكم</span>
         </a>
+        <a href="{% url 'reports_center' %}" class="nav-link-custom {% if request.resolver_match.url_name in 'reports_center export_sales_csv' %}active{% endif %}">
+            <i class="fa-solid fa-chart-pie"></i><span>مركز التقارير</span>
+        </a>
+        {% can_access request 'view_monthlyclose' as can_view_monthly_close %}
+        {% if can_view_monthly_close %}
+        <a href="{% url 'monthly_close_list' %}" class="nav-link-custom {% if request.resolver_match.url_name in 'monthly_close_list monthly_close_add monthly_close_reopen' %}active{% endif %}">
+            <i class="fa-solid fa-lock"></i><span>القفل الشهري</span>
+        </a>
+        {% endif %}
         <a href="{% url 'select_company_branch' %}" class="nav-link-custom {% if request.resolver_match.url_name == 'select_company_branch' %}active{% endif %}">
             <i class="fa-solid fa-right-left"></i><span>اختيار الشركة والفرع</span>
         </a>
@@ -348,9 +411,12 @@
         <a href="{% url 'purchase_add' %}" class="nav-link-custom {% if request.resolver_match.url_name == 'purchase_add' %}active{% endif %}">
             <i class="fa-solid fa-cart-plus"></i><span>إضافة شراء</span>
         </a>
+        {% can_access request 'view_item' as can_view_products %}
+        {% if can_view_products %}
         <a href="{% url 'inventory_list' %}" class="nav-link-custom {% if request.resolver_match.url_name == 'inventory_list' %}active{% endif %}">
-            <i class="fa-solid fa-boxes-stacked"></i><span>المخزون</span>
+            <i class="fa-solid fa-boxes-stacked"></i><span>المنتجات</span>
         </a>
+        {% endif %}
         <a href="{% url 'tax_list' %}" class="nav-link-custom {% if request.resolver_match.url_name in 'tax_list tax_create tax_edit tax_delete' %}active{% endif %}">
             <i class="fa-solid fa-percent"></i><span>الضرائب</span>
         </a>
@@ -374,11 +440,18 @@
         </a>
         {% endif %}
 
+        {% endif %}
+
         <div class="sidebar-footer">
+            {% if request.resolver_match.url_name in 'admin_selection admin_home admin_users admin_user_create admin_user_edit admin_user_disable admin_user_exempt admin_user_remove_admin admin_warning_create admin_roles admin_role_add admin_role_edit admin_plans admin_plan_add admin_plan_edit admin_plan_toggle admin_plan_duplicate admin_subscription_requests admin_subscription_review' %}
+            <div>وضع إدارة النظام</div>
+            <div>{{ request.user.get_full_name|default:request.user.username }}</div>
+            {% else %}
             <div>{{ request.session.company_name|default:"لا توجد شركة محددة" }}</div>
             <div>{{ request.session.branch_name|default:"لا يوجد فرع محدد" }}</div>
             {% if request.user.is_authenticated %}
             <a class="text-decoration-none text-info" href="{% url 'logout' %}">تسجيل الخروج</a>
+            {% endif %}
             {% endif %}
         </div>
     </aside>
@@ -389,8 +462,14 @@
                 <div class="topbar-title">{% block page_title %}{% endblock %}</div>
                 <div class="topbar-sub">{% block page_subtitle %}{% endblock %}</div>
             </div>
-            <div class="topbar-session">
-                {{ request.session.company_name|default:"بدون شركة" }} - {{ request.session.branch_name|default:"بدون فرع" }}
+            <div class="topbar-tools">
+                <div class="calendar-switch" role="group" aria-label="اختيار التقويم">
+                    <button type="button" data-calendar-choice="gregorian">ميلادي</button>
+                    <button type="button" data-calendar-choice="hijri">هجري</button>
+                </div>
+                <div class="topbar-session">
+                    {{ request.session.company_name|default:"بدون شركة" }} - {{ request.session.branch_name|default:"بدون فرع" }}
+                </div>
             </div>
         </header>
         <main class="content">{% block content %}{% endblock %}</main>
@@ -439,6 +518,183 @@
     window.onload = resetTimer;
     window.onmousemove = resetTimer;
     window.onkeydown = resetTimer;
+
+    (function () {
+        const serverPreference = "{{ request.user.profile.calendar_preference|default:'gregorian' }}";
+        const storageKey = "calendarPreference";
+        const originalText = new WeakMap();
+        const datePattern = /\b(20\d{2}|19\d{2})-(0[1-9]|1[0-2])-([0-2]\d|3[01])(?:\s+([0-2]\d:[0-5]\d))?\b/g;
+        let activeCalendar = localStorage.getItem(storageKey) || serverPreference || "gregorian";
+
+        function pad(value) {
+            return String(value).padStart(2, "0");
+        }
+
+        function kuwaitiCalendar(adjust) {
+            const today = new Date();
+            if (adjust) today.setDate(today.getDate() + adjust);
+            let day = today.getDate();
+            let month = today.getMonth();
+            let year = today.getFullYear();
+            let m = month + 1;
+            let y = year;
+            if (m < 3) {
+                y -= 1;
+                m += 12;
+            }
+            const a = Math.floor(y / 100);
+            const b = 2 - a + Math.floor(a / 4);
+            const jd = Math.floor(365.25 * (y + 4716)) + Math.floor(30.6001 * (m + 1)) + day + b - 1524;
+            const islamic = jd - 1948440 + 10632;
+            const n = Math.floor((islamic - 1) / 10631);
+            const l = islamic - 10631 * n + 354;
+            const j = Math.floor((10985 - l) / 5316) * Math.floor((50 * l) / 17719) + Math.floor(l / 5670) * Math.floor((43 * l) / 15238);
+            const l2 = l - Math.floor((30 - j) / 15) * Math.floor((17719 * j) / 50) - Math.floor(j / 16) * Math.floor((15238 * j) / 43) + 29;
+            const hijriMonth = Math.floor((24 * l2) / 709);
+            const hijriDay = l2 - Math.floor((709 * hijriMonth) / 24);
+            const hijriYear = 30 * n + j - 30;
+            return [hijriYear, hijriMonth, hijriDay];
+        }
+
+        function gregorianToHijri(dateString) {
+            const date = new Date(`${dateString}T12:00:00`);
+            if (Number.isNaN(date.getTime())) return "";
+            const current = new Date();
+            const diff = Math.round((date - new Date(current.getFullYear(), current.getMonth(), current.getDate(), 12)) / 86400000);
+            const [year, month, day] = kuwaitiCalendar(diff);
+            return `${year}-${pad(month)}-${pad(day)}`;
+        }
+
+        function hijriToJulian(year, month, day) {
+            return Math.floor((11 * year + 3) / 30) + 354 * year + 30 * month - Math.floor((month - 1) / 2) + day + 1948440 - 385;
+        }
+
+        function julianToGregorian(jd) {
+            let l = jd + 68569;
+            const n = Math.floor((4 * l) / 146097);
+            l = l - Math.floor((146097 * n + 3) / 4);
+            const i = Math.floor((4000 * (l + 1)) / 1461001);
+            l = l - Math.floor((1461 * i) / 4) + 31;
+            const j = Math.floor((80 * l) / 2447);
+            const day = l - Math.floor((2447 * j) / 80);
+            l = Math.floor(j / 11);
+            const month = j + 2 - 12 * l;
+            const year = 100 * (n - 49) + i + l;
+            return `${year}-${pad(month)}-${pad(day)}`;
+        }
+
+        function hijriToGregorian(value) {
+            const match = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec((value || "").trim());
+            if (!match) return "";
+            const year = Number(match[1]);
+            const month = Number(match[2]);
+            const day = Number(match[3]);
+            if (month < 1 || month > 12 || day < 1 || day > 30) return "";
+            return julianToGregorian(hijriToJulian(year, month, day));
+        }
+
+        function formatDateForDisplay(match, year, month, day, time) {
+            if (activeCalendar === "gregorian") return match;
+            const hijri = gregorianToHijri(`${year}-${month}-${day}`);
+            return hijri ? `${hijri}${time ? ` ${time}` : ""} هـ` : match;
+        }
+
+        function convertTextNodes() {
+            const walker = document.createTreeWalker(document.querySelector(".content") || document.body, NodeFilter.SHOW_TEXT, {
+                acceptNode(node) {
+                    const parent = node.parentElement;
+                    if (!parent || ["SCRIPT", "STYLE", "TEXTAREA", "INPUT", "OPTION"].includes(parent.tagName)) {
+                        return NodeFilter.FILTER_REJECT;
+                    }
+                    datePattern.lastIndex = 0;
+                    return datePattern.test(node.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+                }
+            });
+            const nodes = [];
+            while (walker.nextNode()) nodes.push(walker.currentNode);
+            nodes.forEach((node) => {
+                if (!originalText.has(node)) originalText.set(node, node.nodeValue);
+                const source = originalText.get(node);
+                node.nodeValue = activeCalendar === "hijri"
+                    ? source.replace(datePattern, formatDateForDisplay)
+                    : source;
+            });
+        }
+
+        function syncDateInput(input) {
+            let alt = input.nextElementSibling;
+            if (!alt || !alt.classList.contains("calendar-alt-input")) {
+                alt = document.createElement("input");
+                alt.type = "text";
+                alt.className = `${input.className} calendar-alt-input`;
+                alt.placeholder = "YYYY-MM-DD هجري";
+                alt.inputMode = "numeric";
+                const note = document.createElement("span");
+                note.className = "calendar-input-note";
+                note.textContent = "سيتم حفظ التاريخ في النظام بالميلادي تلقائياً.";
+                input.insertAdjacentElement("afterend", alt);
+                alt.insertAdjacentElement("afterend", note);
+                alt.addEventListener("change", () => {
+                    const gregorian = hijriToGregorian(alt.value);
+                    if (gregorian) {
+                        input.value = gregorian;
+                        input.dispatchEvent(new Event("change", { bubbles: true }));
+                    }
+                });
+                input.addEventListener("change", () => {
+                    alt.value = gregorianToHijri(input.value);
+                });
+            }
+            alt.value = gregorianToHijri(input.value);
+            alt.hidden = activeCalendar !== "hijri";
+            const note = alt.nextElementSibling;
+            if (note && note.classList.contains("calendar-input-note")) note.hidden = activeCalendar !== "hijri";
+            input.hidden = activeCalendar === "hijri";
+            if (input.required && !input.dataset.calendarRequired) input.dataset.calendarRequired = "true";
+            if (activeCalendar === "hijri") {
+                alt.required = input.required;
+                input.required = false;
+            } else if (input.dataset.calendarRequired === "true") {
+                input.required = true;
+                alt.required = false;
+            }
+        }
+
+        function syncDateInputs() {
+            document.querySelectorAll('input[type="date"]').forEach(syncDateInput);
+        }
+
+        function savePreference(calendar) {
+            localStorage.setItem(storageKey, calendar);
+            {% if request.user.is_authenticated %}
+            fetch("{% url 'calendar_preference_update' %}", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "X-CSRFToken": "{{ csrf_token }}",
+                },
+                body: new URLSearchParams({ calendar }),
+            }).catch(() => {});
+            {% endif %}
+        }
+
+        function applyCalendar(calendar, persist) {
+            activeCalendar = calendar === "hijri" ? "hijri" : "gregorian";
+            document.documentElement.dataset.calendar = activeCalendar;
+            document.querySelectorAll("[data-calendar-choice]").forEach((button) => {
+                button.classList.toggle("active", button.dataset.calendarChoice === activeCalendar);
+            });
+            syncDateInputs();
+            convertTextNodes();
+            if (persist) savePreference(activeCalendar);
+        }
+
+        document.querySelectorAll("[data-calendar-choice]").forEach((button) => {
+            button.addEventListener("click", () => applyCalendar(button.dataset.calendarChoice, true));
+        });
+        document.addEventListener("DOMContentLoaded", () => applyCalendar(activeCalendar, false));
+        applyCalendar(activeCalendar, false);
+    })();
 </script>
 {% endblock %}
 </body>

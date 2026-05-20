@@ -1,4 +1,188 @@
 {% extends 'core/base.html' %}
+
 {% block title %}باقة اشتراك{% endblock %}
 {% block page_title %}باقة اشتراك{% endblock %}
-{% block content %}<div class="glass-card p-4"><form method="post">{% csrf_token %}{% for field in form %}<div class="mb-3">{{ field.label_tag }}{{ field }}</div>{% endfor %}<button class="btn btn-primary">حفظ</button></form></div>{% endblock %}
+{% block page_subtitle %}إدارة التسعير والحدود والصلاحيات التي تمنحها الباقة{% endblock %}
+
+{% block content %}
+<form class="glass-card p-4" method="post">
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+        <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <h5 class="mb-3">البيانات الأساسية</h5>
+            <div class="row g-3">
+                <div class="col-md-8">
+                    <label class="form-label" for="{{ form.name.id_for_label }}">اسم الباقة</label>
+                    {{ form.name }}
+                    {{ form.name.errors }}
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" for="{{ form.display_order.id_for_label }}">ترتيب العرض</label>
+                    {{ form.display_order }}
+                    {{ form.display_order.errors }}
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="{{ form.role.id_for_label }}">الدور المرتبط</label>
+                    {{ form.role }}
+                    {{ form.role.errors }}
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="{{ form.max_users.id_for_label }}">عدد المستخدمين داخل الشركة</label>
+                    {{ form.max_users }}
+                    <div class="text-muted-soft mt-1">اتركه فارغًا إذا لم يكن هناك حد مستخدمين.</div>
+                    {{ form.max_users.errors }}
+                </div>
+                <div class="col-12">
+                    <label class="form-label" for="{{ form.description.id_for_label }}">الوصف</label>
+                    {{ form.description }}
+                    {{ form.description.errors }}
+                </div>
+                <div class="col-12">
+                    <label class="form-label" for="{{ form.features.id_for_label }}">المزايا</label>
+                    {{ form.features }}
+                    <div class="text-muted-soft mt-1">اكتب كل ميزة في سطر مستقل.</div>
+                    {{ form.features.errors }}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-5">
+            <h5 class="mb-3">التسعير والحدود</h5>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label" for="{{ form.price.id_for_label }}">السعر الأساسي</label>
+                    {{ form.price }}
+                    {{ form.price.errors }}
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="{{ form.duration_days.id_for_label }}">مدة الاشتراك بالأيام</label>
+                    {{ form.duration_days }}
+                    {{ form.duration_days.errors }}
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="{{ form.monthly_price.id_for_label }}">السعر الشهري</label>
+                    {{ form.monthly_price }}
+                    {{ form.monthly_price.errors }}
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="{{ form.yearly_price.id_for_label }}">السعر السنوي</label>
+                    {{ form.yearly_price }}
+                    {{ form.yearly_price.errors }}
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="{{ form.trial_days.id_for_label }}">فترة التجربة بالأيام</label>
+                    {{ form.trial_days }}
+                    {{ form.trial_days.errors }}
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="{{ form.max_companies.id_for_label }}">عدد الشركات المسموح</label>
+                    {{ form.max_companies }}
+                    {{ form.max_companies.errors }}
+                </div>
+                <div class="col-12 d-flex gap-4 flex-wrap pt-2">
+                    <label class="form-check-label d-flex align-items-center gap-2">{{ form.is_featured }} باقة مميزة</label>
+                    <label class="form-check-label d-flex align-items-center gap-2">{{ form.is_active }} باقة نشطة</label>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12">
+            <div class="glass-soft p-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <h5 class="mb-1">صلاحيات الباقة</h5>
+                        <div class="text-muted-soft">اختر الصلاحيات التي ستُمنح للمستخدم بعد قبول طلب الاشتراك.</div>
+                    </div>
+                    <button class="btn btn-sm btn-outline-light" type="button" id="togglePermissions">
+                        <i class="fa-solid fa-check-double"></i> تحديد الكل
+                    </button>
+                </div>
+
+                {% for group_name, modules in form.permission_groups.items %}
+                    <div class="mb-4">
+                        <h6 class="text-info mb-2">{{ group_name }}</h6>
+                        <div class="row g-3">
+                            {% for module in modules %}
+                                <div class="col-xl-3 col-lg-4 col-md-6">
+                                    <div class="permission-card glass-soft p-3 h-100">
+                                        <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+                                            <div class="fw-semibold text-light">{{ module.name }}</div>
+                                            <button class="btn btn-sm btn-outline-light permission-card-toggle" type="button">تحديد الكل</button>
+                                        </div>
+                                        <div class="d-grid gap-2">
+                                            {% for action in module.ordered_actions %}
+                                                <label class="permission-action d-flex align-items-center gap-2">
+                                                    <input class="form-check-input permission-checkbox" type="checkbox" name="permissions" value="{{ action.id }}" {% if action.checked %}checked{% endif %}>
+                                                    <span>{{ action.label }}</span>
+                                                </label>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                {% endfor %}
+                {{ form.permissions.errors }}
+            </div>
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mt-4">
+        <a class="btn btn-outline-light" href="{% url 'admin_plans' %}"><i class="fa-solid fa-arrow-right"></i> رجوع</a>
+        <button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> حفظ الباقة</button>
+    </div>
+</form>
+
+<script>
+const toggleButton = document.getElementById("togglePermissions");
+toggleButton?.addEventListener("click", () => {
+    const boxes = Array.from(document.querySelectorAll(".permission-checkbox"));
+    const shouldCheck = boxes.some((box) => !box.checked);
+    boxes.forEach((box) => { box.checked = shouldCheck; });
+    toggleButton.innerHTML = shouldCheck
+        ? '<i class="fa-solid fa-xmark"></i> إلغاء التحديد'
+        : '<i class="fa-solid fa-check-double"></i> تحديد الكل';
+});
+
+document.querySelectorAll(".permission-card-toggle").forEach((button) => {
+    button.addEventListener("click", () => {
+        const card = button.closest(".permission-card");
+        const boxes = Array.from(card.querySelectorAll(".permission-checkbox"));
+        const shouldCheck = boxes.some((box) => !box.checked);
+        boxes.forEach((box) => { box.checked = shouldCheck; });
+        button.textContent = shouldCheck ? "إلغاء الكل" : "تحديد الكل";
+    });
+});
+</script>
+<style>
+    .permission-card {
+        border-radius: 8px;
+        transition: border-color .16s ease, background .16s ease, transform .16s ease;
+    }
+    .permission-card:hover {
+        border-color: rgba(56, 189, 248, .42);
+        background: rgba(56, 189, 248, .10);
+        transform: translateY(-1px);
+    }
+    .permission-card:has(.permission-checkbox:checked) {
+        border-color: rgba(14, 165, 233, .75);
+        background: rgba(14, 165, 233, .16);
+    }
+    .permission-action {
+        cursor: pointer;
+        min-height: 34px;
+        padding: 6px 8px;
+        border-radius: 8px;
+        background: rgba(255,255,255,.05);
+    }
+    .permission-action:has(.permission-checkbox:checked) {
+        color: #fff;
+        background: rgba(56, 189, 248, .14);
+    }
+</style>
+{% endblock %}

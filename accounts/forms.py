@@ -16,6 +16,8 @@ class UserRegistrationForm(forms.ModelForm):
     national_id = forms.CharField(label="رقم الهوية", max_length=20, widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "أدخل رقم الهوية"}))
     phone = forms.CharField(label="رقم الجوال", max_length=15, widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "أدخل رقم الجوال"}))
 
+    role = forms.ModelChoiceField(label="الدور", queryset=Role.objects.all(), widget=forms.Select(attrs={"class": "form-select"}))
+
     class Meta:
         model = User
         fields = ["first_name", "last_name", "email", "username"]
@@ -47,6 +49,87 @@ class UserCreateForm(forms.ModelForm):
             "last_name": forms.TextInput(attrs={"class": "form-control"}),
             "email": forms.EmailInput(attrs={"class": "form-control"}),
             "username": forms.TextInput(attrs={"class": "form-control"}),
+        }
+
+
+class AdminPermissionMixin:
+    def configure_admin_fields(self, can_manage_admins=False):
+        permission_queryset = Permission.objects.filter(
+            content_type__app_label__in=['auth', 'core', 'accounts', 'invoicing']
+        ).select_related('content_type').annotate(
+            action_order=Case(
+                When(codename__startswith='view_', then=Value(0)),
+                When(codename__startswith='add_', then=Value(1)),
+                When(codename__startswith='change_', then=Value(2)),
+                When(codename__startswith='delete_', then=Value(3)),
+                default=Value(9),
+                output_field=IntegerField(),
+            )
+        ).order_by('content_type__app_label', 'content_type__model', 'action_order', 'codename')
+        self.fields['user_permissions'].queryset = permission_queryset
+        if not can_manage_admins:
+            for field_name in ['is_staff', 'is_superuser', 'user_permissions']:
+                self.fields.pop(field_name, None)
+
+
+class AdminUserCreateForm(AdminPermissionMixin, UserCreateForm):
+    phone = forms.CharField(label="رقم الجوال", max_length=30, required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
+
+    def __init__(self, *args, can_manage_admins=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.configure_admin_fields(can_manage_admins=can_manage_admins)
+
+    class Meta(UserCreateForm.Meta):
+        fields = ["first_name", "last_name", "email", "username", "password", "is_staff", "is_superuser", "user_permissions"]
+        labels = {
+            **UserCreateForm.Meta.labels,
+            "is_staff": "مشرف إدارة",
+            "is_superuser": "مشرف كامل الصلاحيات",
+            "user_permissions": "صلاحيات الإدارة التفصيلية",
+        }
+        widgets = {
+            **UserCreateForm.Meta.widgets,
+            "is_staff": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "is_superuser": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "user_permissions": forms.SelectMultiple(attrs={"class": "form-select", "size": 12}),
+        }
+
+
+class UserEditForm(AdminPermissionMixin, forms.ModelForm):
+    national_id = forms.CharField(label="رقم الهوية", max_length=20, widget=forms.TextInput(attrs={"class": "form-control"}))
+    phone = forms.CharField(label="رقم الجوال", max_length=30, required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
+    role = forms.ModelChoiceField(label="الدور", queryset=Role.objects.all(), required=False, widget=forms.Select(attrs={"class": "form-select"}))
+
+    def __init__(self, *args, profile=None, can_manage_admins=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        if profile:
+            self.fields["national_id"].initial = profile.national_id
+            self.fields["phone"].initial = profile.phone
+            self.fields["role"].initial = profile.role
+        self.configure_admin_fields(can_manage_admins=can_manage_admins)
+
+    class Meta:
+        model = User
+        fields = ["first_name", "last_name", "email", "username", "is_active", "is_staff", "is_superuser", "user_permissions"]
+        labels = {
+            "first_name": "الاسم الأول",
+            "last_name": "اسم العائلة",
+            "email": "البريد الإلكتروني",
+            "username": "اسم المستخدم",
+            "is_active": "حساب نشط",
+            "is_staff": "مشرف إدارة",
+            "is_superuser": "مشرف كامل الصلاحيات",
+            "user_permissions": "صلاحيات الإدارة التفصيلية",
+        }
+        widgets = {
+            "first_name": forms.TextInput(attrs={"class": "form-control"}),
+            "last_name": forms.TextInput(attrs={"class": "form-control"}),
+            "email": forms.EmailInput(attrs={"class": "form-control"}),
+            "username": forms.TextInput(attrs={"class": "form-control"}),
+            "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "is_staff": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "is_superuser": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "user_permissions": forms.SelectMultiple(attrs={"class": "form-select", "size": 12}),
         }
 
 
@@ -84,18 +167,162 @@ class RoleForm(forms.ModelForm):
 
 
 class SubscriptionPlanForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['permissions'].queryset = Permission.objects.filter(
+            content_type__app_label__in=['core', 'accounts', 'invoicing']
+        ).select_related('content_type').annotate(
+            action_order=Case(
+                When(codename__startswith='view_', then=Value(0)),
+                When(codename__startswith='add_', then=Value(1)),
+                When(codename__startswith='change_', then=Value(2)),
+                When(codename__startswith='delete_', then=Value(3)),
+                default=Value(9),
+                output_field=IntegerField(),
+            )
+        ).order_by('content_type__app_label', 'content_type__model', 'action_order', 'codename')
+        labels = {
+            "name": "اسم الباقة",
+            "role": "الدور المرتبط",
+            "price": "السعر الأساسي",
+            "monthly_price": "السعر الشهري",
+            "yearly_price": "السعر السنوي",
+            "duration_days": "مدة الاشتراك بالأيام",
+            "trial_days": "أيام التجربة",
+            "max_companies": "عدد الشركات المسموح",
+            "max_users": "الحد الأقصى للمستخدمين",
+            "display_order": "ترتيب العرض",
+            "description": "الوصف",
+            "features": "المزايا",
+            "is_featured": "باقة مميزة",
+            "is_active": "نشطة",
+        }
+        help_texts = {
+            "features": "اكتب كل ميزة في سطر مستقل لتظهر بوضوح للعميل.",
+            "max_users": "اتركه فارغًا إذا لم يكن هناك حد مستخدمين.",
+            "max_companies": "أقصى عدد شركات يمكن للمستخدم إضافتها بهذه الباقة.",
+            "price": "يبقى السعر الأساسي للتوافق مع الطلبات الحالية.",
+        }
+        labels["permissions"] = "صلاحيات الباقة"
+        help_texts["permissions"] = "هذه الصلاحيات تمنح للمستخدم بعد قبول طلب الاشتراك."
+        for name, label in labels.items():
+            self.fields[name].label = label
+        for name, help_text in help_texts.items():
+            self.fields[name].help_text = help_text
+        self.permission_groups = self._build_permission_groups()
+
+    def _build_permission_groups(self):
+        app_names = {
+            'core': 'الحسابات والشركات',
+            'accounts': 'المستخدمون والاشتراكات',
+            'invoicing': 'الفواتير والمخزون',
+        }
+        action_names = {
+            'view': 'عرض',
+            'add': 'إضافة',
+            'change': 'تعديل',
+            'delete': 'حذف',
+            'close': 'قفل',
+            'reopen': 'فتح',
+        }
+        model_names = {
+            'account': 'الحسابات',
+            'branch': 'الفروع',
+            'company': 'الشركات',
+            'companyjoinrequest': 'طلبات الانضمام للشركات',
+            'companymembership': 'عضويات الشركات',
+            'monthlyclose': 'القفل الشهري',
+            'journalentry': 'القيود اليومية',
+            'journalentryline': 'بنود القيود',
+            'role': 'الأدوار',
+            'subscriptionplan': 'باقات الاشتراك',
+            'subscriptionrequest': 'طلبات الاشتراك',
+            'userprofile': 'ملفات المستخدمين',
+            'userwarning': 'إنذارات المستخدمين',
+            'fingerprintcredential': 'بصمة الدخول',
+            'customer': 'العملاء',
+            'invoice': 'فواتير البيع',
+            'invoiceitem': 'بنود فواتير البيع',
+            'item': 'الأصناف',
+            'purchaseinvoice': 'فواتير الشراء',
+            'purchaseitem': 'بنود فواتير الشراء',
+            'stockmovement': 'حركة المخزون',
+            'supplier': 'الموردون',
+            'tax': 'الضرائب',
+        }
+        selected = set()
+        if self.instance and self.instance.pk:
+            selected = set(self.instance.permissions.values_list('id', flat=True))
+        groups = {}
+        for permission in self.fields['permissions'].queryset:
+            app_label = permission.content_type.app_label
+            model_key = permission.content_type.model
+            model_name = model_names.get(model_key, permission.content_type.name)
+            action = permission.codename.split('_', 1)[0]
+            group_name = app_names.get(app_label, app_label)
+            group = groups.setdefault(group_name, {})
+            module = group.setdefault(model_key, {
+                "name": model_name,
+                "actions": {},
+            })
+            module["actions"][action] = {
+                "id": permission.id,
+                "label": action_names.get(action, action),
+                "checked": permission.id in selected,
+            }
+        ordered_groups = {}
+        action_order = ["add", "view", "change", "delete", "close", "reopen"]
+        for group_name, modules in groups.items():
+            ordered_modules = []
+            for module in modules.values():
+                module["ordered_actions"] = [
+                    module["actions"][action]
+                    for action in action_order
+                    if action in module["actions"]
+                ]
+                ordered_modules.append(module)
+            ordered_groups[group_name] = sorted(ordered_modules, key=lambda item: item["name"])
+        return ordered_groups
+
     class Meta:
         model = SubscriptionPlan
-        fields = ["name", "role", "price", "duration_days", "description", "is_active"]
+        fields = [
+            "name", "role", "permissions", "price", "monthly_price", "yearly_price",
+            "duration_days", "trial_days", "max_companies", "max_users", "display_order",
+            "description", "features", "is_featured", "is_active",
+        ]
         labels = {"name": "اسم الباقة", "role": "الدور", "price": "السعر", "duration_days": "المدة بالأيام", "description": "الوصف", "is_active": "نشطة"}
         widgets = {
             "name": forms.TextInput(attrs={"class": "form-control"}),
             "role": forms.Select(attrs={"class": "form-select"}),
-            "price": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-            "duration_days": forms.NumberInput(attrs={"class": "form-control"}),
+            "permissions": forms.SelectMultiple(attrs={"class": "form-select", "size": 12}),
+            "price": forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "min": "0"}),
+            "monthly_price": forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "min": "0"}),
+            "yearly_price": forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "min": "0"}),
+            "duration_days": forms.NumberInput(attrs={"class": "form-control", "min": "1"}),
+            "trial_days": forms.NumberInput(attrs={"class": "form-control", "min": "1"}),
+            "max_companies": forms.NumberInput(attrs={"class": "form-control", "min": "1"}),
+            "max_users": forms.NumberInput(attrs={"class": "form-control", "min": "1"}),
+            "display_order": forms.NumberInput(attrs={"class": "form-control", "min": "0"}),
             "description": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+            "features": forms.Textarea(attrs={"class": "form-control", "rows": 5}),
+            "is_featured": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
+
+    def clean(self):
+        cleaned_data = super().clean()
+        monthly_price = cleaned_data.get("monthly_price")
+        yearly_price = cleaned_data.get("yearly_price")
+        trial_days = cleaned_data.get("trial_days") or 0
+        duration_days = cleaned_data.get("duration_days") or 0
+        if yearly_price and monthly_price and yearly_price > monthly_price * 12:
+            self.add_error("yearly_price", "السعر السنوي أعلى من مجموع 12 شهرًا.")
+        if trial_days < 1:
+            self.add_error("trial_days", "يجب تحديد فترة تجربة لا تقل عن يوم واحد.")
+        if duration_days and trial_days > duration_days:
+            self.add_error("trial_days", "أيام التجربة لا يمكن أن تتجاوز مدة الاشتراك.")
+        return cleaned_data
 
 
 class SubscriptionRequestForm(forms.ModelForm):

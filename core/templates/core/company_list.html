@@ -2,7 +2,7 @@
 
 {% block title %}الشركات{% endblock %}
 {% block page_title %}الشركات{% endblock %}
-{% block page_subtitle %}إدارة الشركات المسجلة في النظام{% endblock %}
+{% block page_subtitle %}إدارة الشركات المسجلة وحالة اشتراك كل شركة{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -20,6 +20,9 @@
                     <th>الرقم الموحد</th>
                     <th>السجل التجاري</th>
                     <th>الرقم الضريبي</th>
+                    <th>المالك</th>
+                    <th>الدور</th>
+                    <th>حالة الاشتراك</th>
                 </tr>
             </thead>
             <tbody>
@@ -29,10 +32,13 @@
                     <td>{{ c.unified_number }}</td>
                     <td>{{ c.commercial_number|default:"-" }}</td>
                     <td>{{ c.vat_number|default:"-" }}</td>
+                    <td>{% if c.owner %}{{ c.owner.get_full_name|default:c.owner.username }}{% else %}-{% endif %}</td>
+                    <td>{{ c.owner_role.name|default:"-" }}</td>
+                    <td>{{ c.get_subscription_status_display }}</td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="4" class="text-center text-muted py-4">لا توجد شركات</td>
+                    <td colspan="7" class="text-center text-muted py-4">لا توجد شركات</td>
                 </tr>
                 {% endfor %}
             </tbody>

@@ -1,0 +1,127 @@
+{% extends 'core/base.html' %}
+
+{% block title %}مركز التقارير{% endblock %}
+{% block page_title %}مركز التقارير{% endblock %}
+{% block page_subtitle %}تحليل المبيعات والمشتريات والمخزون حسب الفترة المحددة{% endblock %}
+
+{% block content %}
+<form class="glass-card p-3 mb-4" method="get">
+    <div class="row g-3 align-items-end">
+        <div class="col-md-4">
+            <label class="form-label" for="date-from">من تاريخ</label>
+            <input class="form-control" id="date-from" type="date" name="from" value="{{ date_from }}">
+        </div>
+        <div class="col-md-4">
+            <label class="form-label" for="date-to">إلى تاريخ</label>
+            <input class="form-control" id="date-to" type="date" name="to" value="{{ date_to }}">
+        </div>
+        <div class="col-md-4 d-flex gap-2">
+            <button class="btn btn-primary flex-fill" type="submit"><i class="fa-solid fa-filter"></i> تطبيق</button>
+            <a class="btn btn-outline-light flex-fill" href="{% url 'export_sales_csv' %}?from={{ date_from }}&to={{ date_to }}">
+                <i class="fa-solid fa-file-csv"></i> CSV
+            </a>
+        </div>
+    </div>
+</form>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-3">
+        <div class="glass-soft p-3 h-100">
+            <div class="text-muted-soft mb-2">إجمالي المبيعات شامل الضريبة</div>
+            <div class="fs-4 fw-semibold text-white">{{ sales_with_vat|floatformat:2 }}</div>
+            <div class="text-muted-soft">{{ invoice_count }} فاتورة</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="glass-soft p-3 h-100">
+            <div class="text-muted-soft mb-2">ضريبة القيمة المضافة</div>
+            <div class="fs-4 fw-semibold text-white">{{ vat_total|floatformat:2 }}</div>
+            <div class="text-muted-soft">من المبيعات خلال الفترة</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="glass-soft p-3 h-100">
+            <div class="text-muted-soft mb-2">إجمالي المشتريات</div>
+            <div class="fs-4 fw-semibold text-white">{{ purchases_total|floatformat:2 }}</div>
+            <div class="text-muted-soft">{{ purchase_count }} فاتورة شراء</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="glass-soft p-3 h-100">
+            <div class="text-muted-soft mb-2">صافي التدفق</div>
+            <div class="fs-4 fw-semibold {% if net_flow < 0 %}text-warning{% else %}text-white{% endif %}">{{ net_flow|floatformat:2 }}</div>
+            <div class="text-muted-soft">المبيعات ناقص المشتريات</div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-6">
+        <div class="glass-card p-4 h-100">
+            <h5 class="mb-3">أفضل العملاء</h5>
+            <div class="table-responsive">
+                <table class="table table-dark table-hover align-middle mb-0">
+                    <thead><tr><th>العميل</th><th>الفواتير</th><th>الإجمالي</th></tr></thead>
+                    <tbody>
+                    {% for customer in top_customers %}
+                        <tr>
+                            <td>{{ customer.customer__name|default:"-" }}</td>
+                            <td>{{ customer.invoices }}</td>
+                            <td>{{ customer.total|floatformat:2 }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="3" class="text-center text-muted-soft py-4">لا توجد مبيعات في هذه الفترة</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="glass-card p-4 h-100">
+            <h5 class="mb-3">أفضل المنتجات</h5>
+            <div class="table-responsive">
+                <table class="table table-dark table-hover align-middle mb-0">
+                    <thead><tr><th>الصنف</th><th>الكمية</th><th>الإجمالي</th></tr></thead>
+                    <tbody>
+                    {% for item in top_items %}
+                        <tr>
+                            <td>{{ item.item__name|default:"-" }}</td>
+                            <td>{{ item.quantity|floatformat:2 }}</td>
+                            <td>{{ item.total|floatformat:2 }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="3" class="text-center text-muted-soft py-4">لا توجد منتجات مباعة في هذه الفترة</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-12">
+        <div class="glass-card p-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0">تنبيهات المخزون</h5>
+                <div class="text-muted-soft">قيمة المخزون الحالية: {{ inventory_value|floatformat:2 }}</div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-dark table-hover align-middle mb-0">
+                    <thead><tr><th>الصنف</th><th>الكمية الحالية</th><th>حد التنبيه</th><th>الباركود</th></tr></thead>
+                    <tbody>
+                    {% for item in low_stock_items %}
+                        <tr>
+                            <td>{{ item.name }}</td>
+                            <td class="text-warning">{{ item.quantity|floatformat:2 }}</td>
+                            <td>{{ item.min_quantity|floatformat:2 }}</td>
+                            <td>{{ item.barcode|default:"-" }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="4" class="text-center text-muted-soft py-4">المخزون ضمن الحدود المحددة</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

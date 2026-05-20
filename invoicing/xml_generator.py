@@ -1,72 +1,107 @@
-from lxml import etree
+from decimal import Decimal, ROUND_HALF_UP
+
 from django.conf import settings
-from .models import Invoice, InvoiceItem
+from lxml import etree
+
+from .models import Invoice
+
+
+CBC = "urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"
+CAC = "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+EXT = "urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2"
+
+
+def _money(value):
+    return str(Decimal(value or 0).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def _el(parent, namespace, tag, text=None, **attrs):
+    node = etree.SubElement(parent, f"{{{namespace}}}{tag}", **attrs)
+    if text is not None:
+        node.text = str(text)
+    return node
+
 
 class XMLGenerator:
-
     @staticmethod
     def generate_invoice_xml(invoice_id):
-        invoice = Invoice.objects.get(id=invoice_id)
-        items = InvoiceItem.objects.filter(invoice=invoice)
+        invoice = Invoice.objects.select_related("branch__company", "customer").get(id=invoice_id)
+        company = invoice.branch.company
+        seller_name = getattr(settings, "COMPANY_NAME", "") or company.name
+        seller_vat = getattr(settings, "COMPANY_VAT_NUMBER", "") or company.vat_number or ""
 
-        # UBL Namespaces
-        NSMAP = {
+        nsmap = {
             None: "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2",
-            "cbc": "urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2",
-            "cac": "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+            "cbc": CBC,
+            "cac": CAC,
+            "ext": EXT,
         }
+        root = etree.Element("Invoice", nsmap=nsmap)
 
-        root = etree.Element("Invoice", nsmap=NSMAP)
+        extensions = _el(root, EXT, "UBLExtensions")
+        extension = _el(extensions, EXT, "UBLExtension")
+        _el(extension, EXT, "ExtensionContent")
 
-        # UUID
-        uuid_el = etree.SubElement(root, "{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}UUID")
-        uuid_el.text = str(invoice.uuid)
+        _el(root, CBC, "ProfileID", "reporting:1.0")
+        _el(root, CBC, "ID", invoice.invoice_number)
+        _el(root, CBC, "UUID", invoice.uuid)
+        _el(root, CBC, "IssueDate", invoice.issue_date.strftime("%Y-%m-%d"))
+        _el(root, CBC, "IssueTime", invoice.issue_date.strftime("%H:%M:%S"))
+        _el(root, CBC, "InvoiceTypeCode", "388" if invoice.invoice_type == "standard" else "388", name="0100000")
+        _el(root, CBC, "DocumentCurrencyCode", "SAR")
+        _el(root, CBC, "TaxCurrencyCode", "SAR")
 
-        # Invoice Number
-        id_el = etree.SubElement(root, "{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}ID")
-        id_el.text = invoice.invoice_number
+        supplier = _el(root, CAC, "AccountingSupplierParty")
+        supplier_party = _el(supplier, CAC, "Party")
+        supplier_id = _el(supplier_party, CAC, "PartyIdentification")
+        _el(supplier_id, CBC, "ID", company.unified_number, schemeID="CRN")
+        supplier_address = _el(supplier_party, CAC, "PostalAddress")
+        _el(supplier_address, CBC, "StreetName", company.address or invoice.branch.address or "Saudi Arabia")
+        _el(supplier_address, CBC, "CityName", "Saudi Arabia")
+        _el(supplier_address, CBC, "PostalZone", "00000")
+        supplier_country = _el(supplier_address, CAC, "Country")
+        _el(supplier_country, CBC, "IdentificationCode", "SA")
+        supplier_tax = _el(supplier_party, CAC, "PartyTaxScheme")
+        _el(supplier_tax, CBC, "CompanyID", seller_vat)
+        supplier_scheme = _el(supplier_tax, CAC, "TaxScheme")
+        _el(supplier_scheme, CBC, "ID", "VAT")
+        supplier_legal = _el(supplier_party, CAC, "PartyLegalEntity")
+        _el(supplier_legal, CBC, "RegistrationName", seller_name)
 
-        # Issue Date
-        issue_date = etree.SubElement(root, "{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}IssueDate")
-        issue_date.text = invoice.issue_date.strftime("%Y-%m-%d")
+        customer = _el(root, CAC, "AccountingCustomerParty")
+        customer_party = _el(customer, CAC, "Party")
+        if invoice.customer.vat_number:
+            customer_tax = _el(customer_party, CAC, "PartyTaxScheme")
+            _el(customer_tax, CBC, "CompanyID", invoice.customer.vat_number)
+            customer_scheme = _el(customer_tax, CAC, "TaxScheme")
+            _el(customer_scheme, CBC, "ID", "VAT")
+        customer_legal = _el(customer_party, CAC, "PartyLegalEntity")
+        _el(customer_legal, CBC, "RegistrationName", invoice.customer.name)
 
-        # Invoice Type
-        type_code = etree.SubElement(root, "{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}InvoiceTypeCode")
-        type_code.text = "388" if invoice.invoice_type == "standard" else "381"
+        tax_total = _el(root, CAC, "TaxTotal")
+        _el(tax_total, CBC, "TaxAmount", _money(invoice.total_vat), currencyID="SAR")
 
-        # Supplier
-        supplier = etree.SubElement(root, "{urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2}AccountingSupplierParty")
-        supplier_party = etree.SubElement(supplier, "{urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2}Party")
-        supplier_name = etree.SubElement(supplier_party, "{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Name")
-        supplier_name.text = settings.COMPANY_NAME
+        monetary = _el(root, CAC, "LegalMonetaryTotal")
+        _el(monetary, CBC, "LineExtensionAmount", _money(invoice.total_amount), currencyID="SAR")
+        _el(monetary, CBC, "TaxExclusiveAmount", _money(invoice.total_amount), currencyID="SAR")
+        _el(monetary, CBC, "TaxInclusiveAmount", _money(invoice.total_with_vat), currencyID="SAR")
+        _el(monetary, CBC, "PayableAmount", _money(invoice.total_with_vat), currencyID="SAR")
 
-        # Customer
-        customer = etree.SubElement(root, "{urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2}AccountingCustomerParty")
-        customer_party = etree.SubElement(customer, "{urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2}Party")
-        customer_name = etree.SubElement(customer_party, "{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}Name")
-        customer_name.text = invoice.customer.name
-
-        # Invoice Lines
-        for item in items:
-            line = etree.SubElement(root, "{urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2}InvoiceLine")
-
-            qty = etree.SubElement(line, "{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}InvoicedQuantity")
-            qty.text = str(item.quantity)
-
-            price = etree.SubElement(line, "{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}PriceAmount")
-            price.text = str(item.unit_price)
-
-            line_ext = etree.SubElement(line, "{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}LineExtensionAmount")
-            line_ext.text = str(item.line_total)
-
-            tax_total = etree.SubElement(line, "{urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2}TaxTotal")
-            tax_amount = etree.SubElement(tax_total, "{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}TaxAmount")
-            tax_amount.text = str(item.line_vat)
-
-        # Totals
-        legal_monetary = etree.SubElement(root, "{urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2}LegalMonetaryTotal")
-
-        payable = etree.SubElement(legal_monetary, "{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}PayableAmount")
-        payable.text = str(invoice.total_with_vat)
+        for index, item in enumerate(invoice.items.select_related("tax", "item"), start=1):
+            line = _el(root, CAC, "InvoiceLine")
+            _el(line, CBC, "ID", index)
+            _el(line, CBC, "InvoicedQuantity", _money(item.quantity), unitCode="PCE")
+            _el(line, CBC, "LineExtensionAmount", _money(item.line_total), currencyID="SAR")
+            line_tax = _el(line, CAC, "TaxTotal")
+            _el(line_tax, CBC, "TaxAmount", _money(item.line_vat), currencyID="SAR")
+            line_item = _el(line, CAC, "Item")
+            _el(line_item, CBC, "Name", item.description or item.item.name)
+            category = _el(line_item, CAC, "ClassifiedTaxCategory")
+            _el(category, CBC, "ID", "S")
+            _el(category, CBC, "Percent", _money(item.tax.rate))
+            category_scheme = _el(category, CAC, "TaxScheme")
+            _el(category_scheme, CBC, "ID", "VAT")
+            price = _el(line, CAC, "Price")
+            _el(price, CBC, "PriceAmount", _money(item.unit_price), currencyID="SAR")
 
         return etree.tostring(root, pretty_print=True, encoding="UTF-8", xml_declaration=True)
