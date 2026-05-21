@@ -178,7 +178,7 @@ def item_edit(request, item_id):
 
 
 @login_required(login_url='login')
-@role_required('add_purchaseinvoice')
+@role_required('import_ai_invoice')
 def ai_invoice_import(request):
     branch_id = request.session.get('branch_id')
     form = AIInvoiceUploadForm(request.POST or None, request.FILES or None)
@@ -229,6 +229,7 @@ def ai_invoice_import(request):
 
 
 @login_required(login_url='login')
+@role_required('view_ai_insights')
 def ai_insights(request):
     branch_id = request.session.get('branch_id')
     low_stock = Item.objects.filter(branch_id=branch_id, quantity__lte=F("min_quantity"), is_active=True).count()

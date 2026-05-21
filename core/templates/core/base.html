@@ -439,12 +439,18 @@
         </a>
 
         <div class="sidebar-section-title">الذكاء الاصطناعي</div>
+        {% can_access request 'import_ai_invoice' as can_import_ai_invoice %}
+        {% if can_import_ai_invoice %}
         <a href="{% url 'ai_invoice_import' %}" class="nav-link-custom {% if request.resolver_match.url_name == 'ai_invoice_import' %}active{% endif %}">
             <i class="fa-solid fa-wand-magic-sparkles"></i><span>فاتورة بالذكاء الاصطناعي</span>
         </a>
+        {% endif %}
+        {% can_access request 'view_ai_insights' as can_view_ai_insights %}
+        {% if can_view_ai_insights %}
         <a href="{% url 'ai_insights' %}" class="nav-link-custom {% if request.resolver_match.url_name == 'ai_insights' %}active{% endif %}">
             <i class="fa-solid fa-brain"></i><span>نصائح وتوقعات</span>
         </a>
+        {% endif %}
 
         {% if request.user.is_superuser %}
         <div class="sidebar-section-title">إدارة النظام</div>

@@ -1,4 +1,5 @@
 {% extends 'core/base.html' %}
+{% load permission_labels %}
 
 {% block title %}{{ title }}{% endblock %}
 {% block page_title %}{{ title }}{% endblock %}
@@ -101,37 +102,8 @@
                         <section class="permission-group" data-group-card>
                             <div class="permission-group-head">
                                 <div>
-                                    <div class="permission-app">
-                                        {% if group.grouper.app_label == 'core' %}المحاسبة والشركات
-                                        {% elif group.grouper.app_label == 'accounts' %}المستخدمون والاشتراكات
-                                        {% elif group.grouper.app_label == 'invoicing' %}الفواتير والمخزون
-                                        {% else %}قسم النظام
-                                        {% endif %}
-                                    </div>
-                                    <h6>
-                                        {% if group.grouper.model == 'account' %}دليل الحسابات
-                                        {% elif group.grouper.model == 'company' %}الشركات
-                                        {% elif group.grouper.model == 'branch' %}الفروع
-                                        {% elif group.grouper.model == 'journalentry' %}القيود اليومية
-                                        {% elif group.grouper.model == 'journalentryline' %}بنود القيود
-                                        {% elif group.grouper.model == 'role' %}الأدوار
-                                        {% elif group.grouper.model == 'userprofile' %}ملفات المستخدمين
-                                        {% elif group.grouper.model == 'subscriptionplan' %}باقات الاشتراك
-                                        {% elif group.grouper.model == 'subscriptionrequest' %}طلبات الاشتراك
-                                        {% elif group.grouper.model == 'userwarning' %}تنبيهات المستخدمين
-                                        {% elif group.grouper.model == 'fingerprintcredential' %}بصمة الدخول
-                                        {% elif group.grouper.model == 'customer' %}العملاء
-                                        {% elif group.grouper.model == 'supplier' %}الموردون
-                                        {% elif group.grouper.model == 'invoice' %}فواتير البيع
-                                        {% elif group.grouper.model == 'invoiceitem' %}بنود فواتير البيع
-                                        {% elif group.grouper.model == 'purchaseinvoice' %}فواتير الشراء
-                                        {% elif group.grouper.model == 'purchaseitem' %}بنود فواتير الشراء
-                                        {% elif group.grouper.model == 'item' %}الأصناف
-                                        {% elif group.grouper.model == 'stockmovement' %}حركة المخزون
-                                        {% elif group.grouper.model == 'tax' %}الضرائب
-                                        {% else %}{{ group.grouper.model }}
-                                        {% endif %}
-                                    </h6>
+                                    <div class="permission-app">{{ group.grouper|permission_app_label }}</div>
+                                    <h6>{{ group.grouper|permission_model_label }}</h6>
                                 </div>
                                 <label class="group-select">
                                     <input type="checkbox" class="form-check-input select-all-group">
@@ -153,13 +125,7 @@
                                         {% elif perm.codename|slice:":5" == "view_" %}<i class="fa-solid fa-eye"></i>
                                         {% else %}<i class="fa-solid fa-key"></i>{% endif %}
                                     </span>
-                                    <span class="permission-text">
-                                        {% if perm.codename|slice:":4" == "add_" %}إضافة
-                                        {% elif perm.codename|slice:":7" == "change_" %}تعديل
-                                        {% elif perm.codename|slice:":7" == "delete_" %}حذف
-                                        {% elif perm.codename|slice:":5" == "view_" %}عرض
-                                        {% else %}صلاحية خاصة{% endif %}
-                                    </span>
+                                    <span class="permission-text">{{ perm|permission_action_label }}</span>
                                 </label>
                                 {% endfor %}
                             </div>

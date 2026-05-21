@@ -4,6 +4,7 @@ from django.contrib.auth.models import Permission
 from django.db.models import Case, IntegerField, Value, When
 
 from .models import Role, SubscriptionPlan, SubscriptionRequest, UserProfile, UserWarning
+from .permission_labels import APP_LABELS, ACTION_LABELS, CODENAME_LABELS, MODEL_LABELS
 
 
 class NationalIdLoginForm(forms.Form):
@@ -212,47 +213,6 @@ class SubscriptionPlanForm(forms.ModelForm):
         self.permission_groups = self._build_permission_groups()
 
     def _build_permission_groups(self):
-        app_names = {
-            'core': 'الحسابات والشركات',
-            'accounts': 'المستخدمون والاشتراكات',
-            'invoicing': 'الفواتير والمخزون',
-        }
-        action_names = {
-            'view': 'عرض',
-            'add': 'إضافة',
-            'change': 'تعديل',
-            'delete': 'حذف',
-            'close': 'قفل',
-            'reopen': 'فتح',
-        }
-        model_names = {
-            'account': 'الحسابات',
-            'branch': 'الفروع',
-            'company': 'الشركات',
-            'companyjoinrequest': 'طلبات الانضمام للشركات',
-            'companymembership': 'عضويات الشركات',
-            'monthlyclose': 'القفل الشهري',
-            'employee': 'الموظفون',
-            'salaryrecord': 'رواتب الموظفين',
-            'employeeadvance': 'سلف الموظفين',
-            'journalentry': 'القيود اليومية',
-            'journalentryline': 'بنود القيود',
-            'role': 'الأدوار',
-            'subscriptionplan': 'باقات الاشتراك',
-            'subscriptionrequest': 'طلبات الاشتراك',
-            'userprofile': 'ملفات المستخدمين',
-            'userwarning': 'إنذارات المستخدمين',
-            'fingerprintcredential': 'بصمة الدخول',
-            'customer': 'العملاء',
-            'invoice': 'فواتير البيع',
-            'invoiceitem': 'بنود فواتير البيع',
-            'item': 'الأصناف',
-            'purchaseinvoice': 'فواتير الشراء',
-            'purchaseitem': 'بنود فواتير الشراء',
-            'stockmovement': 'حركة المخزون',
-            'supplier': 'الموردون',
-            'tax': 'الضرائب',
-        }
         selected = set()
         if self.instance and self.instance.pk:
             selected = set(self.instance.permissions.values_list('id', flat=True))
@@ -260,29 +220,25 @@ class SubscriptionPlanForm(forms.ModelForm):
         for permission in self.fields['permissions'].queryset:
             app_label = permission.content_type.app_label
             model_key = permission.content_type.model
-            model_name = model_names.get(model_key, permission.content_type.name)
+            model_name = MODEL_LABELS.get(model_key, permission.content_type.name)
             action = permission.codename.split('_', 1)[0]
-            group_name = app_names.get(app_label, app_label)
+            group_name = APP_LABELS.get(app_label, app_label)
             group = groups.setdefault(group_name, {})
             module = group.setdefault(model_key, {
                 "name": model_name,
                 "actions": {},
             })
-            module["actions"][action] = {
+            module["actions"][permission.codename] = {
                 "id": permission.id,
-                "label": action_names.get(action, action),
+                "label": CODENAME_LABELS.get(permission.codename, ACTION_LABELS.get(action, permission.name)),
+                "order": ["add", "view", "change", "delete", "close", "reopen", "import"].index(action) if action in ["add", "view", "change", "delete", "close", "reopen", "import"] else 99,
                 "checked": permission.id in selected,
             }
         ordered_groups = {}
-        action_order = ["add", "view", "change", "delete", "close", "reopen"]
         for group_name, modules in groups.items():
             ordered_modules = []
             for module in modules.values():
-                module["ordered_actions"] = [
-                    module["actions"][action]
-                    for action in action_order
-                    if action in module["actions"]
-                ]
+                module["ordered_actions"] = sorted(module["actions"].values(), key=lambda item: (item["order"], item["label"]))
                 ordered_modules.append(module)
             ordered_groups[group_name] = sorted(ordered_modules, key=lambda item: item["name"])
         return ordered_groups

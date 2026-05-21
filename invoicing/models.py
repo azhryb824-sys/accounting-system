@@ -102,6 +102,12 @@ class PurchaseInvoice(models.Model):
     vat_amount = models.DecimalField(max_digits=10, decimal_places=2)
     total_with_vat = models.DecimalField(max_digits=10, decimal_places=2)
 
+    class Meta:
+        permissions = [
+            ("import_ai_invoice", "إضافة فاتورة بالذكاء الاصطناعي"),
+            ("view_ai_insights", "عرض نصائح وتوقعات الذكاء الاصطناعي"),
+        ]
+
     def __str__(self):
         return f"فاتورة شراء {self.invoice_number} - {self.supplier.name}"
 
