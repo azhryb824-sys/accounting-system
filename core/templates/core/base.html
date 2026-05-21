@@ -450,6 +450,9 @@
         <a href="{% url 'ai_insights' %}" class="nav-link-custom {% if request.resolver_match.url_name == 'ai_insights' %}active{% endif %}">
             <i class="fa-solid fa-brain"></i><span>نصائح وتوقعات</span>
         </a>
+        <a href="{% url 'ai_assistant' %}" class="nav-link-custom {% if request.resolver_match.url_name == 'ai_assistant' %}active{% endif %}">
+            <i class="fa-solid fa-comments-dollar"></i><span>المساعد المالي</span>
+        </a>
         {% endif %}
 
         {% if request.user.is_superuser %}

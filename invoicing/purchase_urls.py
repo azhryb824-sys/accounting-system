@@ -11,4 +11,5 @@ urlpatterns = [
     path('inventory/<int:item_id>/edit/', purchase_views.item_edit, name='item_edit'),
     path('ai/invoice/', purchase_views.ai_invoice_import, name='ai_invoice_import'),
     path('ai/insights/', purchase_views.ai_insights, name='ai_insights'),
+    path('ai/assistant/', purchase_views.ai_assistant, name='ai_assistant'),
 ]

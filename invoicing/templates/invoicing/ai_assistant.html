@@ -1,0 +1,57 @@
+{% extends 'core/base.html' %}
+
+{% block page_title %}المساعد المالي بالذكاء الاصطناعي{% endblock %}
+{% block page_subtitle %}اسأل عن المبيعات والمشتريات والمخزون والمؤشرات الحالية للفرع{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="alert {% if ai_status.has_key %}alert-success{% else %}alert-warning{% endif %}">
+        {% if ai_status.has_key %}
+            المساعد متصل عبر <code>{{ ai_status.key_name }}</code> ويستخدم <code>{{ ai_status.model }}</code>.
+        {% else %}
+            يعمل المساعد الآن بتحليل محلي. لتفعيل إجابات Gemini أضف <code>GOOGLE_API_KEY</code> أو <code>GEMINI_API_KEY</code> ثم أعد نشر الخدمة.
+        {% endif %}
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <div class="glass-card p-4 h-100">
+                <form method="post">
+                    {% csrf_token %}
+                    <label class="form-label" for="ai-question">سؤالك</label>
+                    <textarea id="ai-question" name="question" class="form-control" rows="5" placeholder="مثال: ما أهم مخاطر هذا الشهر؟ أو كيف أحسن التدفق النقدي؟">{{ question }}</textarea>
+                    <button class="btn btn-primary mt-3" type="submit"><i class="fa-solid fa-paper-plane"></i> اسأل المساعد</button>
+                </form>
+
+                {% if answer %}
+                <div class="glass-soft p-3 mt-4">
+                    <div class="text-muted-soft mb-2">الإجابة</div>
+                    {% if answer.ok %}
+                    <div style="white-space: pre-line;">{{ answer.answer }}</div>
+                    {% else %}
+                    <div class="text-warning">{{ answer.message }}</div>
+                    {% if answer.raw %}<pre class="small mt-2 mb-0 text-wrap">{{ answer.raw }}</pre>{% endif %}
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="col-lg-5">
+            <div class="glass-card p-4 h-100">
+                <h5 class="mb-3">قراءة فورية</h5>
+                <div class="d-grid gap-2">
+                    {% for tip in insights.tips %}
+                    <div class="glass-soft p-3">{{ tip }}</div>
+                    {% empty %}
+                    <div class="text-muted-soft">لا توجد توصيات حالياً.</div>
+                    {% endfor %}
+                </div>
+                <a class="btn btn-outline-light w-100 mt-3" href="{% url 'ai_insights' %}">
+                    <i class="fa-solid fa-chart-line"></i> فتح التحليل الكامل
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

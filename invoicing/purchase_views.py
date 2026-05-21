@@ -5,7 +5,7 @@ from django.db.models import F
 
 from .models import PurchaseInvoice, PurchaseItem, Supplier, Item, StockMovement
 from .forms import PurchaseInvoiceForm, ItemForm, AIInvoiceUploadForm
-from .ai_services import ai_configuration_status, extract_invoice_from_image, match_invoice_items
+from .ai_services import ai_configuration_status, answer_financial_question, extract_invoice_from_image, generate_financial_insights, match_invoice_items
 from django.utils.translation import gettext_lazy as _
 from accounts.views import role_required
 from core.models import Branch
@@ -241,11 +241,40 @@ def ai_invoice_import(request):
 @role_required('view_ai_insights')
 def ai_insights(request):
     branch_id = request.session.get('branch_id')
+    if not branch_id:
+        return redirect("select_company_branch")
     low_stock = Item.objects.filter(branch_id=branch_id, quantity__lte=F("min_quantity"), is_active=True).count()
     purchases = PurchaseInvoice.objects.filter(branch_id=branch_id).order_by("-issue_date")[:5]
-    tips = [
-        f"يوجد {low_stock} صنف عند أو تحت حد التنبيه، راجع إعادة الطلب.",
-        "راجع فواتير الشراء الكبيرة وتأكد من تحديث تكلفة الأصناف بعد كل شراء.",
-        "استخدم القفل الشهري بعد مراجعة القيود والفواتير لمنع التعديل على الفترات المعتمدة.",
-    ]
-    return render(request, 'invoicing/ai_insights.html', {"title": "نصائح وتوقعات الذكاء الاصطناعي", "tips": tips, "purchases": purchases})
+    insights = generate_financial_insights(branch_id)
+    return render(request, 'invoicing/ai_insights.html', {
+        "title": "نصائح وتوقعات الذكاء الاصطناعي",
+        "tips": insights.get("tips", []),
+        "insights": insights,
+        "purchases": purchases,
+        "low_stock": low_stock,
+        "ai_status": ai_configuration_status(),
+    })
+
+
+@login_required(login_url='login')
+@role_required('view_ai_insights')
+def ai_assistant(request):
+    branch_id = request.session.get('branch_id')
+    if not branch_id:
+        return redirect("select_company_branch")
+    answer = None
+    question = ""
+    insights = generate_financial_insights(branch_id)
+    if request.method == "POST":
+        question = (request.POST.get("question") or "").strip()
+        if question:
+            answer = answer_financial_question(branch_id, question)
+        else:
+            messages.warning(request, "اكتب سؤالك أولاً.")
+    return render(request, "invoicing/ai_assistant.html", {
+        "title": "مساعد الذكاء الاصطناعي",
+        "ai_status": ai_configuration_status(),
+        "insights": insights,
+        "answer": answer,
+        "question": question,
+    })
