@@ -1,6 +1,6 @@
 from django.db import models
 import uuid
-from core.models import Branch
+from core.models import Branch, JournalEntry
 
 
 # ============================
@@ -48,6 +48,13 @@ class Invoice(models.Model):
     total_with_vat = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
     is_posted = models.BooleanField(default=False)
+    journal_entry = models.ForeignKey(
+        JournalEntry,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='sales_invoices',
+    )
     zatca_qr = models.TextField(blank=True, default="")
     zatca_xml = models.TextField(blank=True, default="")
     zatca_hash = models.CharField(max_length=128, blank=True, default="")
@@ -101,6 +108,13 @@ class PurchaseInvoice(models.Model):
     total_before_vat = models.DecimalField(max_digits=10, decimal_places=2)
     vat_amount = models.DecimalField(max_digits=10, decimal_places=2)
     total_with_vat = models.DecimalField(max_digits=10, decimal_places=2)
+    journal_entry = models.ForeignKey(
+        JournalEntry,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='purchase_invoices',
+    )
 
     class Meta:
         permissions = [

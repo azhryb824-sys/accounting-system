@@ -1,0 +1,12 @@
+{% extends 'core/base.html' %}
+{% block page_title %}عمليات غير مرحلة{% endblock %}
+{% block page_subtitle %}تنبيهات للرواتب والسلف والفواتير التي لا ترتبط بقيد محاسبي{% endblock %}
+{% block content %}
+<div class="container-fluid"><div class="row g-3">
+<div class="col-lg-6"><div class="glass-card p-4"><h5>رواتب غير معتمدة</h5>{% for row in draft_salaries %}<div>{{ row.employee.name }} - {{ row.period_label }}</div>{% empty %}<div class="text-muted">لا يوجد.</div>{% endfor %}</div></div>
+<div class="col-lg-6"><div class="glass-card p-4"><h5>رواتب معتمدة غير مدفوعة</h5>{% for row in unpaid_salaries %}<div>{{ row.employee.name }} - {{ row.period_label }}</div>{% empty %}<div class="text-muted">لا يوجد.</div>{% endfor %}</div></div>
+<div class="col-lg-6"><div class="glass-card p-4"><h5>سلف بلا قيد</h5>{% for row in unposted_advances %}<div>{{ row.employee.name }} - {{ row.amount }}</div>{% empty %}<div class="text-muted">لا يوجد.</div>{% endfor %}</div></div>
+<div class="col-lg-6"><div class="glass-card p-4"><h5>فواتير بيع بلا قيد</h5>{% for row in unposted_invoices %}<div>{{ row.invoice_number }} - {{ row.customer.name }}</div>{% empty %}<div class="text-muted">لا يوجد.</div>{% endfor %}</div></div>
+<div class="col-lg-6"><div class="glass-card p-4"><h5>فواتير شراء بلا قيد</h5>{% for row in unposted_purchases %}<div>{{ row.invoice_number }} - {{ row.supplier.name }}</div>{% empty %}<div class="text-muted">لا يوجد.</div>{% endfor %}</div></div>
+</div></div>
+{% endblock %}

@@ -13,6 +13,7 @@ from .models import Account, JournalEntry, Company, Branch, CompanyJoinRequest, 
 from .forms import CompanyForm, CompanyJoinRequestForm, CompanySubscriptionRequestForm, BranchForm, JournalEntryForm, JournalEntryLineFormSet, AccountForm, MonthlyCloseForm, EmployeeForm, SalaryRecordForm, EmployeeAdvanceForm
 from .services.accounting import create_balanced_entry
 from .services.monthly_close import assert_month_open
+from .services.payroll import approve_salary, pay_salary
 from accounts.forms import UserRegistrationForm
 from accounts.models import Role, SubscriptionRequest, UserProfile
 from accounts.views import role_required
@@ -147,6 +148,71 @@ def reports_center(request):
 
 
 @login_required(login_url='login')
+def payroll_report(request):
+    companies = _user_companies(request.user)
+    selected_company_id = request.GET.get("company") or request.session.get("company_id")
+    year = int(request.GET.get("year") or timezone.localdate().year)
+    month = int(request.GET.get("month") or timezone.localdate().month)
+    salaries = SalaryRecord.objects.filter(company__in=companies, year=year, month=month).select_related("employee", "company", "branch", "accrual_entry", "payment_entry")
+    if selected_company_id:
+        salaries = salaries.filter(company_id=selected_company_id)
+    totals = salaries.aggregate(
+        basic=Coalesce(Sum('basic_salary'), Decimal('0')),
+        allowances=Coalesce(Sum('allowances'), Decimal('0')),
+        deductions=Coalesce(Sum('deductions'), Decimal('0')),
+        advances=Coalesce(Sum('advances_deduction'), Decimal('0')),
+        net=Coalesce(Sum('net_salary'), Decimal('0')),
+    )
+    totals["gross"] = totals["basic"] + totals["allowances"] - totals["deductions"]
+    return render(request, 'core/payroll_report.html', {
+        "title": "كشف الرواتب الشهري",
+        "companies": companies.order_by("name"),
+        "selected_company_id": str(selected_company_id or ""),
+        "year": year,
+        "month": month,
+        "salaries": salaries.order_by("employee__name"),
+        "totals": totals,
+    })
+
+
+@login_required(login_url='login')
+def advance_report(request):
+    companies = _user_companies(request.user)
+    advances = EmployeeAdvance.objects.filter(company__in=companies).select_related("employee", "company", "branch", "journal_entry")
+    status = request.GET.get("status") or ""
+    if status:
+        advances = advances.filter(status=status)
+    totals = advances.aggregate(
+        amount=Coalesce(Sum('amount'), Decimal('0')),
+        paid=Coalesce(Sum('paid_amount'), Decimal('0')),
+    )
+    totals["remaining"] = totals["amount"] - totals["paid"]
+    return render(request, 'core/advance_report.html', {
+        "title": "كشف سلف الموظفين",
+        "status": status,
+        "advances": advances.order_by("employee__name", "-date"),
+        "totals": totals,
+    })
+
+
+@login_required(login_url='login')
+def unposted_operations_report(request):
+    branch_id = request.session.get('branch_id')
+    if not branch_id:
+        return redirect('select_company_branch')
+    from invoicing.models import Invoice, PurchaseInvoice
+
+    return render(request, 'core/unposted_operations_report.html', {
+        "title": "عمليات غير مرحلة",
+        "draft_salaries": SalaryRecord.objects.filter(branch_id=branch_id, accrual_entry__isnull=True).select_related("employee"),
+        "unpaid_salaries": SalaryRecord.objects.filter(branch_id=branch_id, status='approved', payment_entry__isnull=True).select_related("employee"),
+        "unposted_advances": EmployeeAdvance.objects.filter(branch_id=branch_id, journal_entry__isnull=True).select_related("employee"),
+        "unposted_invoices": Invoice.objects.filter(branch_id=branch_id, journal_entry__isnull=True).select_related("customer"),
+        "unposted_purchases": PurchaseInvoice.objects.filter(branch_id=branch_id, journal_entry__isnull=True).select_related("supplier"),
+    })
+
+
+@login_required(login_url='login')
 @role_required('view_monthlyclose')
 def monthly_close_list(request):
     companies = _user_companies(request.user)
@@ -266,6 +332,17 @@ def salary_add(request):
         payment_date = salary.payment_date or timezone.localdate()
         assert_month_open(salary.employee.company, payment_date)
         salary.save()
+        try:
+            if salary.status == "approved":
+                approve_salary(salary, payment_date)
+            elif salary.status == "paid":
+                pay_salary(salary, payment_date)
+        except ValueError as exc:
+            salary.delete()
+            form.add_error("advances_deduction", str(exc))
+            return render(request, 'core/salary_form.html', {"title": "ط¥ط¶ط§ظپط© ط±ط§طھط¨", "form": form})
+        messages.success(request, "طھظ… ط­ظپط¸ ظ…ط³ظٹط± ط§ظ„ط±ط§طھط¨.")
+        return redirect("salary_list")
         if salary.status in {"approved", "paid"}:
             credit_account = "1000" if salary.status == "paid" else "2300"
             credit_note = "صرف راتب" if salary.status == "paid" else "رواتب مستحقة"
@@ -284,6 +361,32 @@ def salary_add(request):
 
 
 @login_required(login_url='login')
+@role_required('change_salaryrecord')
+def salary_approve(request, salary_id):
+    salary = get_object_or_404(SalaryRecord, id=salary_id, company__in=_user_companies(request.user))
+    if request.method == "POST":
+        try:
+            entry = approve_salary(salary)
+            messages.success(request, f"تم اعتماد الراتب وإنشاء قيد رقم {entry.id}.")
+        except ValueError as exc:
+            messages.error(request, str(exc))
+    return redirect("salary_list")
+
+
+@login_required(login_url='login')
+@role_required('change_salaryrecord')
+def salary_pay(request, salary_id):
+    salary = get_object_or_404(SalaryRecord, id=salary_id, company__in=_user_companies(request.user))
+    if request.method == "POST":
+        try:
+            entry = pay_salary(salary)
+            messages.success(request, f"تم دفع الراتب وإنشاء قيد رقم {entry.id}.")
+        except ValueError as exc:
+            messages.error(request, str(exc))
+    return redirect("salary_list")
+
+
+@login_required(login_url='login')
 @role_required('view_employeeadvance')
 def advance_list(request):
     advances = EmployeeAdvance.objects.filter(company__in=_user_companies(request.user)).select_related("employee", "company")
@@ -298,7 +401,7 @@ def advance_add(request):
         advance = form.save(commit=False)
         assert_month_open(advance.employee.company, advance.date)
         advance.save()
-        create_balanced_entry(
+        entry = create_balanced_entry(
             branch=advance.branch or Branch.objects.filter(company=advance.company).first(),
             date=advance.date,
             description=f"سلفة موظف: {advance.employee.name}",
@@ -307,6 +410,8 @@ def advance_add(request):
                 {"account": "1000", "credit": advance.amount, "note": "صرف سلفة"},
             ],
         )
+        advance.journal_entry = entry
+        advance.save(update_fields=["journal_entry"])
         messages.success(request, "تم تسجيل السلفة وترحيلها محاسبياً.")
         return redirect("advance_list")
     return render(request, 'core/advance_form.html', {"title": "إضافة سلفة", "form": form})

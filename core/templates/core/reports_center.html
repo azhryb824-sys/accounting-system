@@ -24,6 +24,12 @@
     </div>
 </form>
 
+<div class="row g-3 mb-4">
+    <div class="col-md-4"><a class="btn btn-outline-light w-100 py-3" href="{% url 'payroll_report' %}"><i class="fa-solid fa-money-check-dollar"></i> كشف الرواتب الشهري</a></div>
+    <div class="col-md-4"><a class="btn btn-outline-light w-100 py-3" href="{% url 'advance_report' %}"><i class="fa-solid fa-hand-holding-dollar"></i> كشف سلف الموظفين</a></div>
+    <div class="col-md-4"><a class="btn btn-outline-warning w-100 py-3" href="{% url 'unposted_operations_report' %}"><i class="fa-solid fa-triangle-exclamation"></i> عمليات غير مرحلة</a></div>
+</div>
+
 <div class="row g-4 mb-4">
     <div class="col-md-3">
         <div class="glass-soft p-3 h-100">

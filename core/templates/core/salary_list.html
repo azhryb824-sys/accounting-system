@@ -2,16 +2,31 @@
 {% load permission_tags %}
 
 {% block page_title %}رواتب الموظفين{% endblock %}
-{% block page_subtitle %}مسيرات الرواتب والخصومات والسلف وصافي الراتب{% endblock %}
+{% block page_subtitle %}مسيرات الرواتب والاعتماد والدفع والقيود المرتبطة{% endblock %}
 
 {% block content %}
 {% can_access request 'add_salaryrecord' as can_add_salary %}
+{% can_access request 'change_salaryrecord' as can_change_salary %}
 <div class="container-fluid">
-    <div class="d-flex justify-content-end mb-3">{% if can_add_salary %}<a class="btn btn-primary" href="{% url 'salary_add' %}">إضافة راتب</a>{% endif %}</div>
+    <div class="d-flex justify-content-between mb-3">
+        <a class="btn btn-outline-light" href="{% url 'payroll_report' %}">كشف الرواتب</a>
+        {% if can_add_salary %}<a class="btn btn-primary" href="{% url 'salary_add' %}">إضافة راتب</a>{% endif %}
+    </div>
     <div class="glass-card p-4 table-responsive">
         <table class="table table-dark table-hover align-middle mb-0">
-            <thead><tr><th>الموظف</th><th>الفترة</th><th>الأساسي</th><th>البدلات</th><th>الخصومات</th><th>خصم السلف</th><th>الصافي</th><th>الحالة</th></tr></thead>
-            <tbody>{% for salary in salaries %}<tr><td>{{ salary.employee.name }}</td><td>{{ salary.period_label }}</td><td>{{ salary.basic_salary }}</td><td>{{ salary.allowances }}</td><td>{{ salary.deductions }}</td><td>{{ salary.advances_deduction }}</td><td>{{ salary.net_salary }}</td><td>{{ salary.get_status_display }}</td></tr>{% empty %}<tr><td colspan="8" class="text-center py-5 text-muted">لا توجد رواتب.</td></tr>{% endfor %}</tbody>
+            <thead><tr><th>الموظف</th><th>الفترة</th><th>الأساسي</th><th>البدلات</th><th>الخصومات</th><th>خصم السلف</th><th>الصافي</th><th>الحالة</th><th>القيود</th><th>إجراءات</th></tr></thead>
+            <tbody>
+            {% for salary in salaries %}
+            <tr>
+                <td>{{ salary.employee.name }}</td><td>{{ salary.period_label }}</td><td>{{ salary.basic_salary }}</td><td>{{ salary.allowances }}</td><td>{{ salary.deductions }}</td><td>{{ salary.advances_deduction }}</td><td>{{ salary.net_salary }}</td><td>{{ salary.get_status_display }}</td>
+                <td>{% if salary.accrual_entry %}<a class="btn btn-sm btn-outline-info" href="{% url 'journal_edit' salary.accrual_entry.id %}">استحقاق</a>{% endif %} {% if salary.payment_entry %}<a class="btn btn-sm btn-outline-success" href="{% url 'journal_edit' salary.payment_entry.id %}">دفع</a>{% endif %}</td>
+                <td>
+                    {% if can_change_salary and not salary.accrual_entry %}<form class="d-inline" method="post" action="{% url 'salary_approve' salary.id %}">{% csrf_token %}<button class="btn btn-sm btn-warning">اعتماد</button></form>{% endif %}
+                    {% if can_change_salary and salary.accrual_entry and not salary.payment_entry %}<form class="d-inline" method="post" action="{% url 'salary_pay' salary.id %}">{% csrf_token %}<button class="btn btn-sm btn-success">دفع</button></form>{% endif %}
+                </td>
+            </tr>
+            {% empty %}<tr><td colspan="10" class="text-center py-5 text-muted">لا توجد رواتب.</td></tr>{% endfor %}
+            </tbody>
         </table>
     </div>
 </div>

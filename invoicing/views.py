@@ -17,6 +17,8 @@ from .zatca import prepare_zatca_payload
 
 
 def post_sales_invoice(invoice):
+    if invoice.journal_entry_id:
+        return invoice.journal_entry
     assert_month_open(invoice.branch.company, invoice.issue_date.date())
     total_cogs = Decimal("0.00")
     for line in invoice.items.select_related("item"):
@@ -31,18 +33,23 @@ def post_sales_invoice(invoice):
             movement_type="OUT",
         )
 
-    return create_balanced_entry(
+    debit_account = "1101" if invoice.payment_method == "ط¢ط¬ظ„" else "1000"
+    debit_note = _("Debtor - Customer") if debit_account == "1101" else _("Cash / Bank")
+    entry = create_balanced_entry(
         branch=invoice.branch,
         date=invoice.issue_date.date(),
         description=_("Sales Invoice No. {invoice_number}").format(invoice_number=invoice.invoice_number),
         lines=[
-            {"account": "1101", "debit": invoice.total_with_vat, "note": _("Debtor - Customer")},
+            {"account": debit_account, "debit": invoice.total_with_vat, "note": debit_note},
             {"account": "4100", "credit": invoice.total_amount, "note": _("Sales Revenue")},
             {"account": "2100", "credit": invoice.total_vat, "note": _("Value Added Tax")},
             {"account": "5100", "debit": total_cogs, "note": _("Cost of Goods Sold")},
             {"account": "1200", "credit": total_cogs, "note": _("Inventory Reduction")},
         ],
     )
+    invoice.journal_entry = entry
+    invoice.save(update_fields=["journal_entry"])
+    return entry
 
 
 @login_required(login_url='login')

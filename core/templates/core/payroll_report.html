@@ -1,0 +1,17 @@
+{% extends 'core/base.html' %}
+{% block page_title %}كشف الرواتب الشهري{% endblock %}
+{% block page_subtitle %}إجماليات الرواتب والسلف وصافي المستحقات حسب الشهر{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <form class="glass-soft p-3 mb-3 row g-3" method="get">
+        <div class="col-md-4"><select class="form-select" name="company"><option value="">كل الشركات</option>{% for company in companies %}<option value="{{ company.id }}" {% if selected_company_id == company.id|stringformat:"s" %}selected{% endif %}>{{ company.name }}</option>{% endfor %}</select></div>
+        <div class="col-md-3"><input class="form-control" name="year" type="number" value="{{ year }}"></div>
+        <div class="col-md-3"><input class="form-control" name="month" type="number" min="1" max="12" value="{{ month }}"></div>
+        <div class="col-md-2"><button class="btn btn-primary w-100">عرض</button></div>
+    </form>
+    <div class="row g-3 mb-3"><div class="col-md-4"><div class="glass-soft p-3">الإجمالي قبل السلف: {{ totals.gross|floatformat:2 }}</div></div><div class="col-md-4"><div class="glass-soft p-3">خصم السلف: {{ totals.advances|floatformat:2 }}</div></div><div class="col-md-4"><div class="glass-soft p-3">الصافي: {{ totals.net|floatformat:2 }}</div></div></div>
+    <div class="glass-card p-4 table-responsive"><table class="table table-dark table-hover"><thead><tr><th>الموظف</th><th>الفرع</th><th>الصافي</th><th>الحالة</th><th>قيد الاستحقاق</th><th>قيد الدفع</th></tr></thead><tbody>
+    {% for salary in salaries %}<tr><td>{{ salary.employee.name }}</td><td>{{ salary.branch.name|default:"-" }}</td><td>{{ salary.net_salary }}</td><td>{{ salary.get_status_display }}</td><td>{% if salary.accrual_entry %}<a href="{% url 'journal_edit' salary.accrual_entry.id %}">#{{ salary.accrual_entry.id }}</a>{% else %}-{% endif %}</td><td>{% if salary.payment_entry %}<a href="{% url 'journal_edit' salary.payment_entry.id %}">#{{ salary.payment_entry.id }}</a>{% else %}-{% endif %}</td></tr>{% empty %}<tr><td colspan="6" class="text-center py-4">لا توجد بيانات.</td></tr>{% endfor %}
+    </tbody></table></div>
+</div>
+{% endblock %}

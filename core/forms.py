@@ -251,6 +251,7 @@ class SalaryRecordForm(forms.ModelForm):
             self.fields['employee'].queryset = Employee.objects.filter(company__in=companies, status='active')
 
 
+
 class EmployeeAdvanceForm(forms.ModelForm):
     class Meta:
         model = EmployeeAdvance
@@ -276,3 +277,11 @@ class EmployeeAdvanceForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         if companies is not None:
             self.fields['employee'].queryset = Employee.objects.filter(company__in=companies, status='active')
+
+    def clean(self):
+        cleaned_data = super().clean()
+        amount = cleaned_data.get('amount') or 0
+        paid_amount = cleaned_data.get('paid_amount') or 0
+        if paid_amount > amount:
+            raise forms.ValidationError("المبلغ المسدد لا يمكن أن يكون أكبر من مبلغ السلفة.")
+        return cleaned_data

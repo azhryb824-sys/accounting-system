@@ -1,0 +1,10 @@
+{% extends 'core/base.html' %}
+{% block page_title %}كشف سلف الموظفين{% endblock %}
+{% block page_subtitle %}إجمالي السلف والمسدد والمتبقي حسب الموظف والحالة{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <form class="glass-soft p-3 mb-3 row g-3" method="get"><div class="col-md-10"><select class="form-select" name="status"><option value="">كل الحالات</option><option value="open" {% if status == "open" %}selected{% endif %}>قائمة</option><option value="settled" {% if status == "settled" %}selected{% endif %}>مسددة</option><option value="cancelled" {% if status == "cancelled" %}selected{% endif %}>ملغاة</option></select></div><div class="col-md-2"><button class="btn btn-primary w-100">عرض</button></div></form>
+    <div class="row g-3 mb-3"><div class="col-md-4"><div class="glass-soft p-3">إجمالي السلف: {{ totals.amount|floatformat:2 }}</div></div><div class="col-md-4"><div class="glass-soft p-3">المسدد: {{ totals.paid|floatformat:2 }}</div></div><div class="col-md-4"><div class="glass-soft p-3">المتبقي: {{ totals.remaining|floatformat:2 }}</div></div></div>
+    <div class="glass-card p-4 table-responsive"><table class="table table-dark table-hover"><thead><tr><th>الموظف</th><th>التاريخ</th><th>المبلغ</th><th>المسدد</th><th>المتبقي</th><th>الحالة</th><th>القيد</th></tr></thead><tbody>{% for advance in advances %}<tr><td>{{ advance.employee.name }}</td><td>{{ advance.date|date:"Y-m-d" }}</td><td>{{ advance.amount }}</td><td>{{ advance.paid_amount }}</td><td>{{ advance.remaining_amount }}</td><td>{{ advance.get_status_display }}</td><td>{% if advance.journal_entry %}<a href="{% url 'journal_edit' advance.journal_entry.id %}">#{{ advance.journal_entry.id }}</a>{% else %}-{% endif %}</td></tr>{% empty %}<tr><td colspan="7" class="text-center py-4">لا توجد بيانات.</td></tr>{% endfor %}</tbody></table></div>
+</div>
+{% endblock %}

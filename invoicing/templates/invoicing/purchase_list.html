@@ -31,6 +31,9 @@
                 <td>{{ p.issue_date }}</td>
                 <td>{{ p.total_with_vat }}</td>
                 <td>
+                    {% if p.journal_entry %}
+                    <a href="{% url 'journal_edit' p.journal_entry.id %}" class="btn btn-sm btn-info">القيد</a>
+                    {% endif %}
                     <a href="{% url 'purchase_edit' p.id %}" class="btn btn-sm btn-warning">تعديل</a>
                     <a href="{% url 'purchase_delete' p.id %}" class="btn btn-sm btn-danger"
                        onclick="return confirm('هل أنت متأكد من الحذف؟')">حذف</a>

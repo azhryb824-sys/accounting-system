@@ -16,8 +16,10 @@ from datetime import date
 
 
 def post_purchase_invoice(invoice):
+    if invoice.journal_entry_id:
+        return invoice.journal_entry
     assert_month_open(invoice.branch.company, invoice.issue_date)
-    return create_balanced_entry(
+    entry = create_balanced_entry(
         branch=invoice.branch,
         date=invoice.issue_date,
         description=f"فاتورة شراء رقم {invoice.invoice_number}",
@@ -27,6 +29,9 @@ def post_purchase_invoice(invoice):
             {"account": "2200", "credit": invoice.total_with_vat, "note": "مستحق للمورد"},
         ],
     )
+    invoice.journal_entry = entry
+    invoice.save(update_fields=["journal_entry"])
+    return entry
 
 # ============================
 #  قائمة فواتير المشتريات حسب الفرع

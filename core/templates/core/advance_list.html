@@ -2,16 +2,23 @@
 {% load permission_tags %}
 
 {% block page_title %}سلف الموظفين{% endblock %}
-{% block page_subtitle %}متابعة السلف والمبالغ المسددة والمتبقية{% endblock %}
+{% block page_subtitle %}متابعة السلف والمبالغ المسددة والمتبقية والقيود المرتبطة{% endblock %}
 
 {% block content %}
 {% can_access request 'add_employeeadvance' as can_add_advance %}
 <div class="container-fluid">
-    <div class="d-flex justify-content-end mb-3">{% if can_add_advance %}<a class="btn btn-primary" href="{% url 'advance_add' %}">إضافة سلفة</a>{% endif %}</div>
+    <div class="d-flex justify-content-between mb-3">
+        <a class="btn btn-outline-light" href="{% url 'advance_report' %}">كشف السلف</a>
+        {% if can_add_advance %}<a class="btn btn-primary" href="{% url 'advance_add' %}">إضافة سلفة</a>{% endif %}
+    </div>
     <div class="glass-card p-4 table-responsive">
         <table class="table table-dark table-hover align-middle mb-0">
-            <thead><tr><th>الموظف</th><th>التاريخ</th><th>المبلغ</th><th>المسدد</th><th>المتبقي</th><th>الحالة</th></tr></thead>
-            <tbody>{% for advance in advances %}<tr><td>{{ advance.employee.name }}</td><td>{{ advance.date|date:"Y-m-d" }}</td><td>{{ advance.amount }}</td><td>{{ advance.paid_amount }}</td><td>{{ advance.remaining_amount }}</td><td>{{ advance.get_status_display }}</td></tr>{% empty %}<tr><td colspan="6" class="text-center py-5 text-muted">لا توجد سلف.</td></tr>{% endfor %}</tbody>
+            <thead><tr><th>الموظف</th><th>التاريخ</th><th>المبلغ</th><th>المسدد</th><th>المتبقي</th><th>الحالة</th><th>القيد</th></tr></thead>
+            <tbody>
+            {% for advance in advances %}
+            <tr><td>{{ advance.employee.name }}</td><td>{{ advance.date|date:"Y-m-d" }}</td><td>{{ advance.amount }}</td><td>{{ advance.paid_amount }}</td><td>{{ advance.remaining_amount }}</td><td>{{ advance.get_status_display }}</td><td>{% if advance.journal_entry %}<a class="btn btn-sm btn-outline-info" href="{% url 'journal_edit' advance.journal_entry.id %}">عرض القيد</a>{% else %}<span class="text-warning">غير مرحل</span>{% endif %}</td></tr>
+            {% empty %}<tr><td colspan="7" class="text-center py-5 text-muted">لا توجد سلف.</td></tr>{% endfor %}
+            </tbody>
         </table>
     </div>
 </div>
