@@ -8,6 +8,7 @@ urlpatterns = [
     # Dashboard
     # ============================
     path('', views.home, name='home'),
+    path('health/version/', views.health_version, name='health_version'),
     path('dashboard/', views.dashboard, name='dashboard'),
     path('reports/', views.reports_center, name='reports_center'),
     path('reports/sales.csv', views.export_sales_csv, name='export_sales_csv'),

@@ -5,7 +5,7 @@ from django.db.models import F
 
 from .models import PurchaseInvoice, PurchaseItem, Supplier, Item, StockMovement
 from .forms import PurchaseInvoiceForm, ItemForm, AIInvoiceUploadForm
-from .ai_services import extract_invoice_from_image, match_invoice_items
+from .ai_services import ai_configuration_status, extract_invoice_from_image, match_invoice_items
 from django.utils.translation import gettext_lazy as _
 from accounts.views import role_required
 from core.models import Branch
@@ -183,6 +183,10 @@ def ai_invoice_import(request):
     branch_id = request.session.get('branch_id')
     form = AIInvoiceUploadForm(request.POST or None, request.FILES or None)
     result = None
+    ai_status = ai_configuration_status()
+    if not branch_id:
+        messages.warning(request, "اختر الشركة والفرع قبل استخدام إضافة الفاتورة بالذكاء الاصطناعي.")
+        return redirect("select_company_branch")
     if request.method == 'POST' and form.is_valid():
         result = extract_invoice_from_image(form.cleaned_data['invoice_image'])
         if result.get("ok"):
@@ -225,7 +229,12 @@ def ai_invoice_import(request):
             post_purchase_invoice(invoice)
             messages.success(request, "تم استخراج الفاتورة وإضافتها وترحيلها محاسبياً.")
             return redirect("purchase_list")
-    return render(request, 'invoicing/ai_invoice_import.html', {"form": form, "result": result, "title": "إضافة فاتورة بالذكاء الاصطناعي"})
+    return render(request, 'invoicing/ai_invoice_import.html', {
+        "form": form,
+        "result": result,
+        "title": "إضافة فاتورة بالذكاء الاصطناعي",
+        "ai_status": ai_status,
+    })
 
 
 @login_required(login_url='login')

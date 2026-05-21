@@ -9,13 +9,35 @@ from django.conf import settings
 
 from .models import Item
 
+API_KEY_ENV_NAMES = ("GOOGLE_API_KEY", "GEMINI_API_KEY", "GOOGLE_GEMINI_API_KEY")
+
 
 def _google_api_key():
-    return getattr(settings, "GOOGLE_API_KEY", "") or os.environ.get("GOOGLE_API_KEY", "")
+    for name in API_KEY_ENV_NAMES:
+        value = getattr(settings, name, "") or os.environ.get(name, "")
+        value = str(value or "").strip().strip('"').strip("'")
+        if value:
+            return value
+    return ""
 
 
 def _gemini_model():
-    return getattr(settings, "GEMINI_INVOICE_MODEL", "") or os.environ.get("GEMINI_INVOICE_MODEL", "gemini-1.5-flash")
+    return (getattr(settings, "GEMINI_INVOICE_MODEL", "") or os.environ.get("GEMINI_INVOICE_MODEL", "gemini-2.0-flash")).strip()
+
+
+def ai_configuration_status():
+    configured_name = ""
+    for name in API_KEY_ENV_NAMES:
+        value = getattr(settings, name, "") or os.environ.get(name, "")
+        if str(value or "").strip().strip('"').strip("'"):
+            configured_name = name
+            break
+    return {
+        "has_key": bool(configured_name),
+        "key_name": configured_name,
+        "model": _gemini_model(),
+        "accepted_names": API_KEY_ENV_NAMES,
+    }
 
 
 def _json_from_text(text):
@@ -35,7 +57,7 @@ def extract_invoice_from_image(uploaded_file):
     if not key:
         return {
             "ok": False,
-            "message": "لم يتم ضبط GOOGLE_API_KEY بعد. أضفه كمتغير بيئة ثم أعد تشغيل الخادم.",
+            "message": "لم يتم العثور على مفتاح Gemini. أضف GOOGLE_API_KEY أو GEMINI_API_KEY في متغيرات البيئة ثم أعد نشر الخدمة.",
         }
 
     content = uploaded_file.read()
@@ -60,11 +82,25 @@ def extract_invoice_from_image(uploaded_file):
             "response_mime_type": "application/json",
         },
     }
-    response = requests.post(url, params={"key": key}, json=payload, timeout=60)
-    if response.status_code >= 400:
+    try:
+        response = requests.post(url, params={"key": key}, json=payload, timeout=60)
+    except requests.RequestException as exc:
         return {
             "ok": False,
-            "message": f"تعذر الاتصال بخدمة Gemini: {response.status_code}",
+            "message": "تعذر الاتصال بخدمة Gemini. تحقق من اتصال الخادم ومن صحة إعدادات المفتاح.",
+            "raw": str(exc)[:1000],
+        }
+    if response.status_code >= 400:
+        error_message = f"تعذر الاتصال بخدمة Gemini: {response.status_code}"
+        if response.status_code in (400, 404):
+            error_message += " - تحقق من اسم النموذج GEMINI_INVOICE_MODEL."
+        elif response.status_code in (401, 403):
+            error_message += " - تحقق من صحة المفتاح وتفعيل Gemini API."
+        elif response.status_code == 429:
+            error_message += " - تم تجاوز حد الاستخدام مؤقتاً."
+        return {
+            "ok": False,
+            "message": error_message,
             "raw": response.text[:1000],
         }
 

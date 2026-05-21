@@ -4,7 +4,7 @@ from decimal import Decimal
 from django.db.models import Count, F, Q, Sum
 from django.db.models.functions import Coalesce
 from django.contrib import messages
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
 from django.contrib.auth.decorators import login_required
@@ -16,6 +16,16 @@ from .services.monthly_close import assert_month_open
 from accounts.forms import UserRegistrationForm
 from accounts.models import Role, SubscriptionRequest, UserProfile
 from accounts.views import role_required
+
+APP_VERSION = "2026-05-21-company-plan-fix-2"
+
+
+def health_version(request):
+    return JsonResponse({
+        "version": APP_VERSION,
+        "company_add_plan_fix": True,
+    })
+
 
 # ============================
 #  Home Page (Landing)
