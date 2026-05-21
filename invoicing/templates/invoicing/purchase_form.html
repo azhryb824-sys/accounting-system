@@ -5,87 +5,567 @@
 {% block page_subtitle %}تسجيل فاتورة شراء وتحديث المخزون تلقائيًا{% endblock %}
 
 {% block content %}
-<form class="glass-card p-4" method="post">
+<form class="purchase-glass-page" method="post" dir="rtl">
     {% csrf_token %}
-    {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
 
-    <div class="row g-4">
-        <div class="col-lg-5">
-            <h5 class="mb-3">بيانات الفاتورة</h5>
-            <div class="row g-3">
+    {% if form.non_field_errors %}
+        <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    <div class="purchase-grid">
+
+        <!-- بيانات الفاتورة -->
+        <section class="glass-panel invoice-panel">
+            <h3 class="panel-title">بيانات الفاتورة</h3>
+
+            <div class="form-grid">
                 {% for field in form %}
-                    <div class="col-12">
-                        <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    <div class="field-box">
+                        <label class="form-label" for="{{ field.id_for_label }}">
+                            {{ field.label }}
+                        </label>
+
                         {{ field }}
-                        {{ field.errors }}
+
+                        {% if field.help_text %}
+                            <small class="help-text">{{ field.help_text }}</small>
+                        {% endif %}
+
+                        {% if field.errors %}
+                            <div class="field-errors">{{ field.errors }}</div>
+                        {% endif %}
                     </div>
                 {% endfor %}
             </div>
-        </div>
-        <div class="col-lg-7">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h5 class="mb-0">الأصناف</h5>
-                <button type="button" id="add-row" class="btn btn-sm btn-outline-light"><i class="fa-solid fa-plus"></i> إضافة صنف</button>
+
+            <div class="summary-box">
+                <div class="summary-row">
+                    <span>إجمالي الأصناف</span>
+                    <strong id="subtotal">0.00</strong>
+                </div>
+
+                <div class="summary-row">
+                    <span>ضريبة القيمة المضافة 15%</span>
+                    <strong id="vat">0.00</strong>
+                </div>
+
+                <div class="summary-row total">
+                    <span>الإجمالي النهائي</span>
+                    <strong id="grand-total">0.00</strong>
+                </div>
             </div>
-            <div class="table-responsive glass-soft">
-                <table class="table table-dark table-hover mb-0 align-middle" id="items-table">
+        </section>
+
+        <!-- الأصناف -->
+        <section class="glass-panel items-panel">
+            <div class="panel-header">
+                <h3 class="panel-title">الأصناف</h3>
+
+                <button type="button" id="add-row" class="btn-add-item">
+                    <i class="fa-solid fa-plus"></i>
+                    إضافة صنف
+                </button>
+            </div>
+
+            <div class="items-table-wrap">
+                <table class="items-table" id="items-table">
                     <thead>
                         <tr>
                             <th>الصنف</th>
                             <th>الكمية</th>
                             <th>السعر</th>
+                            <th>الإجمالي</th>
                             <th>حذف</th>
                         </tr>
                     </thead>
+
                     <tbody id="items-body">
                         <tr>
-                            <td>
-                                <select name="item_id" class="form-select" required>
+                            <td data-label="الصنف">
+                                <select name="item_id" class="item-control" required>
                                     {% for item in items %}
                                         <option value="{{ item.id }}">{{ item.name }}</option>
                                     {% endfor %}
                                 </select>
                             </td>
-                            <td><input type="number" name="quantity" class="form-control" step="0.01" min="0.01" required></td>
-                            <td><input type="number" name="price" class="form-control" step="0.01" min="0" required></td>
-                            <td><button type="button" class="btn btn-sm btn-outline-danger remove-row"><i class="fa-solid fa-trash"></i></button></td>
+
+                            <td data-label="الكمية">
+                                <input type="number" name="quantity" class="item-control quantity-input" step="0.01" min="0.01" required>
+                            </td>
+
+                            <td data-label="السعر">
+                                <input type="number" name="price" class="item-control price-input" step="0.01" min="0" required>
+                            </td>
+
+                            <td data-label="الإجمالي">
+                                <input type="text" class="item-control row-total" value="0.00" readonly>
+                            </td>
+
+                            <td data-label="حذف">
+                                <button type="button" class="btn-remove remove-row">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            </td>
                         </tr>
                     </tbody>
                 </table>
             </div>
-        </div>
-    </div>
 
-    <div class="d-flex justify-content-between align-items-center mt-4">
-        <a href="{% url 'purchase_list' %}" class="btn btn-outline-light"><i class="fa-solid fa-arrow-right"></i> رجوع</a>
-        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> حفظ الفاتورة</button>
+            <div class="actions-bar">
+                <a href="{% url 'purchase_list' %}" class="btn-back">
+                    <i class="fa-solid fa-arrow-right"></i>
+                    رجوع
+                </a>
+
+                <button type="submit" class="btn-save">
+                    <i class="fa-solid fa-floppy-disk"></i>
+                    حفظ الفاتورة
+                </button>
+            </div>
+        </section>
+
     </div>
 </form>
 
+<style>
+.purchase-glass-page {
+    width: 100%;
+    padding: 22px;
+    border-radius: 28px;
+    background: rgba(15, 23, 42, 0.52);
+    border: 1px solid rgba(255,255,255,0.08);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 24px 70px rgba(0,0,0,0.32);
+    overflow: hidden;
+}
+
+.purchase-grid {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 24px;
+    align-items: stretch;
+}
+
+.glass-panel {
+    background: rgba(255,255,255,0.075);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 26px;
+    padding: 28px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+}
+
+.invoice-panel {
+    order: 2;
+}
+
+.items-panel {
+    order: 1;
+}
+
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 20px;
+}
+
+.panel-title {
+    margin: 0 0 22px;
+    color: #f8fafc;
+    font-size: 28px;
+    font-weight: 900;
+}
+
+.panel-header .panel-title {
+    margin-bottom: 0;
+}
+
+.form-grid {
+    display: grid;
+    gap: 18px;
+}
+
+.field-box {
+    width: 100%;
+}
+
+.purchase-glass-page .form-label {
+    display: block;
+    margin-bottom: 9px;
+    color: #dbeafe;
+    font-weight: 800;
+    font-size: 15px;
+}
+
+.purchase-glass-page input,
+.purchase-glass-page select,
+.purchase-glass-page textarea,
+.item-control {
+    width: 100% !important;
+    min-height: 50px;
+    box-sizing: border-box;
+    border-radius: 16px !important;
+    border: 1px solid rgba(255,255,255,0.16) !important;
+    background: rgba(255,255,255,0.08) !important;
+    color: #ffffff !important;
+    padding: 10px 14px;
+    outline: none;
+}
+
+.purchase-glass-page input:focus,
+.purchase-glass-page select:focus,
+.purchase-glass-page textarea:focus,
+.item-control:focus {
+    border-color: #38bdf8 !important;
+    box-shadow: 0 0 0 4px rgba(56,189,248,0.15) !important;
+}
+
+.purchase-glass-page select option {
+    color: #111827;
+    background: #ffffff;
+}
+
+.help-text {
+    display: block;
+    margin-top: 6px;
+    color: #94a3b8;
+    font-size: 12px;
+}
+
+.field-errors {
+    color: #fecaca;
+    font-size: 13px;
+    margin-top: 6px;
+}
+
+.summary-box {
+    display: grid;
+    gap: 12px;
+    margin-top: 24px;
+}
+
+.summary-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 18px;
+    background: rgba(255,255,255,0.055);
+    color: #e5e7eb;
+    font-weight: 700;
+}
+
+.summary-row strong {
+    color: #ffffff;
+}
+
+.summary-row.total {
+    background: rgba(14,165,233,0.16);
+    border: 1px solid rgba(56,189,248,0.25);
+}
+
+.summary-row.total strong {
+    color: #38bdf8;
+    font-size: 22px;
+}
+
+.btn-add-item,
+.btn-save,
+.btn-back,
+.btn-remove {
+    border: none;
+    border-radius: 16px;
+    font-weight: 800;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.btn-add-item {
+    padding: 10px 16px;
+    color: #ffffff;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.75);
+}
+
+.btn-save {
+    padding: 13px 24px;
+    color: #ffffff;
+    background: linear-gradient(135deg, #0ea5e9, #38bdf8);
+    box-shadow: 0 10px 24px rgba(14,165,233,0.25);
+}
+
+.btn-back {
+    padding: 13px 24px;
+    color: #ffffff;
+    border: 1px solid rgba(255,255,255,0.65);
+    background: rgba(255,255,255,0.04);
+}
+
+.btn-remove {
+    width: 42px;
+    height: 42px;
+    color: #fecaca;
+    background: rgba(239,68,68,0.10);
+    border: 1px solid rgba(248,113,113,0.35);
+}
+
+.items-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    border-radius: 22px;
+    border: 1px solid rgba(255,255,255,0.10);
+}
+
+.items-table {
+    width: 100%;
+    border-collapse: collapse;
+    color: #fff;
+    table-layout: fixed;
+}
+
+.items-table th {
+    background: rgba(255,255,255,0.10);
+    color: #f8fafc;
+    padding: 16px 12px;
+    font-weight: 900;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.items-table td {
+    padding: 12px;
+    background: rgba(255,255,255,0.035);
+    border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+.items-table th:nth-child(1),
+.items-table td:nth-child(1) {
+    width: 34%;
+}
+
+.items-table th:nth-child(2),
+.items-table td:nth-child(2),
+.items-table th:nth-child(3),
+.items-table td:nth-child(3),
+.items-table th:nth-child(4),
+.items-table td:nth-child(4) {
+    width: 19%;
+}
+
+.items-table th:nth-child(5),
+.items-table td:nth-child(5) {
+    width: 9%;
+    text-align: center;
+}
+
+.actions-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+    margin-top: 24px;
+}
+
+/* Tablet */
+@media (max-width: 1100px) {
+    .purchase-grid {
+        grid-template-columns: 340px 1fr;
+        gap: 18px;
+    }
+
+    .glass-panel {
+        padding: 22px;
+    }
+}
+
+/* Mobile */
+@media (max-width: 900px) {
+    .purchase-glass-page {
+        padding: 14px;
+        border-radius: 22px;
+    }
+
+    .purchase-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .invoice-panel,
+    .items-panel {
+        order: unset;
+    }
+
+    .panel-title {
+        font-size: 24px;
+    }
+
+    .panel-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .btn-add-item {
+        width: 100%;
+    }
+
+    .items-table-wrap {
+        border: none;
+        overflow: visible;
+    }
+
+    .items-table,
+    .items-table thead,
+    .items-table tbody,
+    .items-table th,
+    .items-table td,
+    .items-table tr {
+        display: block;
+        width: 100% !important;
+    }
+
+    .items-table thead {
+        display: none;
+    }
+
+    .items-table tr {
+        background: rgba(255,255,255,0.055);
+        border: 1px solid rgba(255,255,255,0.10);
+        border-radius: 20px;
+        padding: 14px;
+        margin-bottom: 14px;
+    }
+
+    .items-table td {
+        background: transparent;
+        border: none;
+        padding: 8px 0;
+        text-align: right;
+    }
+
+    .items-table td::before {
+        content: attr(data-label);
+        display: block;
+        margin-bottom: 7px;
+        color: #dbeafe;
+        font-weight: 800;
+        font-size: 13px;
+    }
+
+    .btn-remove {
+        width: 100%;
+        height: 46px;
+    }
+
+    .actions-bar {
+        flex-direction: column-reverse;
+    }
+
+    .actions-bar .btn-save,
+    .actions-bar .btn-back {
+        width: 100%;
+    }
+}
+
+/* Small Mobile */
+@media (max-width: 480px) {
+    .glass-panel {
+        padding: 18px;
+        border-radius: 20px;
+    }
+
+    .panel-title {
+        font-size: 22px;
+    }
+
+    .summary-row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+</style>
+
 <script>
+function calculateTotals() {
+    let subtotal = 0;
+
+    document.querySelectorAll("#items-body tr").forEach(function (row) {
+        const quantity = parseFloat(row.querySelector(".quantity-input")?.value) || 0;
+        const price = parseFloat(row.querySelector(".price-input")?.value) || 0;
+        const total = quantity * price;
+
+        const rowTotal = row.querySelector(".row-total");
+        if (rowTotal) {
+            rowTotal.value = total.toFixed(2);
+        }
+
+        subtotal += total;
+    });
+
+    const vat = subtotal * 0.15;
+    const grandTotal = subtotal + vat;
+
+    document.getElementById("subtotal").textContent = subtotal.toFixed(2);
+    document.getElementById("vat").textContent = vat.toFixed(2);
+    document.getElementById("grand-total").textContent = grandTotal.toFixed(2);
+}
+
 document.getElementById("add-row").addEventListener("click", function () {
     const row = `
         <tr>
-            <td>
-                <select name="item_id" class="form-select" required>
+            <td data-label="الصنف">
+                <select name="item_id" class="item-control" required>
                     {% for item in items %}
                         <option value="{{ item.id }}">{{ item.name }}</option>
                     {% endfor %}
                 </select>
             </td>
-            <td><input type="number" name="quantity" class="form-control" step="0.01" min="0.01" required></td>
-            <td><input type="number" name="price" class="form-control" step="0.01" min="0" required></td>
-            <td><button type="button" class="btn btn-sm btn-outline-danger remove-row"><i class="fa-solid fa-trash"></i></button></td>
+
+            <td data-label="الكمية">
+                <input type="number" name="quantity" class="item-control quantity-input" step="0.01" min="0.01" required>
+            </td>
+
+            <td data-label="السعر">
+                <input type="number" name="price" class="item-control price-input" step="0.01" min="0" required>
+            </td>
+
+            <td data-label="الإجمالي">
+                <input type="text" class="item-control row-total" value="0.00" readonly>
+            </td>
+
+            <td data-label="حذف">
+                <button type="button" class="btn-remove remove-row">
+                    <i class="fa-solid fa-trash"></i>
+                </button>
+            </td>
         </tr>
     `;
+
     document.getElementById("items-body").insertAdjacentHTML("beforeend", row);
+});
+
+document.addEventListener("input", function (event) {
+    if (
+        event.target.classList.contains("quantity-input") ||
+        event.target.classList.contains("price-input")
+    ) {
+        calculateTotals();
+    }
 });
 
 document.addEventListener("click", function (event) {
     const button = event.target.closest(".remove-row");
+
     if (button && document.querySelectorAll("#items-body tr").length > 1) {
         button.closest("tr").remove();
+        calculateTotals();
     }
 });
+
+calculateTotals();
 </script>
 {% endblock %}

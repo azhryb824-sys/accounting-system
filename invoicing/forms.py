@@ -94,8 +94,41 @@ class PurchaseInvoiceForm(forms.ModelForm):
             'vat_amount',
             'total_with_vat'
         ]
+
+        labels = {
+            'supplier': 'المورد',
+            'invoice_number': 'رقم الفاتورة',
+            'issue_date': 'تاريخ الإصدار',
+            'total_before_vat': 'الإجمالي قبل الضريبة',
+            'vat_amount': 'قيمة الضريبة',
+            'total_with_vat': 'الإجمالي شامل الضريبة',
+        }
+
         widgets = {
-            'issue_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'supplier': forms.Select(attrs={'class': 'form-select'}),
+            'invoice_number': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'أدخل رقم الفاتورة'
+            }),
+            'issue_date': forms.DateInput(attrs={
+                'class': 'form-control',
+                'type': 'date'
+            }),
+            'total_before_vat': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'step': '0.01',
+                'placeholder': '0.00'
+            }),
+            'vat_amount': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'step': '0.01',
+                'placeholder': '0.00'
+            }),
+            'total_with_vat': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'step': '0.01',
+                'placeholder': '0.00'
+            }),
         }
 
 
