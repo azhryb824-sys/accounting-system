@@ -6,27 +6,15 @@ from decimal import Decimal
 
 import requests
 from django.conf import settings
-from django.db.models import Count, F, Sum
+from django.db.models import F, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from .models import Invoice, InvoiceItem, Item, PurchaseInvoice
 
-API_KEY_ENV_NAMES = ("GOOGLE_API_KEY", "GEMINI_API_KEY", "GOOGLE_GEMINI_API_KEY")
+
 PRIVATE_AI_URL = "http://127.0.0.1:8010/ask"
-
-
-def _google_api_key():
-    for name in API_KEY_ENV_NAMES:
-        value = getattr(settings, name, "") or os.environ.get(name, "")
-        value = str(value or "").strip().strip('"').strip("'")
-        if value:
-            return value
-    return ""
-
-
-def _gemini_model():
-    return (getattr(settings, "GEMINI_INVOICE_MODEL", "") or os.environ.get("GEMINI_INVOICE_MODEL", "gemini-2.0-flash")).strip()
+PRIVATE_AI_NAME = "نموذج عبدالرحمن المحاسبي"
 
 
 def _private_ai_url():
@@ -37,17 +25,26 @@ def _private_ai_url():
     ).strip()
 
 
-def _private_ai_generate_text(prompt, max_new_tokens=220):
+def _private_ai_request(prompt, max_new_tokens=350, **extra_payload):
+    max_new_tokens = min(int(max_new_tokens or 220), 300)
+    payload = {
+        "question": prompt,
+        "max_new_tokens": max_new_tokens,
+    }
+    if "image_base64" in extra_payload:
+        payload["image_base64"] = extra_payload["image_base64"]
+        payload["media_type"] = extra_payload.get("media_type", "image/jpeg")
     try:
         response = requests.post(
             _private_ai_url(),
-            json={"question": prompt, "max_new_tokens": max_new_tokens},
+            data=json.dumps(payload, ensure_ascii=False, default=str),
+            headers={"Content-Type": "application/json"},
             timeout=90,
         )
     except requests.RequestException as exc:
         return {
             "ok": False,
-            "message": "تعذر الاتصال بنموذجك الخاص. تأكد أن خدمة accounting-ai تعمل على المنفذ 8010.",
+            "message": "تعذر الاتصال بنموذجك الخاص. تأكد أن خدمة accounting-ai تعمل على المنفذ 8010 أو اضبط PRIVATE_ACCOUNTING_AI_URL.",
             "raw": str(exc)[:1000],
         }
 
@@ -61,31 +58,32 @@ def _private_ai_generate_text(prompt, max_new_tokens=220):
     try:
         data = response.json()
     except ValueError:
-        return {"ok": False, "message": "رد نموذجك الخاص ليس JSON صالحًا.", "raw": response.text[:1000]}
+        return {
+            "ok": False,
+            "message": "رد نموذجك الخاص ليس JSON صالحا.",
+            "raw": response.text[:1000],
+        }
 
+    text = (data.get("answer") or data.get("text") or data.get("response") or "").strip()
     return {
         "ok": True,
-        "text": (data.get("answer") or "").strip(),
-        "model": data.get("model") or "نموذج عبدالرحمن المحاسبي",
+        "text": text,
+        "data": data.get("data"),
+        "model": data.get("model") or PRIVATE_AI_NAME,
         "owner": data.get("owner") or "",
+        "raw": data,
     }
 
 
 def ai_configuration_status():
-    configured_name = ""
-    for name in API_KEY_ENV_NAMES:
-        value = getattr(settings, name, "") or os.environ.get(name, "")
-        if str(value or "").strip().strip('"').strip("'"):
-            configured_name = name
-            break
     return {
         "has_key": True,
-        "key_name": configured_name,
-        "model": _gemini_model(),
-        "private_model": "نموذج عبدالرحمن المحاسبي",
+        "key_name": "PRIVATE_ACCOUNTING_AI_URL",
+        "model": PRIVATE_AI_NAME,
+        "private_model": PRIVATE_AI_NAME,
         "private_url": _private_ai_url(),
         "uses_private_model": True,
-        "accepted_names": API_KEY_ENV_NAMES,
+        "accepted_names": ("PRIVATE_ACCOUNTING_AI_URL",),
     }
 
 
@@ -99,35 +97,6 @@ def _json_from_text(text):
     if start >= 0 and end > start:
         cleaned = cleaned[start:end + 1]
     return json.loads(cleaned)
-
-
-def _gemini_generate_text(prompt, temperature=0.25):
-    key = _google_api_key()
-    if not key:
-        return {
-            "ok": False,
-            "message": "لم يتم العثور على مفتاح Gemini. أضف GOOGLE_API_KEY أو GEMINI_API_KEY في متغيرات البيئة ثم أعد نشر الخدمة.",
-        }
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{_gemini_model()}:generateContent"
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": temperature},
-    }
-    try:
-        response = requests.post(url, params={"key": key}, json=payload, timeout=60)
-    except requests.RequestException as exc:
-        return {"ok": False, "message": "تعذر الاتصال بخدمة Gemini.", "raw": str(exc)[:1000]}
-    if response.status_code >= 400:
-        return {
-            "ok": False,
-            "message": f"تعذر الاتصال بخدمة Gemini: {response.status_code}",
-            "raw": response.text[:1000],
-        }
-    text = ""
-    for candidate in response.json().get("candidates", []):
-        for part in candidate.get("content", {}).get("parts", []):
-            text += part.get("text", "")
-    return {"ok": True, "text": text.strip()}
 
 
 def branch_ai_context(branch_id):
@@ -166,50 +135,12 @@ def local_financial_insights(context):
     if purchases > sales and sales > 0:
         tips.append("المشتريات أعلى من المبيعات في الفترة الحالية؛ راجع المخزون البطيء وسياسة الشراء.")
     if context["low_stock_count"]:
-        tips.append(f"يوجد {context['low_stock_count']} صنفاً عند حد التنبيه أو أقل، وأهمها: {', '.join(context['low_stock_items'])}.")
+        tips.append(f"يوجد {context['low_stock_count']} صنف عند حد التنبيه أو أقل، وأهمها: {', '.join(context['low_stock_items'])}.")
     if context["invoice_count"] and not context["customers_count"]:
         tips.append("توجد فواتير بدون تنوع واضح في العملاء؛ راجع بيانات العملاء وربطها بالفواتير.")
     if not tips:
-        tips.append("المؤشرات الأساسية مستقرة حالياً. تابع التدفق النقدي والمخزون بشكل أسبوعي.")
+        tips.append("المؤشرات الأساسية مستقرة حاليا. تابع التدفق النقدي والمخزون بشكل أسبوعي.")
     return tips
-
-
-def generate_financial_insights(branch_id):
-    context = branch_ai_context(branch_id)
-    fallback = local_financial_insights(context)
-    if not _google_api_key():
-        return {"ok": True, "source": "local", "context": context, "tips": fallback}
-    prompt = (
-        "أنت مستشار مالي ومحاسبي لنظام سعودي. حلل هذه البيانات المختصرة بالعربية، "
-        "وقدّم 5 توصيات عملية قصيرة بدون مبالغة وبدون اختراع أرقام غير موجودة:\n"
-        f"{json.dumps(context, ensure_ascii=False, default=str)}"
-    )
-    result = _gemini_generate_text(prompt)
-    if not result.get("ok"):
-        return {"ok": True, "source": "local", "context": context, "tips": fallback, "warning": result.get("message")}
-    tips = [line.strip(" -•\t") for line in result["text"].splitlines() if line.strip()]
-    return {"ok": True, "source": "gemini", "context": context, "tips": tips[:7] or fallback}
-
-
-def answer_financial_question(branch_id, question):
-    context = branch_ai_context(branch_id)
-    if not _google_api_key():
-        return {
-            "ok": True,
-            "source": "local",
-            "answer": "لم يتم ضبط مفتاح Gemini بعد. بناءً على البيانات الحالية: " + " ".join(local_financial_insights(context)),
-            "context": context,
-        }
-    prompt = (
-        "أجب بالعربية كمساعد مالي داخل نظام محاسبي. استخدم البيانات المتاحة فقط، "
-        "وإذا لم تكف البيانات فاذكر ذلك بوضوح. لا تقدم استشارة قانونية نهائية.\n"
-        f"بيانات الفرع: {json.dumps(context, ensure_ascii=False, default=str)}\n"
-        f"سؤال المستخدم: {question}"
-    )
-    result = _gemini_generate_text(prompt)
-    if not result.get("ok"):
-        return {"ok": False, "message": result.get("message"), "raw": result.get("raw", "")}
-    return {"ok": True, "source": "gemini", "answer": result["text"], "context": context}
 
 
 def generate_financial_insights(branch_id):
@@ -220,14 +151,8 @@ def generate_financial_insights(branch_id):
         "حلل بيانات الفرع التالية بالعربية وقدم 5 توصيات عملية قصيرة دون اختراع أرقام غير موجودة:\n"
         f"{json.dumps(context, ensure_ascii=False, default=str)}"
     )
-    result = _private_ai_generate_text(prompt)
-    source = "private"
-
-    if not result.get("ok") and _google_api_key():
-        result = _gemini_generate_text(prompt)
-        source = "gemini"
-
-    if not result.get("ok"):
+    result = _private_ai_request(prompt, max_new_tokens=300, task="financial_insights", context=context)
+    if not result.get("ok") or not result.get("text"):
         return {
             "ok": True,
             "source": "local",
@@ -237,7 +162,7 @@ def generate_financial_insights(branch_id):
         }
 
     tips = [line.strip(" -•\t") for line in result["text"].splitlines() if line.strip()]
-    return {"ok": True, "source": source, "context": context, "tips": tips[:7] or fallback}
+    return {"ok": True, "source": "private", "context": context, "tips": tips[:7] or fallback}
 
 
 def answer_financial_question(branch_id, question):
@@ -248,33 +173,20 @@ def answer_financial_question(branch_id, question):
         f"بيانات الفرع: {json.dumps(context, ensure_ascii=False, default=str)}\n"
         f"سؤال المستخدم: {question}"
     )
-    result = _private_ai_generate_text(prompt)
-    source = "private"
-
-    if not result.get("ok") and _google_api_key():
-        result = _gemini_generate_text(prompt)
-        source = "gemini"
-
-    if not result.get("ok"):
+    result = _private_ai_request(prompt, max_new_tokens=300, task="financial_question", context=context)
+    if not result.get("ok") or not result.get("text"):
         return {
             "ok": True,
             "source": "local",
-            "answer": "تعذر الاتصال بالنموذج الخاص حاليًا. بناءً على البيانات الحالية: " + " ".join(local_financial_insights(context)),
+            "answer": "تعذر الاتصال بالنموذج الخاص حاليا. بناء على البيانات الحالية: " + " ".join(local_financial_insights(context)),
             "context": context,
             "warning": result.get("message"),
         }
 
-    return {"ok": True, "source": source, "answer": result["text"], "context": context}
+    return {"ok": True, "source": "private", "answer": result["text"], "context": context}
 
 
 def extract_invoice_from_image(uploaded_file):
-    key = _google_api_key()
-    if not key:
-        return {
-            "ok": False,
-            "message": "لم يتم العثور على مفتاح Gemini. أضف GOOGLE_API_KEY أو GEMINI_API_KEY في متغيرات البيئة ثم أعد نشر الخدمة.",
-        }
-
     content = uploaded_file.read()
     image_b64 = base64.b64encode(content).decode("utf-8")
     media_type = uploaded_file.content_type or "image/jpeg"
@@ -284,50 +196,27 @@ def extract_invoice_from_image(uploaded_file):
         "items كقائمة عناصر، وكل عنصر يحتوي name, quantity, unit_price. "
         "استخدم الأرقام فقط للقيم المالية والكميات."
     )
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{_gemini_model()}:generateContent"
-    payload = {
-        "contents": [{
-            "parts": [
-                {"text": prompt},
-                {"inline_data": {"mime_type": media_type, "data": image_b64}},
-            ]
-        }],
-        "generationConfig": {
-            "temperature": 0.1,
-            "response_mime_type": "application/json",
-        },
-    }
-    try:
-        response = requests.post(url, params={"key": key}, json=payload, timeout=60)
-    except requests.RequestException as exc:
-        return {
-            "ok": False,
-            "message": "تعذر الاتصال بخدمة Gemini. تحقق من اتصال الخادم ومن صحة إعدادات المفتاح.",
-            "raw": str(exc)[:1000],
-        }
-    if response.status_code >= 400:
-        error_message = f"تعذر الاتصال بخدمة Gemini: {response.status_code}"
-        if response.status_code in (400, 404):
-            error_message += " - تحقق من اسم النموذج GEMINI_INVOICE_MODEL."
-        elif response.status_code in (401, 403):
-            error_message += " - تحقق من صحة المفتاح وتفعيل Gemini API."
-        elif response.status_code == 429:
-            error_message += " - تم تجاوز حد الاستخدام مؤقتاً."
-        return {
-            "ok": False,
-            "message": error_message,
-            "raw": response.text[:1000],
-        }
+    result = _private_ai_request(
+        prompt,
+        max_new_tokens=300,
+        task="invoice_image_extraction",
+        image_base64=image_b64,
+        media_type=media_type,
+    )
+    if not result.get("ok"):
+        return result
 
-    data = response.json()
-    text = ""
-    for candidate in data.get("candidates", []):
-        for part in candidate.get("content", {}).get("parts", []):
-            text += part.get("text", "")
+    if isinstance(result.get("data"), dict):
+        return {"ok": True, "data": result["data"]}
+
     try:
-        extracted = _json_from_text(text)
+        extracted = _json_from_text(result.get("text") or "")
     except (json.JSONDecodeError, TypeError):
-        return {"ok": False, "message": "تعذر قراءة نتيجة Gemini كبيانات منظمة.", "raw": text}
+        return {
+            "ok": False,
+            "message": "تعذر قراءة نتيجة نموذجك الخاص كبيانات فاتورة منظمة.",
+            "raw": result.get("text", ""),
+        }
     return {"ok": True, "data": extracted}
 
 

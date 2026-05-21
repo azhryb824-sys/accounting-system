@@ -1,13 +1,73 @@
 {% extends 'core/base.html' %}
 
 {% block page_title %}{{ title }}{% endblock %}
-{% block page_subtitle %}إضافة مسير راتب وربطه محاسبياً عند الاعتماد{% endblock %}
+{% block page_subtitle %}إضافة مسير راتب مع تعبئة بيانات الموظف وربطه محاسبيا عند الاعتماد{% endblock %}
 
 {% block content %}
 <div class="container-fluid"><div class="glass-card p-4">
-    <form method="post">{% csrf_token %}
-        <div class="row g-3">{% for field in form %}<div class="{% if field.name == 'note' %}col-12{% else %}col-md-6{% endif %}"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}</div>{% endfor %}</div>
+    <form method="post" id="salary-form">{% csrf_token %}
+        <div class="row g-3">
+            {% for field in form %}
+            <div class="{% if field.name == 'note' %}col-12{% else %}col-md-6{% endif %}">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {{ field.errors }}
+            </div>
+            {% endfor %}
+        </div>
+        <div class="glass-soft p-3 mt-3">
+            <div class="row g-3">
+                <div class="col-md-4"><span class="text-muted-soft">سلف مفتوحة للموظف</span><div id="open-advances-preview" class="fs-5">0.00</div></div>
+                <div class="col-md-4"><span class="text-muted-soft">إجمالي الراتب قبل خصم السلف</span><div id="gross-salary-preview" class="fs-5">0.00</div></div>
+                <div class="col-md-4"><span class="text-muted-soft">صافي الراتب المتوقع</span><div id="net-salary-preview" class="fs-5 text-info">0.00</div></div>
+            </div>
+        </div>
         <div class="d-flex justify-content-between mt-4"><a class="btn btn-outline-light" href="{% url 'salary_list' %}">رجوع</a><button class="btn btn-primary">حفظ الراتب</button></div>
     </form>
 </div></div>
+{% endblock %}
+
+{% block scripts %}
+{{ block.super }}
+<script>
+    const salaryDefaults = {{ salary_defaults_json|default:"{}"|safe }};
+    const employeeInput = document.getElementById("id_employee");
+    const basicInput = document.getElementById("id_basic_salary");
+    const allowancesInput = document.getElementById("id_allowances");
+    const deductionsInput = document.getElementById("id_deductions");
+    const advancesInput = document.getElementById("id_advances_deduction");
+    const openAdvancesPreview = document.getElementById("open-advances-preview");
+    const grossPreview = document.getElementById("gross-salary-preview");
+    const netPreview = document.getElementById("net-salary-preview");
+
+    function money(value) {
+        const number = Number.parseFloat(value || "0");
+        return Number.isFinite(number) ? number : 0;
+    }
+    function formatMoney(value) {
+        return money(value).toFixed(2);
+    }
+    function updatePreview() {
+        const gross = money(basicInput.value) + money(allowancesInput.value) - money(deductionsInput.value);
+        const net = gross - money(advancesInput.value);
+        grossPreview.textContent = formatMoney(gross);
+        netPreview.textContent = formatMoney(net);
+    }
+    function applyEmployeeDefaults(force) {
+        const defaults = salaryDefaults[employeeInput?.value] || {};
+        if (!defaults.basic_salary) return;
+        if (force || !money(basicInput.value)) basicInput.value = defaults.basic_salary;
+        if (force || !money(allowancesInput.value)) allowancesInput.value = defaults.allowances;
+        openAdvancesPreview.textContent = formatMoney(defaults.open_advances);
+        updatePreview();
+    }
+    if (employeeInput) {
+        employeeInput.addEventListener("change", () => applyEmployeeDefaults(true));
+        [basicInput, allowancesInput, deductionsInput, advancesInput].forEach((input) => {
+            if (input) input.addEventListener("input", updatePreview);
+        });
+        applyEmployeeDefaults(false);
+        updatePreview();
+    }
+</script>
 {% endblock %}

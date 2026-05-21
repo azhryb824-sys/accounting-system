@@ -1,16 +1,13 @@
 {% extends 'core/base.html' %}
 
-{% block page_title %}إضافة فاتورة بالذكاء الاصطناعي{% endblock %}
-{% block page_subtitle %}ارفع صورة الفاتورة وسيتم استخراج البيانات ومطابقة الأصناف وترحيلها محاسبياً{% endblock %}
+{% block page_title %}إضافة فاتورة بالنموذج الخاص{% endblock %}
+{% block page_subtitle %}ارفع صورة الفاتورة وسيستخرج نموذجك البيانات ويطابق الأصناف ويرحلها محاسبيا{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
-    <div class="alert {% if ai_status.has_key %}alert-success{% else %}alert-warning{% endif %}">
-        {% if ai_status.has_key %}
-            الاتصال مهيأ عبر <code>{{ ai_status.key_name }}</code> باستخدام نموذج <code>{{ ai_status.model }}</code>.
-        {% else %}
-            لم يتم العثور على مفتاح Gemini. أضف <code>GOOGLE_API_KEY</code> أو <code>GEMINI_API_KEY</code> في متغيرات البيئة ثم أعد نشر الخدمة.
-        {% endif %}
+    <div class="alert alert-success">
+        الاتصال مهيأ مع <strong>{{ ai_status.private_model }}</strong>
+        عبر <code>{{ ai_status.private_url }}</code>.
     </div>
     <div class="glass-card p-4">
         <form method="post" enctype="multipart/form-data">

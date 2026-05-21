@@ -1,5 +1,6 @@
 from django import forms
 from django.forms import inlineformset_factory
+from django.db.models import F, Sum
 
 from accounts.models import Role, SubscriptionPlan
 from .models import Account, Branch, Company, CompanyJoinRequest, Employee, EmployeeAdvance, JournalEntry, JournalEntryLine, MonthlyClose, SalaryRecord
@@ -249,6 +250,28 @@ class SalaryRecordForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         if companies is not None:
             self.fields['employee'].queryset = Employee.objects.filter(company__in=companies, status='active')
+
+    def clean(self):
+        cleaned_data = super().clean()
+        employee = cleaned_data.get('employee')
+        year = cleaned_data.get('year')
+        month = cleaned_data.get('month')
+        advances_deduction = cleaned_data.get('advances_deduction') or 0
+        if month and (month < 1 or month > 12):
+            self.add_error('month', "الشهر يجب أن يكون بين 1 و 12.")
+        if employee and year and month:
+            existing = SalaryRecord.objects.filter(employee=employee, year=year, month=month)
+            if self.instance.pk:
+                existing = existing.exclude(pk=self.instance.pk)
+            if existing.exists():
+                raise forms.ValidationError("يوجد راتب مسجل لهذا الموظف في نفس الشهر.")
+        if employee and advances_deduction:
+            open_advances = EmployeeAdvance.objects.filter(employee=employee, status='open').aggregate(
+                total=Sum(F('amount') - F('paid_amount'))
+            )['total'] or 0
+            if advances_deduction > open_advances:
+                self.add_error('advances_deduction', "خصم السلف أكبر من رصيد السلف المفتوحة للموظف.")
+        return cleaned_data
 
 
 

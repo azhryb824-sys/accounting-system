@@ -14,9 +14,7 @@
                         <div class="text-muted-soft">
                             المصدر:
                             {% if insights.source == "private" %}
-                                نموذج عبدالرحمن المحاسبي
-                            {% elif insights.source == "gemini" %}
-                                Gemini احتياطي
+                                نموذجك المحاسبي الخاص
                             {% else %}
                                 تحليل محلي من بيانات النظام
                             {% endif %}
@@ -30,7 +28,7 @@
                     {% for tip in tips %}
                     <div class="glass-soft p-3">{{ tip }}</div>
                     {% empty %}
-                    <div class="text-muted-soft">لا توجد توصيات حاليًا.</div>
+                    <div class="text-muted-soft">لا توجد توصيات حاليا.</div>
                     {% endfor %}
                 </div>
                 {% if insights.warning %}

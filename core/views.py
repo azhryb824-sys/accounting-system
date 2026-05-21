@@ -1,4 +1,5 @@
-import csv
+﻿import csv
+import json
 from decimal import Decimal
 
 from django.db.models import Count, F, Q, Sum
@@ -32,11 +33,11 @@ def health_version(request):
 #  Home Page (Landing)
 # ============================
 def home(request):
-    """الصفحة الرئيسية التي تظهر قبل تسجيل الدخول"""
+    """ط§ظ„طµظپط­ط© ط§ظ„ط±ط¦ظٹط³ظٹط© ط§ظ„طھظٹ طھط¸ظ‡ط± ظ‚ط¨ظ„ طھط³ط¬ظٹظ„ ط§ظ„ط¯ط®ظˆظ„"""
     if request.user.is_authenticated:
         return redirect('dashboard')
     return render(request, 'core/home.html', {
-        "title": "مرحباً بك في نظام المحاسبة الذكي",
+        "title": "ظ…ط±ط­ط¨ط§ظ‹ ط¨ظƒ ظپظٹ ظ†ط¸ط§ظ… ط§ظ„ظ…ط­ط§ط³ط¨ط© ط§ظ„ط°ظƒظٹ",
     })
 
 
@@ -47,7 +48,7 @@ def home(request):
 def dashboard(request):
     branch_id = request.session.get('branch_id')
 
-    # إذا لم يتم اختيار فرع، وجه المستخدم لصفحة الاختيار
+    # ط¥ط°ط§ ظ„ظ… ظٹطھظ… ط§ط®طھظٹط§ط± ظپط±ط¹طŒ ظˆط¬ظ‡ ط§ظ„ظ…ط³طھط®ط¯ظ… ظ„طµظپط­ط© ط§ظ„ط§ط®طھظٹط§ط±
     if not branch_id: # _("If no branch is selected, redirect the user to the selection page")
         if not _user_companies(request.user).exists():
             return redirect('company_access')
@@ -58,7 +59,7 @@ def dashboard(request):
         "entries_count": JournalEntry.objects.filter(branch_id=branch_id).count(),
         "branch_name": request.session.get("branch_name"),
         "company_name": request.session.get("company_name"),
-        "title": "لوحة التحكم",
+        "title": "ظ„ظˆط­ط© ط§ظ„طھط­ظƒظ…",
     }
     from invoicing.models import Invoice, Item, PurchaseInvoice
 
@@ -121,7 +122,7 @@ def reports_center(request):
     purchases_total = purchases.aggregate(total=Coalesce(Sum('total_with_vat'), Decimal('0')))['total']
 
     return render(request, 'core/reports_center.html', {
-        "title": "مركز التقارير",
+        "title": "ظ…ط±ظƒط² ط§ظ„طھظ‚ط§ط±ظٹط±",
         "date_from": date_from,
         "date_to": date_to,
         "sales_total": totals['sales'],
@@ -165,7 +166,7 @@ def payroll_report(request):
     )
     totals["gross"] = totals["basic"] + totals["allowances"] - totals["deductions"]
     return render(request, 'core/payroll_report.html', {
-        "title": "كشف الرواتب الشهري",
+        "title": "ظƒط´ظپ ط§ظ„ط±ظˆط§طھط¨ ط§ظ„ط´ظ‡ط±ظٹ",
         "companies": companies.order_by("name"),
         "selected_company_id": str(selected_company_id or ""),
         "year": year,
@@ -188,7 +189,7 @@ def advance_report(request):
     )
     totals["remaining"] = totals["amount"] - totals["paid"]
     return render(request, 'core/advance_report.html', {
-        "title": "كشف سلف الموظفين",
+        "title": "ظƒط´ظپ ط³ظ„ظپ ط§ظ„ظ…ظˆط¸ظپظٹظ†",
         "status": status,
         "advances": advances.order_by("employee__name", "-date"),
         "totals": totals,
@@ -203,7 +204,7 @@ def unposted_operations_report(request):
     from invoicing.models import Invoice, PurchaseInvoice
 
     return render(request, 'core/unposted_operations_report.html', {
-        "title": "عمليات غير مرحلة",
+        "title": "ط¹ظ…ظ„ظٹط§طھ ط؛ظٹط± ظ…ط±ط­ظ„ط©",
         "draft_salaries": SalaryRecord.objects.filter(branch_id=branch_id, accrual_entry__isnull=True).select_related("employee"),
         "unpaid_salaries": SalaryRecord.objects.filter(branch_id=branch_id, status='approved', payment_entry__isnull=True).select_related("employee"),
         "unposted_advances": EmployeeAdvance.objects.filter(branch_id=branch_id, journal_entry__isnull=True).select_related("employee"),
@@ -221,7 +222,7 @@ def monthly_close_list(request):
     if selected_company_id:
         closes = closes.filter(company_id=selected_company_id)
     return render(request, 'core/monthly_close_list.html', {
-        "title": "القفل الشهري",
+        "title": "ط§ظ„ظ‚ظپظ„ ط§ظ„ط´ظ‡ط±ظٹ",
         "companies": companies.order_by("name"),
         "selected_company_id": str(selected_company_id or ""),
         "closes": closes,
@@ -246,11 +247,11 @@ def monthly_close_add(request):
                 "note": form.cleaned_data.get("note", ""),
             },
         )
-        message = "تم قفل الشهر بنجاح." if created else "تم إعادة قفل الشهر بنجاح."
+        message = "طھظ… ظ‚ظپظ„ ط§ظ„ط´ظ‡ط± ط¨ظ†ط¬ط§ط­." if created else "طھظ… ط¥ط¹ط§ط¯ط© ظ‚ظپظ„ ط§ظ„ط´ظ‡ط± ط¨ظ†ط¬ط§ط­."
         messages.success(request, message)
         return redirect("monthly_close_list")
     return render(request, 'core/monthly_close_form.html', {
-        "title": "قفل شهر محاسبي",
+        "title": "ظ‚ظپظ„ ط´ظ‡ط± ظ…ط­ط§ط³ط¨ظٹ",
         "form": form,
     })
 
@@ -264,7 +265,7 @@ def monthly_close_reopen(request, close_id):
         monthly_close.reopened_by = request.user
         monthly_close.reopened_at = timezone.now()
         monthly_close.save(update_fields=["is_closed", "reopened_by", "reopened_at"])
-        messages.success(request, "تم فتح الشهر المحاسبي.")
+        messages.success(request, "طھظ… ظپطھط­ ط§ظ„ط´ظ‡ط± ط§ظ„ظ…ط­ط§ط³ط¨ظٹ.")
     return redirect("monthly_close_list")
 
 
@@ -276,7 +277,7 @@ def employee_finance_dashboard(request):
     salaries = SalaryRecord.objects.filter(company__in=companies)
     advances = EmployeeAdvance.objects.filter(company__in=companies)
     return render(request, 'core/employee_finance_dashboard.html', {
-        "title": "مالية الموظفين",
+        "title": "ظ…ط§ظ„ظٹط© ط§ظ„ظ…ظˆط¸ظپظٹظ†",
         "employees_count": employees.count(),
         "active_employees_count": employees.filter(status='active').count(),
         "salary_total": salaries.aggregate(total=Coalesce(Sum('net_salary'), Decimal('0')))['total'],
@@ -290,7 +291,7 @@ def employee_finance_dashboard(request):
 @role_required('view_employee')
 def employee_list(request):
     employees = Employee.objects.filter(company__in=_user_companies(request.user)).select_related("company", "branch")
-    return render(request, 'core/employee_list.html', {"title": "الموظفون", "employees": employees})
+    return render(request, 'core/employee_list.html', {"title": "ط§ظ„ظ…ظˆط¸ظپظˆظ†", "employees": employees})
 
 
 @login_required(login_url='login')
@@ -299,9 +300,9 @@ def employee_add(request):
     form = EmployeeForm(request.POST or None, companies=_user_companies(request.user))
     if request.method == "POST" and form.is_valid():
         form.save()
-        messages.success(request, "تم إضافة الموظف بنجاح.")
+        messages.success(request, "طھظ… ط¥ط¶ط§ظپط© ط§ظ„ظ…ظˆط¸ظپ ط¨ظ†ط¬ط§ط­.")
         return redirect("employee_list")
-    return render(request, 'core/employee_form.html', {"title": "إضافة موظف", "form": form})
+    return render(request, 'core/employee_form.html', {"title": "ط¥ط¶ط§ظپط© ظ…ظˆط¸ظپ", "form": form})
 
 
 @login_required(login_url='login')
@@ -311,16 +312,16 @@ def employee_edit(request, employee_id):
     form = EmployeeForm(request.POST or None, instance=employee, companies=_user_companies(request.user))
     if request.method == "POST" and form.is_valid():
         form.save()
-        messages.success(request, "تم تعديل بيانات الموظف.")
+        messages.success(request, "طھظ… طھط¹ط¯ظٹظ„ ط¨ظٹط§ظ†ط§طھ ط§ظ„ظ…ظˆط¸ظپ.")
         return redirect("employee_list")
-    return render(request, 'core/employee_form.html', {"title": "تعديل موظف", "form": form})
+    return render(request, 'core/employee_form.html', {"title": "طھط¹ط¯ظٹظ„ ظ…ظˆط¸ظپ", "form": form})
 
 
 @login_required(login_url='login')
 @role_required('view_salaryrecord')
 def salary_list(request):
     salaries = SalaryRecord.objects.filter(company__in=_user_companies(request.user)).select_related("employee", "company").order_by("-year", "-month")
-    return render(request, 'core/salary_list.html', {"title": "رواتب الموظفين", "salaries": salaries})
+    return render(request, 'core/salary_list.html', {"title": "ط±ظˆط§طھط¨ ط§ظ„ظ…ظˆط¸ظپظٹظ†", "salaries": salaries})
 
 
 @login_required(login_url='login')
@@ -340,24 +341,25 @@ def salary_add(request):
         except ValueError as exc:
             salary.delete()
             form.add_error("advances_deduction", str(exc))
-            return render(request, 'core/salary_form.html', {"title": "ط¥ط¶ط§ظپط© ط±ط§طھط¨", "form": form})
-        messages.success(request, "طھظ… ط­ظپط¸ ظ…ط³ظٹط± ط§ظ„ط±ط§طھط¨.")
+            return render(request, 'core/salary_form.html', {"title": "ط·آ¥ط·آ¶ط·آ§ط¸ظ¾ط·آ© ط·آ±ط·آ§ط·ع¾ط·آ¨", "form": form})
+        messages.success(request, "ط·ع¾ط¸â€¦ ط·آ­ط¸ظ¾ط·آ¸ ط¸â€¦ط·آ³ط¸ظ¹ط·آ± ط·آ§ط¸â€‍ط·آ±ط·آ§ط·ع¾ط·آ¨.")
         return redirect("salary_list")
-        if salary.status in {"approved", "paid"}:
-            credit_account = "1000" if salary.status == "paid" else "2300"
-            credit_note = "صرف راتب" if salary.status == "paid" else "رواتب مستحقة"
-            create_balanced_entry(
-                branch=salary.branch or Branch.objects.filter(company=salary.company).first(),
-                date=payment_date,
-                description=f"راتب {salary.employee.name} عن {salary.period_label}",
-                lines=[
-                    {"account": "5200", "debit": salary.net_salary, "note": "مصروف راتب"},
-                    {"account": credit_account, "credit": salary.net_salary, "note": credit_note},
-                ],
-            )
-        messages.success(request, "تم حفظ مسير الراتب.")
-        return redirect("salary_list")
-    return render(request, 'core/salary_form.html', {"title": "إضافة راتب", "form": form})
+    employees = Employee.objects.filter(company__in=_user_companies(request.user), status='active')
+    salary_defaults = {}
+    for employee in employees:
+        open_advances = EmployeeAdvance.objects.filter(employee=employee, status='open').aggregate(
+            total=Coalesce(Sum(F('amount') - F('paid_amount')), Decimal('0'))
+        )['total']
+        salary_defaults[str(employee.id)] = {
+            "basic_salary": str(employee.basic_salary),
+            "allowances": str(employee.housing_allowance + employee.transport_allowance + employee.other_allowances),
+            "open_advances": str(open_advances),
+        }
+    return render(request, 'core/salary_form.html', {
+        "title": "Add Salary",
+        "form": form,
+        "salary_defaults_json": json.dumps(salary_defaults),
+    })
 
 
 @login_required(login_url='login')
@@ -367,7 +369,7 @@ def salary_approve(request, salary_id):
     if request.method == "POST":
         try:
             entry = approve_salary(salary)
-            messages.success(request, f"تم اعتماد الراتب وإنشاء قيد رقم {entry.id}.")
+            messages.success(request, f"طھظ… ط§ط¹طھظ…ط§ط¯ ط§ظ„ط±ط§طھط¨ ظˆط¥ظ†ط´ط§ط، ظ‚ظٹط¯ ط±ظ‚ظ… {entry.id}.")
         except ValueError as exc:
             messages.error(request, str(exc))
     return redirect("salary_list")
@@ -380,7 +382,7 @@ def salary_pay(request, salary_id):
     if request.method == "POST":
         try:
             entry = pay_salary(salary)
-            messages.success(request, f"تم دفع الراتب وإنشاء قيد رقم {entry.id}.")
+            messages.success(request, f"طھظ… ط¯ظپط¹ ط§ظ„ط±ط§طھط¨ ظˆط¥ظ†ط´ط§ط، ظ‚ظٹط¯ ط±ظ‚ظ… {entry.id}.")
         except ValueError as exc:
             messages.error(request, str(exc))
     return redirect("salary_list")
@@ -390,7 +392,7 @@ def salary_pay(request, salary_id):
 @role_required('view_employeeadvance')
 def advance_list(request):
     advances = EmployeeAdvance.objects.filter(company__in=_user_companies(request.user)).select_related("employee", "company")
-    return render(request, 'core/advance_list.html', {"title": "سلف الموظفين", "advances": advances})
+    return render(request, 'core/advance_list.html', {"title": "ط³ظ„ظپ ط§ظ„ظ…ظˆط¸ظپظٹظ†", "advances": advances})
 
 
 @login_required(login_url='login')
@@ -404,17 +406,17 @@ def advance_add(request):
         entry = create_balanced_entry(
             branch=advance.branch or Branch.objects.filter(company=advance.company).first(),
             date=advance.date,
-            description=f"سلفة موظف: {advance.employee.name}",
+            description=f"ط³ظ„ظپط© ظ…ظˆط¸ظپ: {advance.employee.name}",
             lines=[
-                {"account": "1300", "debit": advance.amount, "note": "سلفة موظف"},
-                {"account": "1000", "credit": advance.amount, "note": "صرف سلفة"},
+                {"account": "1300", "debit": advance.amount, "note": "ط³ظ„ظپط© ظ…ظˆط¸ظپ"},
+                {"account": "1000", "credit": advance.amount, "note": "طµط±ظپ ط³ظ„ظپط©"},
             ],
         )
         advance.journal_entry = entry
         advance.save(update_fields=["journal_entry"])
-        messages.success(request, "تم تسجيل السلفة وترحيلها محاسبياً.")
+        messages.success(request, "طھظ… طھط³ط¬ظٹظ„ ط§ظ„ط³ظ„ظپط© ظˆطھط±ط­ظٹظ„ظ‡ط§ ظ…ط­ط§ط³ط¨ظٹط§ظ‹.")
         return redirect("advance_list")
-    return render(request, 'core/advance_form.html', {"title": "إضافة سلفة", "form": form})
+    return render(request, 'core/advance_form.html', {"title": "ط¥ط¶ط§ظپط© ط³ظ„ظپط©", "form": form})
 
 
 @login_required(login_url='login')
@@ -459,7 +461,7 @@ def signup(request):
             user.set_password(form.cleaned_data['password'])
             user.save()
 
-            # إنشاء ملف تعريف المستخدم (Profile) وربطه برقم الهوية
+            # ط¥ظ†ط´ط§ط، ظ…ظ„ظپ طھط¹ط±ظٹظپ ط§ظ„ظ…ط³طھط®ط¯ظ… (Profile) ظˆط±ط¨ط·ظ‡ ط¨ط±ظ‚ظ… ط§ظ„ظ‡ظˆظٹط©
             UserProfile.objects.create(
                 user=user,
                 national_id=form.cleaned_data['national_id'],
@@ -468,12 +470,12 @@ def signup(request):
             )
 
             login(request, user)
-            messages.success(request, "تم إنشاء الحساب. أكمل بيانات الشركة وأرفق إيصال التحويل لتفعيل الاشتراك.")
+            messages.success(request, "طھظ… ط¥ظ†ط´ط§ط، ط§ظ„ط­ط³ط§ط¨. ط£ظƒظ…ظ„ ط¨ظٹط§ظ†ط§طھ ط§ظ„ط´ط±ظƒط© ظˆط£ط±ظپظ‚ ط¥ظٹطµط§ظ„ ط§ظ„طھط­ظˆظٹظ„ ظ„طھظپط¹ظٹظ„ ط§ظ„ط§ط´طھط±ط§ظƒ.")
             return redirect('company_add')
     else:
         form = UserRegistrationForm()
     return render(request, 'core/signup.html', {
-        'form': form, "title": "إنشاء حساب جديد"
+        'form': form, "title": "ط¥ظ†ط´ط§ط، ط­ط³ط§ط¨ ط¬ط¯ظٹط¯"
     })
 
 
@@ -483,7 +485,7 @@ def signup(request):
 @login_required(login_url='login')
 def accounts_list(request):
     accounts = Account.objects.all().order_by('code') # _("Accounts List")
-    return render(request, 'core/accounts_list.html', {"accounts": accounts, "title": "دليل الحسابات"})
+    return render(request, 'core/accounts_list.html', {"accounts": accounts, "title": "ط¯ظ„ظٹظ„ ط§ظ„ط­ط³ط§ط¨ط§طھ"})
 
 
 # ============================
@@ -493,7 +495,7 @@ def accounts_list(request):
 def journal_list(request):
     branch_id = request.session.get('branch_id') # _("Journal Entries List")
     entries = JournalEntry.objects.filter(branch_id=branch_id).order_by('-date', '-id') # _("Journal Entries List")
-    return render(request, 'core/journal_list.html', {"entries": entries, "title": "قيود اليومية"})
+    return render(request, 'core/journal_list.html', {"entries": entries, "title": "ظ‚ظٹظˆط¯ ط§ظ„ظٹظˆظ…ظٹط©"})
 
 
 # ============================
@@ -531,7 +533,7 @@ def journal_add(request):
         "formset": formset,
         "mode": "create",
         "accounts": Account.objects.all().order_by("code"),
-        "title": "إضافة قيد"
+        "title": "ط¥ط¶ط§ظپط© ظ‚ظٹط¯"
     })
 
 
@@ -564,7 +566,7 @@ def journal_edit(request, pk):
         "mode": "edit",
         "entry": entry,
         "accounts": Account.objects.all().order_by("code"),
-        "title": "تعديل قيد"
+        "title": "طھط¹ط¯ظٹظ„ ظ‚ظٹط¯"
     })
 
 
@@ -578,18 +580,18 @@ def company_add(request):
         if form.is_valid():
             plan = form.cleaned_data.get("plan")
             if not plan:
-                form.add_error("plan", "اختر باقة الاشتراك قبل إرسال الطلب.")
+                form.add_error("plan", "ط§ط®طھط± ط¨ط§ظ‚ط© ط§ظ„ط§ط´طھط±ط§ظƒ ظ‚ط¨ظ„ ط¥ط±ط³ط§ظ„ ط§ظ„ط·ظ„ط¨.")
                 return render(request, 'core/company_form.html', {
-                    "form": form, "title": "إضافة شركة"
+                    "form": form, "title": "ط¥ط¶ط§ظپط© ط´ط±ظƒط©"
                 })
             owned_company_count = Company.objects.filter(
                 owner=request.user,
                 subscription_status__in=["pending", "active"],
             ).count()
             if owned_company_count >= plan.max_companies:
-                form.add_error("plan", f"هذه الباقة تسمح بإضافة {plan.max_companies} شركة فقط.")
+                form.add_error("plan", f"ظ‡ط°ظ‡ ط§ظ„ط¨ط§ظ‚ط© طھط³ظ…ط­ ط¨ط¥ط¶ط§ظپط© {plan.max_companies} ط´ط±ظƒط© ظپظ‚ط·.")
                 return render(request, 'core/company_form.html', {
-                    "form": form, "title": "إضافة شركة"
+                    "form": form, "title": "ط¥ط¶ط§ظپط© ط´ط±ظƒط©"
                 })
             company = form.save(commit=False)
             company.owner = request.user
@@ -600,9 +602,9 @@ def company_add(request):
             owner_role = form.cleaned_data.get("requested_role")
             if not owner_role:
                 owner_role, _ = Role.objects.get_or_create(
-                    name="مالك الشركة",
+                    name="ظ…ط§ظ„ظƒ ط§ظ„ط´ط±ظƒط©",
                     defaults={
-                        "description": "صلاحيات مالك الشركة داخل شركته.",
+                        "description": "طµظ„ط§ط­ظٹط§طھ ظ…ط§ظ„ظƒ ط§ظ„ط´ط±ظƒط© ط¯ط§ط®ظ„ ط´ط±ظƒطھظ‡.",
                         "requires_subscription": True,
                     }
                 )
@@ -624,19 +626,19 @@ def company_add(request):
                 transfer_reference=form.cleaned_data.get("transfer_reference", ""),
                 transfer_notice=form.cleaned_data["transfer_notice"],
             )
-            messages.success(request, "تم تسجيل الشركة وإرسال طلب الاشتراك للمراجعة.")
+            messages.success(request, "طھظ… طھط³ط¬ظٹظ„ ط§ظ„ط´ط±ظƒط© ظˆط¥ط±ط³ط§ظ„ ط·ظ„ط¨ ط§ظ„ط§ط´طھط±ط§ظƒ ظ„ظ„ظ…ط±ط§ط¬ط¹ط©.")
             return redirect('company_list')
     else:
         form = CompanySubscriptionRequestForm()
 
     return render(request, 'core/company_form.html', {
-        "form": form, "title": "إضافة شركة"
+        "form": form, "title": "ط¥ط¶ط§ظپط© ط´ط±ظƒط©"
     })
 
 @login_required(login_url='login')
 def company_list(request):
     companies = _user_companies(request.user)
-    return render(request, 'core/company_list.html', {"companies": companies, "title": "الشركات"})
+    return render(request, 'core/company_list.html', {"companies": companies, "title": "ط§ظ„ط´ط±ظƒط§طھ"})
 
 
 
@@ -645,7 +647,7 @@ def company_access(request):
     if _user_companies(request.user).exists():
         return redirect('select_company_branch')
     return render(request, 'core/company_access.html', {
-        "title": "الوصول إلى شركة",
+        "title": "ط§ظ„ظˆطµظˆظ„ ط¥ظ„ظ‰ ط´ط±ظƒط©",
         "pending_requests": CompanyJoinRequest.objects.filter(user=request.user, status='pending').select_related('company'),
     })
 
@@ -657,9 +659,9 @@ def company_join_request(request):
     if request.method == "POST" and form.is_valid():
         found_company = Company.objects.filter(unified_number=form.cleaned_data["unified_number"]).select_related("owner").first()
         if not found_company:
-            form.add_error("unified_number", "لا توجد شركة بهذا الرقم الموحد.")
+            form.add_error("unified_number", "ظ„ط§ طھظˆط¬ط¯ ط´ط±ظƒط© ط¨ظ‡ط°ط§ ط§ظ„ط±ظ‚ظ… ط§ظ„ظ…ظˆط­ط¯.")
         elif found_company.owner_id == request.user.id or CompanyMembership.objects.filter(user=request.user, company=found_company, is_active=True).exists():
-            messages.info(request, "أنت مرتبط بهذه الشركة بالفعل.")
+            messages.info(request, "ط£ظ†طھ ظ…ط±طھط¨ط· ط¨ظ‡ط°ظ‡ ط§ظ„ط´ط±ظƒط© ط¨ط§ظ„ظپط¹ظ„.")
             return redirect("select_company_branch")
         elif "submit_request" in request.POST:
             join_request, created = CompanyJoinRequest.objects.get_or_create(
@@ -671,15 +673,15 @@ def company_join_request(request):
                     "note": form.cleaned_data.get("note", ""),
                 }
             )
-            messages.success(request, "تم إرسال طلب الانضمام إلى مالك الشركة." if created else "لديك طلب انضمام قيد المراجعة لهذه الشركة.")
+            messages.success(request, "طھظ… ط¥ط±ط³ط§ظ„ ط·ظ„ط¨ ط§ظ„ط§ظ†ط¶ظ…ط§ظ… ط¥ظ„ظ‰ ظ…ط§ظ„ظƒ ط§ظ„ط´ط±ظƒط©." if created else "ظ„ط¯ظٹظƒ ط·ظ„ط¨ ط§ظ†ط¶ظ…ط§ظ… ظ‚ظٹط¯ ط§ظ„ظ…ط±ط§ط¬ط¹ط© ظ„ظ‡ط°ظ‡ ط§ظ„ط´ط±ظƒط©.")
             return redirect("company_access")
-    return render(request, 'core/company_join_request.html', {"form": form, "found_company": found_company, "title": "طلب الانضمام إلى شركة"})
+    return render(request, 'core/company_join_request.html', {"form": form, "found_company": found_company, "title": "ط·ظ„ط¨ ط§ظ„ط§ظ†ط¶ظ…ط§ظ… ط¥ظ„ظ‰ ط´ط±ظƒط©"})
 
 
 @login_required(login_url='login')
 def company_join_requests(request):
     requests = CompanyJoinRequest.objects.filter(company__owner=request.user, status="pending").select_related("user", "company", "requested_role").order_by("-created_at")
-    return render(request, 'core/company_join_requests.html', {"requests": requests, "title": "طلبات الانضمام للشركات"})
+    return render(request, 'core/company_join_requests.html', {"requests": requests, "title": "ط·ظ„ط¨ط§طھ ط§ظ„ط§ظ†ط¶ظ…ط§ظ… ظ„ظ„ط´ط±ظƒط§طھ"})
 
 
 @login_required(login_url='login')
@@ -692,7 +694,7 @@ def company_join_review(request, request_id, decision):
         if active_plan and active_plan.max_users:
             active_members_count = CompanyMembership.objects.filter(company=join_request.company, is_active=True).count()
             if active_members_count >= active_plan.max_users:
-                messages.error(request, f"لا يمكن قبول الطلب؛ باقة الشركة تسمح بـ {active_plan.max_users} مستخدم فقط.")
+                messages.error(request, f"ظ„ط§ ظٹظ…ظƒظ† ظ‚ط¨ظˆظ„ ط§ظ„ط·ظ„ط¨ط› ط¨ط§ظ‚ط© ط§ظ„ط´ط±ظƒط© طھط³ظ…ط­ ط¨ظ€ {active_plan.max_users} ظ…ط³طھط®ط¯ظ… ظپظ‚ط·.")
                 return redirect("company_join_requests")
         join_request.status = "approved"
         CompanyMembership.objects.update_or_create(
@@ -700,10 +702,10 @@ def company_join_review(request, request_id, decision):
             company=join_request.company,
             defaults={"role": join_request.requested_role or join_request.company.owner_role, "is_active": True},
         )
-        messages.success(request, "تم قبول طلب الانضمام وربط المستخدم بالشركة.")
+        messages.success(request, "طھظ… ظ‚ط¨ظˆظ„ ط·ظ„ط¨ ط§ظ„ط§ظ†ط¶ظ…ط§ظ… ظˆط±ط¨ط· ط§ظ„ظ…ط³طھط®ط¯ظ… ط¨ط§ظ„ط´ط±ظƒط©.")
     else:
         join_request.status = "rejected"
-        messages.success(request, "تم رفض طلب الانضمام.")
+        messages.success(request, "طھظ… ط±ظپط¶ ط·ظ„ط¨ ط§ظ„ط§ظ†ط¶ظ…ط§ظ….")
     join_request.save(update_fields=["status", "reviewed_by", "reviewed_at"])
     return redirect("company_join_requests")
 
@@ -714,7 +716,7 @@ def company_join_review(request, request_id, decision):
 # ============================
 def branch_list(request):
     branches = Branch.objects.select_related('company').all()
-    return render(request, 'core/branch_list.html', {"branches": branches, "title": "الفروع"})
+    return render(request, 'core/branch_list.html', {"branches": branches, "title": "ط§ظ„ظپط±ظˆط¹"})
 
 @login_required(login_url='login')
 
@@ -728,7 +730,7 @@ def branch_add(request):
         form = BranchForm()
 
     return render(request, 'core/branch_form.html', {
-        "form": form, "title": "إضافة فرع"
+        "form": form, "title": "ط¥ط¶ط§ظپط© ظپط±ط¹"
     })
 
 @login_required(login_url='login')
@@ -746,7 +748,7 @@ def branch_edit(request, id):
 
     return render(request, 'core/branch_form.html', {
         "form": form,
-        "title": "تعديل فرع"
+        "title": "طھط¹ط¯ظٹظ„ ظپط±ط¹"
     })
 
 
@@ -757,7 +759,7 @@ def branch_delete(request, id):
 
 
 # ============================
-#  اختيار الشركة والفرع
+#  ط§ط®طھظٹط§ط± ط§ظ„ط´ط±ظƒط© ظˆط§ظ„ظپط±ط¹
 # ============================
 @login_required(login_url='login')
 def select_company_branch(request): # _("Select Company and Branch")
@@ -771,7 +773,7 @@ def select_company_branch(request): # _("Select Company and Branch")
         branch_id = request.POST.get("branch_id")
 
         company = get_object_or_404(Company, id=company_id)
-        # التأكد من أن الفرع يتبع للشركة المختارة
+        # ط§ظ„طھط£ظƒط¯ ظ…ظ† ط£ظ† ط§ظ„ظپط±ط¹ ظٹطھط¨ط¹ ظ„ظ„ط´ط±ظƒط© ط§ظ„ظ…ط®طھط§ط±ط©
         branch = get_object_or_404(Branch, id=branch_id, company=company)
 
         request.session['company_id'] = company.id
@@ -785,7 +787,7 @@ def select_company_branch(request): # _("Select Company and Branch")
     return render(request, 'core/select_company_branch.html', {
         "companies": companies.order_by('name'),
         "branches": branches.select_related('company').order_by('company__name', 'name'),
-        "title": "اختيار الشركة والفرع"
+        "title": "ط§ط®طھظٹط§ط± ط§ظ„ط´ط±ظƒط© ظˆط§ظ„ظپط±ط¹"
     }) # _("Select Company and Branch")
 
 
@@ -820,7 +822,7 @@ def journal_copy(request, pk):
 # ============================
 def journal_pdf(request, pk):
     entry = get_object_or_404(JournalEntry, pk=pk)
-    return render(request, "core/journal_pdf.html", {"entry": entry, "title": "طباعة القيد"})
+    return render(request, "core/journal_pdf.html", {"entry": entry, "title": "ط·ط¨ط§ط¹ط© ط§ظ„ظ‚ظٹط¯"})
 
 @login_required(login_url='login')
 def account_add(request):
@@ -828,10 +830,10 @@ def account_add(request):
         form = AccountForm(request.POST)
         if form.is_valid():
             form.save()
-            return redirect('accounts_list')  # عدّل الاسم حسب صفحة القائمة
+            return redirect('accounts_list')  # ط¹ط¯ظ‘ظ„ ط§ظ„ط§ط³ظ… ط­ط³ط¨ طµظپط­ط© ط§ظ„ظ‚ط§ط¦ظ…ط©
     else:
         form = AccountForm()
     return render(request, 'core/account_form.html', {
-        "form": form, "title": "إضافة حساب"
+        "form": form, "title": "ط¥ط¶ط§ظپط© ط­ط³ط§ط¨"
     })
    
