@@ -51,25 +51,6 @@ class CompanySubscriptionRequestForm(CompanyForm):
         widget=forms.Select(attrs={'class': 'form-select'}),
         help_text='اتركه فارغًا ليتم تعيينك كمالك الشركة.'
     )
-
-
-class CompanyJoinRequestForm(forms.Form):
-    unified_number = forms.CharField(
-        label='الرقم الموحد للشركة',
-        max_length=20,
-        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'أدخل الرقم الموحد'})
-    )
-    requested_role = forms.ModelChoiceField(
-        label='الدور المطلوب داخل الشركة',
-        queryset=Role.objects.all(),
-        required=False,
-        widget=forms.Select(attrs={'class': 'form-select'})
-    )
-    note = forms.CharField(
-        label='ملاحظة',
-        required=False,
-        widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'اختياري'})
-    )
     plan = forms.ModelChoiceField(
         label='باقة الاشتراك',
         queryset=SubscriptionPlan.objects.filter(is_active=True).order_by('display_order', 'price', 'name'),
@@ -90,6 +71,25 @@ class CompanyJoinRequestForm(forms.Form):
         label='إيصال التحويل',
         required=True,
         widget=forms.FileInput(attrs={'class': 'form-control'})
+    )
+
+
+class CompanyJoinRequestForm(forms.Form):
+    unified_number = forms.CharField(
+        label='الرقم الموحد للشركة',
+        max_length=20,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'أدخل الرقم الموحد'})
+    )
+    requested_role = forms.ModelChoiceField(
+        label='الدور المطلوب داخل الشركة',
+        queryset=Role.objects.all(),
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    note = forms.CharField(
+        label='ملاحظة',
+        required=False,
+        widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'اختياري'})
     )
 
 

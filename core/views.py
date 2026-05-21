@@ -461,7 +461,12 @@ def company_add(request):
     if request.method == 'POST':
         form = CompanySubscriptionRequestForm(request.POST, request.FILES)
         if form.is_valid():
-            plan = form.cleaned_data["plan"]
+            plan = form.cleaned_data.get("plan")
+            if not plan:
+                form.add_error("plan", "اختر باقة الاشتراك قبل إرسال الطلب.")
+                return render(request, 'core/company_form.html', {
+                    "form": form, "title": "إضافة شركة"
+                })
             owned_company_count = Company.objects.filter(
                 owner=request.user,
                 subscription_status__in=["pending", "active"],
@@ -469,7 +474,7 @@ def company_add(request):
             if owned_company_count >= plan.max_companies:
                 form.add_error("plan", f"هذه الباقة تسمح بإضافة {plan.max_companies} شركة فقط.")
                 return render(request, 'core/company_form.html', {
-                    "form": form, "title": "ط¥ط¶ط§ظپط© ط´ط±ظƒط©"
+                    "form": form, "title": "إضافة شركة"
                 })
             company = form.save(commit=False)
             company.owner = request.user
