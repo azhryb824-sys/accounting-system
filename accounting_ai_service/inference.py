@@ -1,12 +1,20 @@
+import base64
 import json
 import re
 import sys
+from datetime import date
+from difflib import SequenceMatcher
 from functools import lru_cache
 from pathlib import Path
-from difflib import SequenceMatcher
+from typing import Any
 
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+try:
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+except ImportError:
+    torch = None
+    AutoModelForCausalLM = None
+    AutoTokenizer = None
 
 
 MODEL_NAME = "نموذج عبدالرحمن المحاسبي"
@@ -26,7 +34,7 @@ PRIVATE_KNOWLEDGE = {
     "المصروفات": "المصروفات تقلل صافي الربح لأنها تمثل تكلفة تحملتها المنشأة للحصول على الإيراد أو تشغيل النشاط.",
     "الدفع النقدي": "الدفع النقدي يعني أن قيمة العملية تم تحصيلها مباشرة وقت البيع أو تقديم الخدمة، بدلا من تسجيلها كذمة على العميل.",
     "البيع الآجل": "البيع الآجل يعني بيع سلعة أو خدمة الآن مع تأجيل تحصيل المبلغ، ويظهر عادة ضمن حسابات العملاء أو الذمم المدينة.",
-    "ضريبة القيمة المضافة": "ضريبة القيمة المضافة ضريبة غير مباشرة تظهر في المبيعات كضريبة مخرجات، وفي المشتريات كضريبة مدخلات، ويحسب صافي الالتزام من الفرق بينهما.",
+    "ضريبة القيمة المضافة": "ضريبة القيمة المضافة ضريبة غير مباشرة تظهر في المبيعات كضريبة مخرجات وفي المشتريات كضريبة مدخلات، ويحسب صافي الالتزام من الفرق بينهما.",
     "حد التنبيه": "حد التنبيه في المخزون هو مستوى تحدده للصنف حتى ينبهك النظام عند انخفاض الكمية، مما يساعد على إعادة الطلب في الوقت المناسب.",
     "من أنت": f"أنا {MODEL_NAME}، مساعد ذكاء اصطناعي محاسبي خاص بـ {MODEL_OWNER} ومصمم لمساعدتك في الفواتير والمخزون والقيود والرواتب والسلف.",
 }
@@ -63,7 +71,7 @@ def _contains_any(text: str, words: tuple[str, ...]) -> bool:
     return any(word.lower() in text for word in words)
 
 
-def _extract_json_object(text: str) -> dict | None:
+def _extract_json_object(text: str) -> dict[str, Any] | None:
     start = text.find("{")
     end = text.rfind("}")
     if start < 0 or end <= start:
@@ -74,7 +82,7 @@ def _extract_json_object(text: str) -> dict | None:
         return None
 
 
-def _money(value) -> float:
+def _money(value: Any) -> float:
     try:
         return float(value or 0)
     except (TypeError, ValueError):
@@ -118,11 +126,144 @@ def _answer_from_financial_context(question: str) -> str | None:
     return "\n".join(lines)
 
 
+def _decode_payload_text(image_base64: str) -> str:
+    try:
+        raw = base64.b64decode(image_base64, validate=False)
+    except (ValueError, TypeError):
+        return ""
+
+    snippets: list[str] = []
+    for encoding in ("utf-8", "utf-16", "windows-1256", "cp1252", "latin-1"):
+        try:
+            decoded = raw.decode(encoding, errors="ignore")
+        except LookupError:
+            continue
+        decoded = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]+", " ", decoded)
+        if len(decoded.strip()) >= 20:
+            snippets.append(decoded)
+
+    merged = "\n".join(snippets)
+    return re.sub(r"\s+", " ", merged).strip()[:12000]
+
+
+def _parse_amount(text: str, labels: tuple[str, ...]) -> float:
+    for label in labels:
+        if label == "total":
+            label_pattern = r"(?<!sub\s)(?<!grand\s)(?<![a-zA-Z])total(?![a-zA-Z])"
+        else:
+            label_pattern = rf"(?<![a-zA-Z]){label}(?![a-zA-Z])"
+        pattern = rf"{label_pattern}\s*[:\-]?\s*(?:SAR|ر\.س|ريال)?\s*([0-9][0-9,]*(?:\.[0-9]+)?)"
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            return _money(match.group(1).replace(",", ""))
+    return 0.0
+
+
+def _parse_field(text: str, labels: tuple[str, ...]) -> str:
+    for label in labels:
+        stop_words = (
+            "invoice_number|invoice no|invoice number|date|subtotal|sub total|total|vat|tax|"
+            "supplier_name|supplier|vendor|رقم الفاتورة|التاريخ|قبل الضريبة|الإجمالي|المجموع|ضريبة|المورد|البائع"
+        )
+        pattern = rf"(?<![a-zA-Z]){label}(?![a-zA-Z])\s*[:\-]?\s*(.+?)(?=\s+(?:{stop_words})\s*[:\-]?|[\n\r|,؛]|$)"
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            return match.group(1).strip()
+    return ""
+
+
+def _parse_date(text: str) -> str:
+    patterns = [
+        r"(20\d{2})[-/](\d{1,2})[-/](\d{1,2})",
+        r"(\d{1,2})[-/](\d{1,2})[-/](20\d{2})",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if not match:
+            continue
+        parts = [int(x) for x in match.groups()]
+        if parts[0] > 1900:
+            year, month, day = parts
+        else:
+            day, month, year = parts
+        try:
+            return date(year, month, day).isoformat()
+        except ValueError:
+            continue
+    return date.today().isoformat()
+
+
+def _parse_invoice_items(text: str) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    line_pattern = re.compile(
+        r"(?P<name>[\u0600-\u06ffa-zA-Z][\u0600-\u06ffa-zA-Z0-9 ._\-]{2,60})\s+"
+        r"(?P<qty>\d+(?:\.\d+)?)\s+"
+        r"(?P<price>\d+(?:\.\d+)?)",
+        re.IGNORECASE,
+    )
+    for match in line_pattern.finditer(text):
+        name = match.group("name").strip()
+        if any(word in name.lower() for word in ("total", "subtotal", "vat", "invoice", "الاجمالي", "الضريبة")):
+            continue
+        items.append({
+            "name": name,
+            "quantity": _money(match.group("qty")),
+            "unit_price": _money(match.group("price")),
+        })
+        if len(items) >= 25:
+            break
+    return items
+
+
+def extract_invoice_data(question: str, image_base64: str | None = None, media_type: str | None = None) -> dict[str, Any]:
+    text = question or ""
+    decoded = _decode_payload_text(image_base64 or "")
+    searchable = f"{text}\n{decoded}".strip()
+
+    supplier_name = _parse_field(searchable, ("supplier_name", "supplier", "vendor", "اسم المورد", "المورد", "البائع"))
+    invoice_number = _parse_field(searchable, ("invoice_number", "invoice no", "invoice number", "رقم الفاتورة", "فاتورة رقم"))
+    subtotal = _parse_amount(searchable, ("subtotal", "sub total", "قبل الضريبة", "الإجمالي قبل الضريبة", "المجموع قبل الضريبة"))
+    vat = _parse_amount(searchable, ("vat", "tax", "ضريبة", "ضريبة القيمة المضافة"))
+    total = _parse_amount(searchable, ("total", "grand total", "amount due", "الإجمالي", "المجموع", "الصافي"))
+    items = _parse_invoice_items(searchable)
+
+    if not any((supplier_name, invoice_number, subtotal, vat, total, items)):
+        return {
+            "error": "لم أتمكن من قراءة بيانات الفاتورة من الصورة. ارفع صورة أوضح، أو PDF نصي، أو أدخل البيانات يدويا ثم أعد المحاولة.",
+            "media_type": media_type or "",
+            "supplier_name": "",
+            "invoice_number": "",
+            "issue_date": date.today().isoformat(),
+            "subtotal": 0,
+            "vat": 0,
+            "total": 0,
+            "items": [],
+        }
+
+    if total and not subtotal and vat:
+        subtotal = max(total - vat, 0)
+    if subtotal and not total:
+        total = subtotal + vat
+
+    return {
+        "supplier_name": supplier_name or "مورد من الفاتورة",
+        "invoice_number": invoice_number or f"AI-{date.today().strftime('%Y%m%d')}",
+        "issue_date": _parse_date(searchable),
+        "subtotal": round(subtotal, 2),
+        "vat": round(vat, 2),
+        "total": round(total, 2),
+        "items": items,
+        "media_type": media_type or "",
+    }
+
+
 class PrivateAccountingModel:
     def __init__(self, model_path: Path = MODEL_PATH):
         self.model_path = Path(model_path)
         self.tokenizer = None
         self.model = None
+        if torch is None or AutoModelForCausalLM is None or AutoTokenizer is None:
+            return
         if not self.model_path.exists():
             return
 
@@ -139,7 +280,6 @@ class PrivateAccountingModel:
         question = question.strip()
         return f"{SYSTEM_PROMPT}\n\nسؤال: {question}\nالإجابة:"
 
-    @torch.inference_mode()
     def answer(self, question: str, max_new_tokens: int = 120) -> str:
         if not question or not question.strip():
             raise ValueError("السؤال لا يمكن أن يكون فارغا.")
@@ -154,19 +294,20 @@ class PrivateAccountingModel:
                 "اسأل عن الرواتب، السلف، فواتير البيع والشراء، القيود، الضريبة، المخزون أو التقارير."
             )
 
-        prompt = self.build_prompt(question)
-        inputs = self.tokenizer(prompt, return_tensors="pt")
+        with torch.inference_mode():
+            prompt = self.build_prompt(question)
+            inputs = self.tokenizer(prompt, return_tensors="pt")
 
-        outputs = self.model.generate(
-            **inputs,
-            max_new_tokens=max_new_tokens,
-            do_sample=False,
-            no_repeat_ngram_size=3,
-            pad_token_id=self.tokenizer.pad_token_id,
-            eos_token_id=self.tokenizer.eos_token_id,
-        )
+            outputs = self.model.generate(
+                **inputs,
+                max_new_tokens=max_new_tokens,
+                do_sample=False,
+                no_repeat_ngram_size=3,
+                pad_token_id=self.tokenizer.pad_token_id,
+                eos_token_id=self.tokenizer.eos_token_id,
+            )
 
-        decoded = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+            decoded = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
         answer = self._clean_answer(decoded, prompt)
         if not self._is_usable_arabic_answer(answer):
             return "هذا السؤال يحتاج تدريبا إضافيا داخل النموذج الخاص. أضف مثالا مشابها في بيانات التدريب ثم شغل train.py لتحسين الإجابة."

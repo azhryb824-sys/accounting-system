@@ -207,6 +207,12 @@ def extract_invoice_from_image(uploaded_file):
         return result
 
     if isinstance(result.get("data"), dict):
+        if result["data"].get("error"):
+            return {
+                "ok": False,
+                "message": result["data"]["error"],
+                "raw": result["data"],
+            }
         return {"ok": True, "data": result["data"]}
 
     try:
