@@ -7,6 +7,8 @@ urlpatterns = [
     path('<int:id>/edit/', purchase_views.purchase_edit, name='purchase_edit'),
     path('<int:id>/delete/', purchase_views.purchase_delete, name='purchase_delete'),
     path('inventory/', purchase_views.inventory_list, name='inventory_list'),
-    #path('inventory/add/', purchase_views.item_add, name='item_add'),
-    #path('inventory/<int:item_id>/edit/', purchase_views.item_edit, name='item_edit'),
+    path('inventory/add/', purchase_views.item_add, name='item_add'),
+    path('inventory/<int:item_id>/edit/', purchase_views.item_edit, name='item_edit'),
+    path('ai/invoice/', purchase_views.ai_invoice_import, name='ai_invoice_import'),
+    path('ai/insights/', purchase_views.ai_insights, name='ai_insights'),
 ]

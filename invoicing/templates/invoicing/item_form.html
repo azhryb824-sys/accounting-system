@@ -1,0 +1,31 @@
+{% extends 'core/base.html' %}
+
+{% block page_title %}{{ title }}{% endblock %}
+{% block page_subtitle %}بيانات الصنف والأسعار وحدود التنبيه{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="glass-card p-4">
+        <form method="post">
+            {% csrf_token %}
+            <div class="row g-3">
+                {% for field in form %}
+                    <div class="{% if field.name == 'is_active' or field.name == 'notes' %}col-12{% else %}col-md-6{% endif %}">
+                        {% if field.name == 'is_active' %}
+                            <label class="form-check-label d-flex align-items-center gap-2">{{ field }} {{ field.label }}</label>
+                        {% else %}
+                            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                            {{ field }}
+                        {% endif %}
+                        {{ field.errors }}
+                    </div>
+                {% endfor %}
+            </div>
+            <div class="d-flex justify-content-between align-items-center mt-4">
+                <a href="{% url 'inventory_list' %}" class="btn btn-outline-light">رجوع</a>
+                <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> حفظ</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -33,6 +33,27 @@
 </div>
 
 <div class="row g-4 mb-4">
+    <div class="col-md-4">
+        <div class="glass-soft p-3 h-100">
+            <div class="text-muted-soft mb-1">رواتب الموظفين</div>
+            <div class="h4 fw-semibold mb-0">{{ salary_total|floatformat:2 }}</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="glass-soft p-3 h-100">
+            <div class="text-muted-soft mb-1">السلف القائمة</div>
+            <div class="h4 fw-semibold mb-0">{{ employee_advances_total|floatformat:2 }}</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="glass-soft p-3 h-100">
+            <div class="text-muted-soft mb-1">نتيجة تشغيلية تقديرية</div>
+            <div class="h4 fw-semibold mb-0 {% if operating_result < 0 %}text-warning{% endif %}">{{ operating_result|floatformat:2 }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
     <div class="col-md-3">
         <div class="glass-soft p-3 h-100">
             <div class="text-muted-soft mb-1">فواتير البيع</div>

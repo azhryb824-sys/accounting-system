@@ -1,0 +1,20 @@
+{% extends 'core/base.html' %}
+
+{% block page_title %}مالية الموظفين{% endblock %}
+{% block page_subtitle %}إدارة الرواتب والسلف والالتزامات المالية للموظفين{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row g-4 mb-4">
+        <div class="col-md-3"><div class="glass-soft p-3"><div class="text-muted-soft">الموظفون</div><div class="fs-3">{{ employees_count }}</div></div></div>
+        <div class="col-md-3"><div class="glass-soft p-3"><div class="text-muted-soft">النشطون</div><div class="fs-3">{{ active_employees_count }}</div></div></div>
+        <div class="col-md-3"><div class="glass-soft p-3"><div class="text-muted-soft">إجمالي الرواتب</div><div class="fs-3">{{ salary_total|floatformat:2 }}</div></div></div>
+        <div class="col-md-3"><div class="glass-soft p-3"><div class="text-muted-soft">السلف القائمة</div><div class="fs-3">{{ open_advances_total|floatformat:2 }}</div></div></div>
+    </div>
+    <div class="row g-4">
+        <div class="col-lg-4"><a class="btn btn-outline-light w-100 py-3" href="{% url 'employee_list' %}"><i class="fa-solid fa-users"></i> الموظفون</a></div>
+        <div class="col-lg-4"><a class="btn btn-outline-light w-100 py-3" href="{% url 'salary_list' %}"><i class="fa-solid fa-money-bill-wave"></i> الرواتب</a></div>
+        <div class="col-lg-4"><a class="btn btn-outline-light w-100 py-3" href="{% url 'advance_list' %}"><i class="fa-solid fa-hand-holding-dollar"></i> السلف</a></div>
+    </div>
+</div>
+{% endblock %}

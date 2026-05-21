@@ -375,6 +375,20 @@
             <i class="fa-solid fa-circle-plus"></i><span>إضافة قيد</span>
         </a>
 
+        {% can_access request 'view_employee' as can_view_employee_finance %}
+        {% if can_view_employee_finance %}
+        <div class="sidebar-section-title">مالية الموظفين</div>
+        <a href="{% url 'employee_finance_dashboard' %}" class="nav-link-custom {% if request.resolver_match.url_name in 'employee_finance_dashboard employee_list employee_add employee_edit salary_list salary_add advance_list advance_add' %}active{% endif %}">
+            <i class="fa-solid fa-user-tie"></i><span>إدارة الموظفين</span>
+        </a>
+        <a href="{% url 'salary_list' %}" class="nav-link-custom {% if request.resolver_match.url_name in 'salary_list salary_add' %}active{% endif %}">
+            <i class="fa-solid fa-money-bill-wave"></i><span>الرواتب</span>
+        </a>
+        <a href="{% url 'advance_list' %}" class="nav-link-custom {% if request.resolver_match.url_name in 'advance_list advance_add' %}active{% endif %}">
+            <i class="fa-solid fa-hand-holding-dollar"></i><span>السلف</span>
+        </a>
+        {% endif %}
+
         <div class="sidebar-section-title">الشركات والفروع</div>
         <a href="{% url 'company_list' %}" class="nav-link-custom {% if request.resolver_match.url_name == 'company_list' %}active{% endif %}">
             <i class="fa-solid fa-building"></i><span>الشركات</span>
@@ -422,6 +436,14 @@
         </a>
         <a href="{% url 'zatca_dashboard' %}" class="nav-link-custom {% if request.resolver_match.url_name == 'zatca_dashboard' %}active{% endif %}">
             <i class="fa-solid fa-shield-halved"></i><span>جاهزية هيئة الزكاة</span>
+        </a>
+
+        <div class="sidebar-section-title">الذكاء الاصطناعي</div>
+        <a href="{% url 'ai_invoice_import' %}" class="nav-link-custom {% if request.resolver_match.url_name == 'ai_invoice_import' %}active{% endif %}">
+            <i class="fa-solid fa-wand-magic-sparkles"></i><span>فاتورة بالذكاء الاصطناعي</span>
+        </a>
+        <a href="{% url 'ai_insights' %}" class="nav-link-custom {% if request.resolver_match.url_name == 'ai_insights' %}active{% endif %}">
+            <i class="fa-solid fa-brain"></i><span>نصائح وتوقعات</span>
         </a>
 
         {% if request.user.is_superuser %}

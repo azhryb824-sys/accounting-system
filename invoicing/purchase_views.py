@@ -1,13 +1,32 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db.models import F
 
 from .models import PurchaseInvoice, PurchaseItem, Supplier, Item, StockMovement
+from .forms import PurchaseInvoiceForm, ItemForm, AIInvoiceUploadForm
+from .ai_services import extract_invoice_from_image, match_invoice_items
 from django.utils.translation import gettext_lazy as _
-from .forms import PurchaseInvoiceForm
 from accounts.views import role_required
 from core.models import Branch
+from core.services.accounting import create_balanced_entry
 from core.services.monthly_close import assert_month_open
+from decimal import Decimal
+from datetime import date
+
+
+def post_purchase_invoice(invoice):
+    assert_month_open(invoice.branch.company, invoice.issue_date)
+    return create_balanced_entry(
+        branch=invoice.branch,
+        date=invoice.issue_date,
+        description=f"فاتورة شراء رقم {invoice.invoice_number}",
+        lines=[
+            {"account": "1200", "debit": invoice.total_before_vat, "note": "إضافة مخزون من فاتورة شراء"},
+            {"account": "2100", "debit": invoice.vat_amount, "note": "ضريبة مدخلات"},
+            {"account": "2200", "credit": invoice.total_with_vat, "note": "مستحق للمورد"},
+        ],
+    )
 
 # ============================
 #  قائمة فواتير المشتريات حسب الفرع
@@ -65,6 +84,7 @@ def purchase_add(request):
                     movement_type="IN"
                 )
 
+            post_purchase_invoice(invoice)
             messages.success(request, _("Purchase invoice added and inventory updated successfully."))
             return redirect('purchase_list')
 
@@ -122,8 +142,100 @@ def purchase_delete(request, id):
 @role_required('view_item')
 def inventory_list(request):
     branch_id = request.session.get('branch_id')
-    items = Item.objects.filter(branch_id=branch_id)
+    items = Item.objects.filter(branch_id=branch_id).annotate(inventory_value=F("quantity") * F("cost")).order_by("name")
 
     return render(request, 'invoicing/inventory_list.html', {
         "items": items, "title": _("Inventory List")
     })
+
+
+@login_required(login_url='login')
+@role_required('add_item')
+def item_add(request):
+    branch_id = request.session.get('branch_id')
+    branch = get_object_or_404(Branch, id=branch_id)
+    form = ItemForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        item = form.save(commit=False)
+        item.branch = branch
+        item.save()
+        messages.success(request, "تم إضافة الصنف بنجاح.")
+        return redirect('inventory_list')
+    return render(request, 'invoicing/item_form.html', {"form": form, "title": "إضافة صنف"})
+
+
+@login_required(login_url='login')
+@role_required('change_item')
+def item_edit(request, item_id):
+    branch_id = request.session.get('branch_id')
+    item = get_object_or_404(Item, id=item_id, branch_id=branch_id)
+    form = ItemForm(request.POST or None, instance=item)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        messages.success(request, "تم تعديل الصنف بنجاح.")
+        return redirect('inventory_list')
+    return render(request, 'invoicing/item_form.html', {"form": form, "title": "تعديل صنف"})
+
+
+@login_required(login_url='login')
+@role_required('add_purchaseinvoice')
+def ai_invoice_import(request):
+    branch_id = request.session.get('branch_id')
+    form = AIInvoiceUploadForm(request.POST or None, request.FILES or None)
+    result = None
+    if request.method == 'POST' and form.is_valid():
+        result = extract_invoice_from_image(form.cleaned_data['invoice_image'])
+        if result.get("ok"):
+            data = result["data"]
+            matched_items = match_invoice_items(branch_id, data.get("items", []))
+            branch = get_object_or_404(Branch, id=branch_id)
+            issue_date = date.fromisoformat(data.get("issue_date"))
+            assert_month_open(branch.company, issue_date)
+            supplier, _ = Supplier.objects.get_or_create(name=data.get("supplier_name") or "مورد من الذكاء الاصطناعي")
+            invoice = PurchaseInvoice.objects.create(
+                branch=branch,
+                supplier=supplier,
+                invoice_number=data.get("invoice_number") or f"AI-{PurchaseInvoice.objects.count() + 1}",
+                issue_date=issue_date,
+                total_before_vat=Decimal(str(data.get("subtotal") or 0)),
+                vat_amount=Decimal(str(data.get("vat") or 0)),
+                total_with_vat=Decimal(str(data.get("total") or 0)),
+            )
+            for row in matched_items:
+                item = row["item"]
+                if not item:
+                    item = Item.objects.create(
+                        branch=branch,
+                        name=row["source_name"] or "صنف من الفاتورة",
+                        cost=row["unit_price"],
+                        selling_price=row["unit_price"],
+                        quantity=0,
+                    )
+                purchase_item = PurchaseItem.objects.create(
+                    invoice=invoice,
+                    branch=branch,
+                    item=item,
+                    quantity=row["quantity"],
+                    price=row["unit_price"],
+                )
+                item.quantity += purchase_item.quantity
+                item.cost = purchase_item.price
+                item.save(update_fields=["quantity", "cost"])
+                StockMovement.objects.create(branch=branch, item=item, quantity=purchase_item.quantity, movement_type="IN")
+            post_purchase_invoice(invoice)
+            messages.success(request, "تم استخراج الفاتورة وإضافتها وترحيلها محاسبياً.")
+            return redirect("purchase_list")
+    return render(request, 'invoicing/ai_invoice_import.html', {"form": form, "result": result, "title": "إضافة فاتورة بالذكاء الاصطناعي"})
+
+
+@login_required(login_url='login')
+def ai_insights(request):
+    branch_id = request.session.get('branch_id')
+    low_stock = Item.objects.filter(branch_id=branch_id, quantity__lte=F("min_quantity"), is_active=True).count()
+    purchases = PurchaseInvoice.objects.filter(branch_id=branch_id).order_by("-issue_date")[:5]
+    tips = [
+        f"يوجد {low_stock} صنف عند أو تحت حد التنبيه، راجع إعادة الطلب.",
+        "راجع فواتير الشراء الكبيرة وتأكد من تحديث تكلفة الأصناف بعد كل شراء.",
+        "استخدم القفل الشهري بعد مراجعة القيود والفواتير لمنع التعديل على الفترات المعتمدة.",
+    ]
+    return render(request, 'invoicing/ai_insights.html', {"title": "نصائح وتوقعات الذكاء الاصطناعي", "tips": tips, "purchases": purchases})

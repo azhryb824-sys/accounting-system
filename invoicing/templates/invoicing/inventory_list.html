@@ -1,37 +1,69 @@
 {% extends 'core/base.html' %}
+{% load permission_tags %}
+
+{% block page_title %}المنتجات{% endblock %}
+{% block page_subtitle %}إدارة الأصناف والكميات والتكاليف وحدود التنبيه{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
+{% can_access request 'add_item' as can_add_item %}
+{% can_access request 'change_item' as can_change_item %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="d-flex gap-2 flex-wrap">
+            <span class="badge bg-info px-3 py-2">{{ items|length }} صنف</span>
+        </div>
+        {% if can_add_item %}
+        <a href="{% url 'item_add' %}" class="btn btn-primary">
+            <i class="fa-solid fa-box-open"></i> إضافة صنف
+        </a>
+        {% endif %}
+    </div>
 
-    <h2 class="mb-4">المخزون</h2>
-
-    <table class="table table-bordered table-striped">
-        <thead class="table-dark">
-            <tr>
-                <th>#</th>
-                <th>الصنف</th>
-                <th>الكمية</th>
-                <th>التكلفة</th>
-                <th>القيمة الإجمالية</th>
-            </tr>
-        </thead>
-
-        <tbody>
-            {% for item in items %}
-            <tr>
-                <td>{{ forloop.counter }}</td>
-                <td>{{ item.name }}</td>
-                <td>{{ item.quantity }}</td>
-                <td>{{ item.cost }}</td>
-                <td>{{ item.quantity|floatformat:2|add:item.cost }}</td>
-            </tr>
-            {% empty %}
-            <tr>
-                <td colspan="5" class="text-center text-muted">لا توجد أصناف</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
+    <div class="glass-card p-4">
+        <div class="table-responsive">
+            <table class="table table-dark table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>الصنف</th>
+                        <th>الباركود</th>
+                        <th>الكمية</th>
+                        <th>التكلفة</th>
+                        <th>سعر البيع</th>
+                        <th>قيمة المخزون</th>
+                        <th>الحالة</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                    <tr>
+                        <td>{{ item.name }}</td>
+                        <td>{{ item.barcode|default:"-" }}</td>
+                        <td {% if item.quantity <= item.min_quantity %}class="text-warning"{% endif %}>{{ item.quantity|floatformat:2 }}</td>
+                        <td>{{ item.cost|floatformat:2 }}</td>
+                        <td>{{ item.selling_price|floatformat:2 }}</td>
+                        <td>{{ item.inventory_value|floatformat:2 }}</td>
+                        <td>
+                            {% if item.is_active %}
+                                <span class="badge bg-success">نشط</span>
+                            {% else %}
+                                <span class="badge bg-secondary">موقوف</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            {% if can_change_item %}
+                            <a href="{% url 'item_edit' item.id %}" class="btn btn-sm btn-outline-light">تعديل</a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center py-5 text-muted">لا توجد منتجات حتى الآن.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
 {% endblock %}

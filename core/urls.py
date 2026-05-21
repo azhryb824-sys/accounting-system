@@ -14,6 +14,14 @@ urlpatterns = [
     path('monthly-close/', views.monthly_close_list, name='monthly_close_list'),
     path('monthly-close/add/', views.monthly_close_add, name='monthly_close_add'),
     path('monthly-close/<int:close_id>/reopen/', views.monthly_close_reopen, name='monthly_close_reopen'),
+    path('employees/finance/', views.employee_finance_dashboard, name='employee_finance_dashboard'),
+    path('employees/', views.employee_list, name='employee_list'),
+    path('employees/add/', views.employee_add, name='employee_add'),
+    path('employees/<int:employee_id>/edit/', views.employee_edit, name='employee_edit'),
+    path('employees/salaries/', views.salary_list, name='salary_list'),
+    path('employees/salaries/add/', views.salary_add, name='salary_add'),
+    path('employees/advances/', views.advance_list, name='advance_list'),
+    path('employees/advances/add/', views.advance_add, name='advance_add'),
     path('signup/', views.signup, name='signup'),
 
     # ============================

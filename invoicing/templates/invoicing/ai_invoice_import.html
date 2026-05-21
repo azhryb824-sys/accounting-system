@@ -1,0 +1,24 @@
+{% extends 'core/base.html' %}
+
+{% block page_title %}إضافة فاتورة بالذكاء الاصطناعي{% endblock %}
+{% block page_subtitle %}ارفع صورة الفاتورة وسيتم استخراج البيانات ومطابقة الأصناف وترحيلها محاسبياً{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="alert alert-info">
+        تعمل هذه الصفحة عبر Google Gemini. يجب ضبط المفتاح في متغير البيئة <code>GOOGLE_API_KEY</code> ثم إعادة تشغيل الخادم.
+    </div>
+    <div class="glass-card p-4">
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <label class="form-label" for="{{ form.invoice_image.id_for_label }}">{{ form.invoice_image.label }}</label>
+            {{ form.invoice_image }}
+            {{ form.invoice_image.errors }}
+            <button class="btn btn-primary mt-3" type="submit"><i class="fa-solid fa-wand-magic-sparkles"></i> استخراج وإضافة الفاتورة</button>
+        </form>
+        {% if result and not result.ok %}
+        <div class="alert alert-warning mt-4 mb-0">{{ result.message }}</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -6,7 +6,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-from core.models import Account, Branch, JournalEntry, JournalEntryLine
+from core.models import Branch
+from core.services.accounting import create_balanced_entry
 from core.services.monthly_close import assert_month_open
 
 from accounts.views import role_required
@@ -17,41 +18,6 @@ from .zatca import prepare_zatca_payload
 
 def post_sales_invoice(invoice):
     assert_month_open(invoice.branch.company, invoice.issue_date.date())
-    entry = JournalEntry.objects.create(
-        date=invoice.issue_date,
-        description=_("Sales Invoice No. {invoice_number}").format(invoice_number=invoice.invoice_number),
-        branch=invoice.branch,
-    )
-
-    acc_receivable = Account.objects.get(code="1101")
-    acc_sales = Account.objects.get(code="4100")
-    acc_vat = Account.objects.get(code="2100")
-    acc_inventory = Account.objects.get(code="1200")
-    acc_cogs = Account.objects.get(code="5100")
-
-    JournalEntryLine.objects.create(
-        entry=entry,
-        account=acc_receivable,
-        debit=invoice.total_with_vat,
-        credit=0,
-        note=_("Debtor - Customer"),
-    )
-    JournalEntryLine.objects.create(
-        entry=entry,
-        account=acc_sales,
-        debit=0,
-        credit=invoice.total_amount,
-        note=_("Sales Revenue"),
-    )
-    if invoice.total_vat > 0:
-        JournalEntryLine.objects.create(
-            entry=entry,
-            account=acc_vat,
-            debit=0,
-            credit=invoice.total_vat,
-            note=_("Value Added Tax"),
-        )
-
     total_cogs = Decimal("0.00")
     for line in invoice.items.select_related("item"):
         item_cost = line.item.cost * line.quantity
@@ -65,21 +31,18 @@ def post_sales_invoice(invoice):
             movement_type="OUT",
         )
 
-    JournalEntryLine.objects.create(
-        entry=entry,
-        account=acc_cogs,
-        debit=total_cogs,
-        credit=0,
-        note=_("Cost of Goods Sold"),
+    return create_balanced_entry(
+        branch=invoice.branch,
+        date=invoice.issue_date.date(),
+        description=_("Sales Invoice No. {invoice_number}").format(invoice_number=invoice.invoice_number),
+        lines=[
+            {"account": "1101", "debit": invoice.total_with_vat, "note": _("Debtor - Customer")},
+            {"account": "4100", "credit": invoice.total_amount, "note": _("Sales Revenue")},
+            {"account": "2100", "credit": invoice.total_vat, "note": _("Value Added Tax")},
+            {"account": "5100", "debit": total_cogs, "note": _("Cost of Goods Sold")},
+            {"account": "1200", "credit": total_cogs, "note": _("Inventory Reduction")},
+        ],
     )
-    JournalEntryLine.objects.create(
-        entry=entry,
-        account=acc_inventory,
-        debit=0,
-        credit=total_cogs,
-        note=_("Inventory Reduction"),
-    )
-    return entry
 
 
 @login_required(login_url='login')

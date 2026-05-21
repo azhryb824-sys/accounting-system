@@ -9,5 +9,6 @@ media/
 staticfiles/
 .env
 .env.*
+data.json
 .DS_Store
 Thumbs.db

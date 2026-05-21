@@ -1,0 +1,28 @@
+{% extends 'core/base.html' %}
+
+{% block page_title %}نصائح وتوقعات الذكاء الاصطناعي{% endblock %}
+{% block page_subtitle %}قراءة سريعة للمخزون والمشتريات والتنبيهات المالية{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row g-4">
+        {% for tip in tips %}
+        <div class="col-md-4">
+            <div class="glass-soft p-3 h-100">
+                <div class="text-info mb-2"><i class="fa-solid fa-lightbulb"></i></div>
+                <div>{{ tip }}</div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    <div class="glass-card p-4 mt-4">
+        <h5 class="mb-3">آخر فواتير الشراء للتوقعات</h5>
+        <div class="table-responsive">
+            <table class="table table-dark table-hover mb-0">
+                <thead><tr><th>الفاتورة</th><th>التاريخ</th><th>الإجمالي</th></tr></thead>
+                <tbody>{% for p in purchases %}<tr><td>{{ p.invoice_number }}</td><td>{{ p.issue_date|date:"Y-m-d" }}</td><td>{{ p.total_with_vat }}</td></tr>{% empty %}<tr><td colspan="3" class="text-center text-muted py-4">لا توجد بيانات كافية للتوقعات.</td></tr>{% endfor %}</tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

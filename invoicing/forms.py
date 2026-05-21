@@ -109,9 +109,25 @@ class ItemForm(forms.ModelForm):
         labels = {
             'name': 'اسم المنتج',
             'barcode': 'الباركود',
-            'quantity': 'الكمية',
+            'quantity': 'الكمية الافتتاحية',
             'cost': 'التكلفة',
             'selling_price': 'سعر البيع',
             'min_quantity': 'حد التنبيه',
             'is_active': 'متاح للبيع',
         }
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'form-control'}),
+            'barcode': forms.TextInput(attrs={'class': 'form-control'}),
+            'quantity': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'cost': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'selling_price': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'min_quantity': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+
+
+class AIInvoiceUploadForm(forms.Form):
+    invoice_image = forms.FileField(
+        label='صورة الفاتورة',
+        widget=forms.FileInput(attrs={'class': 'form-control', 'accept': 'image/*,application/pdf'})
+    )

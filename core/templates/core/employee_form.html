@@ -1,0 +1,20 @@
+{% extends 'core/base.html' %}
+
+{% block page_title %}{{ title }}{% endblock %}
+{% block page_subtitle %}بيانات الموظف والراتب الأساسي والبدلات{% endblock %}
+
+{% block content %}
+<div class="container-fluid"><div class="glass-card p-4">
+    <form method="post">{% csrf_token %}
+        <div class="row g-3">
+            {% for field in form %}
+            <div class="{% if field.name == 'notes' or field.name == 'status' %}col-12{% else %}col-md-6{% endif %}">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}{{ field.errors }}
+            </div>
+            {% endfor %}
+        </div>
+        <div class="d-flex justify-content-between mt-4"><a class="btn btn-outline-light" href="{% url 'employee_list' %}">رجوع</a><button class="btn btn-primary">حفظ</button></div>
+    </form>
+</div></div>
+{% endblock %}
