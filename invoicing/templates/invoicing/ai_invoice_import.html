@@ -14,7 +14,7 @@
             <label class="form-label" for="{{ form.invoice_image.id_for_label }}">{{ form.invoice_image.label }}</label>
             {{ form.invoice_image }}
             {{ form.invoice_image.errors }}
-            <button class="btn btn-primary mt-3" type="submit"><i class="fa-solid fa-wand-magic-sparkles"></i> استخراج وإضافة الفاتورة</button>
+            <button class="btn btn-primary mt-3" type="submit"><i class="fa-solid fa-file-import"></i> استخراج وإضافة الفاتورة</button>
         </form>
         {% if result and not result.ok %}
         <div class="alert alert-warning mt-4 mb-0">{{ result.message }}</div>
