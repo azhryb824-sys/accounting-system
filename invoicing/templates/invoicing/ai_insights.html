@@ -1,6 +1,6 @@
 {% extends 'core/base.html' %}
 
-{% block page_title %}نصائح وتوقعات الذكاء الاصطناعي{% endblock %}
+{% block page_title %}نصائح وتوقعات النموذج الخاص{% endblock %}
 {% block page_subtitle %}تحليل مالي وتشغيلي للفرع الحالي حسب بيانات النظام{% endblock %}
 
 {% block content %}
@@ -11,15 +11,26 @@
                 <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
                     <div>
                         <h5 class="mb-1">التوصيات الذكية</h5>
-                        <div class="text-muted-soft">المصدر: {% if insights.source == "gemini" %}Gemini{% else %}تحليل محلي من بيانات النظام{% endif %}</div>
+                        <div class="text-muted-soft">
+                            المصدر:
+                            {% if insights.source == "private" %}
+                                نموذج عبدالرحمن المحاسبي
+                            {% elif insights.source == "gemini" %}
+                                Gemini احتياطي
+                            {% else %}
+                                تحليل محلي من بيانات النظام
+                            {% endif %}
+                        </div>
                     </div>
-                    <a class="btn btn-primary" href="{% url 'ai_assistant' %}"><i class="fa-solid fa-comments-dollar"></i> اسأل المساعد</a>
+                    <a class="btn btn-primary" href="{% url 'ai_assistant' %}">
+                        <i class="fa-solid fa-comments-dollar"></i> اسأل النموذج
+                    </a>
                 </div>
                 <div class="d-grid gap-2">
                     {% for tip in tips %}
                     <div class="glass-soft p-3">{{ tip }}</div>
                     {% empty %}
-                    <div class="text-muted-soft">لا توجد توصيات حالياً.</div>
+                    <div class="text-muted-soft">لا توجد توصيات حاليًا.</div>
                     {% endfor %}
                 </div>
                 {% if insights.warning %}
@@ -45,7 +56,13 @@
         <div class="table-responsive">
             <table class="table table-dark table-hover mb-0">
                 <thead><tr><th>الفاتورة</th><th>التاريخ</th><th>الإجمالي</th></tr></thead>
-                <tbody>{% for p in purchases %}<tr><td>{{ p.invoice_number }}</td><td>{{ p.issue_date|date:"Y-m-d" }}</td><td>{{ p.total_with_vat }}</td></tr>{% empty %}<tr><td colspan="3" class="text-center text-muted py-4">لا توجد بيانات كافية للتوقعات.</td></tr>{% endfor %}</tbody>
+                <tbody>
+                    {% for p in purchases %}
+                    <tr><td>{{ p.invoice_number }}</td><td>{{ p.issue_date|date:"Y-m-d" }}</td><td>{{ p.total_with_vat }}</td></tr>
+                    {% empty %}
+                    <tr><td colspan="3" class="text-center text-muted py-4">لا توجد بيانات كافية للتوقعات.</td></tr>
+                    {% endfor %}
+                </tbody>
             </table>
         </div>
     </div>

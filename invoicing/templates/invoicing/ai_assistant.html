@@ -1,15 +1,15 @@
 {% extends 'core/base.html' %}
 
-{% block page_title %}المساعد المالي بالذكاء الاصطناعي{% endblock %}
-{% block page_subtitle %}اسأل عن المبيعات والمشتريات والمخزون والمؤشرات الحالية للفرع{% endblock %}
+{% block page_title %}المساعد المالي الخاص{% endblock %}
+{% block page_subtitle %}اسأل نموذج عبدالرحمن المحاسبي عن المبيعات والمشتريات والمخزون ومؤشرات الفرع{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
-    <div class="alert {% if ai_status.has_key %}alert-success{% else %}alert-warning{% endif %}">
-        {% if ai_status.has_key %}
-            المساعد متصل عبر <code>{{ ai_status.key_name }}</code> ويستخدم <code>{{ ai_status.model }}</code>.
-        {% else %}
-            يعمل المساعد الآن بتحليل محلي. لتفعيل إجابات Gemini أضف <code>GOOGLE_API_KEY</code> أو <code>GEMINI_API_KEY</code> ثم أعد نشر الخدمة.
+    <div class="alert alert-success">
+        المساعد متصل بـ <strong>{{ ai_status.private_model }}</strong>
+        عبر <code>{{ ai_status.private_url }}</code>.
+        {% if ai_status.key_name %}
+            ويمكن استخدام Gemini كخيار احتياطي عبر <code>{{ ai_status.key_name }}</code>.
         {% endif %}
     </div>
 
@@ -20,12 +20,26 @@
                     {% csrf_token %}
                     <label class="form-label" for="ai-question">سؤالك</label>
                     <textarea id="ai-question" name="question" class="form-control" rows="5" placeholder="مثال: ما أهم مخاطر هذا الشهر؟ أو كيف أحسن التدفق النقدي؟">{{ question }}</textarea>
-                    <button class="btn btn-primary mt-3" type="submit"><i class="fa-solid fa-paper-plane"></i> اسأل المساعد</button>
+                    <button class="btn btn-primary mt-3" type="submit">
+                        <i class="fa-solid fa-paper-plane"></i> اسأل النموذج الخاص
+                    </button>
                 </form>
 
                 {% if answer %}
                 <div class="glass-soft p-3 mt-4">
-                    <div class="text-muted-soft mb-2">الإجابة</div>
+                    <div class="text-muted-soft mb-2">
+                        الإجابة
+                        {% if answer.source == "private" %}
+                            <span class="badge bg-success ms-2">نموذجك الخاص</span>
+                        {% elif answer.source == "gemini" %}
+                            <span class="badge bg-info ms-2">Gemini احتياطي</span>
+                        {% else %}
+                            <span class="badge bg-secondary ms-2">تحليل محلي</span>
+                        {% endif %}
+                    </div>
+                    {% if answer.warning %}
+                    <div class="alert alert-warning py-2">{{ answer.warning }}</div>
+                    {% endif %}
                     {% if answer.ok %}
                     <div style="white-space: pre-line;">{{ answer.answer }}</div>
                     {% else %}
@@ -44,7 +58,7 @@
                     {% for tip in insights.tips %}
                     <div class="glass-soft p-3">{{ tip }}</div>
                     {% empty %}
-                    <div class="text-muted-soft">لا توجد توصيات حالياً.</div>
+                    <div class="text-muted-soft">لا توجد توصيات حاليًا.</div>
                     {% endfor %}
                 </div>
                 <a class="btn btn-outline-light w-100 mt-3" href="{% url 'ai_insights' %}">
