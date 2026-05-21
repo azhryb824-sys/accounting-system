@@ -70,10 +70,14 @@ WSGI_APPLICATION = 'accountings.wsgi.application'
 
 
 # Database
+default_sqlite_name = os.environ.get('SQLITE_NAME')
+if not default_sqlite_name:
+    default_sqlite_name = 'db.sqlite3' if (BASE_DIR / 'db.sqlite3').exists() else 'starter.sqlite3'
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / os.environ.get('SQLITE_NAME', 'db.sqlite3'),
+        'NAME': BASE_DIR / default_sqlite_name,
     }
 }
 
