@@ -1,11 +1,15 @@
+import json
+
+from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import F
+from django.views.decorators.http import require_POST
 
 from .models import PurchaseInvoice, PurchaseItem, Supplier, Item, StockMovement
 from .forms import PurchaseInvoiceForm, ItemForm, AIInvoiceUploadForm
-from .ai_services import ai_configuration_status, answer_financial_question, extract_invoice_from_image, generate_financial_insights, match_invoice_items
+from .ai_services import ai_configuration_status, analyze_and_route_user_request, answer_financial_question, extract_invoice_from_image, generate_financial_insights, match_invoice_items
 from django.utils.translation import gettext_lazy as _
 from accounts.views import role_required
 from core.models import Branch
@@ -283,3 +287,24 @@ def ai_assistant(request):
         "answer": answer,
         "question": question,
     })
+
+
+@login_required(login_url='login')
+@role_required('view_ai_insights')
+@require_POST
+def ai_assistant_command(request):
+    branch_id = request.session.get('branch_id')
+    if not branch_id:
+        return JsonResponse({"ok": False, "message": "اختر الشركة والفرع أولا."}, status=400)
+
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        payload = request.POST
+
+    command = (payload.get("command") or payload.get("question") or "").strip()
+    if not command:
+        return JsonResponse({"ok": False, "message": "اكتب أو قل طلبك أولا."}, status=400)
+
+    result = analyze_and_route_user_request(branch_id, command)
+    return JsonResponse(result, json_dumps_params={"ensure_ascii": False})

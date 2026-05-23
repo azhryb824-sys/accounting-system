@@ -8,6 +8,7 @@ import requests
 from django.conf import settings
 from django.db.models import F, Sum
 from django.db.models.functions import Coalesce
+from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
 from .models import Invoice, InvoiceItem, Item, PurchaseInvoice
@@ -184,6 +185,176 @@ def answer_financial_question(branch_id, question):
         }
 
     return {"ok": True, "source": "private", "answer": result["text"], "context": context}
+
+
+ASSISTANT_ACTIONS = [
+    {
+        "name": "dashboard",
+        "title": "لوحة التحكم",
+        "url_name": "dashboard",
+        "keywords": ("لوحة التحكم", "الرئيسية", "الداشبورد", "dashboard"),
+        "description": "فتح لوحة التحكم العامة.",
+    },
+    {
+        "name": "reports",
+        "title": "مركز التقارير",
+        "url_name": "reports_center",
+        "keywords": ("التقارير", "تقرير", "reports", "كشف"),
+        "description": "فتح مركز التقارير.",
+    },
+    {
+        "name": "payroll_report",
+        "title": "كشف الرواتب",
+        "url_name": "payroll_report",
+        "keywords": ("كشف الرواتب", "تقرير الرواتب", "مسير الرواتب"),
+        "description": "فتح تقرير كشف الرواتب.",
+    },
+    {
+        "name": "advance_report",
+        "title": "كشف السلف",
+        "url_name": "advance_report",
+        "keywords": ("كشف السلف", "تقرير السلف", "سلف الموظفين"),
+        "description": "فتح تقرير السلف.",
+    },
+    {
+        "name": "unposted",
+        "title": "العمليات غير المرحلة",
+        "url_name": "unposted_operations_report",
+        "keywords": ("غير مرحلة", "غير المرحله", "عمليات غير مرحلة", "لم ترحل"),
+        "description": "فتح تقرير العمليات غير المرحلة محاسبيا.",
+    },
+    {
+        "name": "sales",
+        "title": "فواتير البيع",
+        "url_name": "invoice_list",
+        "keywords": ("فواتير البيع", "المبيعات", "بيع", "العملاء"),
+        "description": "فتح قائمة فواتير البيع.",
+    },
+    {
+        "name": "add_sale",
+        "title": "إضافة فاتورة بيع",
+        "url_name": "invoice_create",
+        "keywords": ("أضف فاتورة بيع", "اضافة فاتورة بيع", "فاتورة بيع جديدة", "أنشئ فاتورة بيع"),
+        "description": "فتح نموذج إضافة فاتورة بيع.",
+    },
+    {
+        "name": "purchases",
+        "title": "فواتير الشراء",
+        "url_name": "purchase_list",
+        "keywords": ("فواتير الشراء", "المشتريات", "شراء", "الموردين"),
+        "description": "فتح قائمة فواتير الشراء.",
+    },
+    {
+        "name": "add_purchase",
+        "title": "إضافة فاتورة شراء",
+        "url_name": "purchase_add",
+        "keywords": ("أضف فاتورة شراء", "اضافة فاتورة شراء", "فاتورة شراء جديدة", "أنشئ فاتورة شراء"),
+        "description": "فتح نموذج إضافة فاتورة شراء.",
+    },
+    {
+        "name": "ai_invoice",
+        "title": "إضافة فاتورة بالذكاء الاصطناعي",
+        "url_name": "ai_invoice_import",
+        "keywords": ("فاتورة مصورة", "صورة فاتورة", "قراءة فاتورة", "فاتورة بالذكاء", "ocr"),
+        "description": "فتح صفحة رفع فاتورة مصورة لاستخراجها بالذكاء الاصطناعي.",
+    },
+    {
+        "name": "inventory",
+        "title": "المخزون",
+        "url_name": "inventory_list",
+        "keywords": ("المخزون", "الأصناف", "الصنف", "المنتجات"),
+        "description": "فتح قائمة المخزون والأصناف.",
+    },
+    {
+        "name": "employees",
+        "title": "الموظفون",
+        "url_name": "employee_list",
+        "keywords": ("الموظفين", "الموظفون", "موظف"),
+        "description": "فتح قائمة الموظفين.",
+    },
+    {
+        "name": "salaries",
+        "title": "رواتب الموظفين",
+        "url_name": "salary_list",
+        "keywords": ("رواتب الموظفين", "مسير الرواتب", "الرواتب", "راتب"),
+        "description": "فتح صفحة رواتب الموظفين.",
+    },
+    {
+        "name": "advances",
+        "title": "سلف الموظفين",
+        "url_name": "advance_list",
+        "keywords": ("السلف", "سلفة", "سلف الموظفين"),
+        "description": "فتح صفحة سلف الموظفين.",
+    },
+    {
+        "name": "journal",
+        "title": "القيود اليومية",
+        "url_name": "journal_list",
+        "keywords": ("القيود", "قيد", "اليومية", "دفتر اليومية"),
+        "description": "فتح قائمة القيود اليومية.",
+    },
+    {
+        "name": "add_journal",
+        "title": "إضافة قيد يومية",
+        "url_name": "journal_add",
+        "keywords": ("أضف قيد", "اضافة قيد", "قيد جديد", "أنشئ قيد"),
+        "description": "فتح نموذج إضافة قيد يومية.",
+    },
+]
+
+
+def _safe_reverse(url_name):
+    try:
+        return reverse(url_name)
+    except NoReverseMatch:
+        return ""
+
+
+def analyze_and_route_user_request(branch_id, request_text):
+    text = (request_text or "").strip()
+    normalized = text.lower()
+    matched = []
+    for action in ASSISTANT_ACTIONS:
+        score = sum(len(keyword) for keyword in action["keywords"] if keyword.lower() in normalized)
+        if score:
+            url = _safe_reverse(action["url_name"])
+            if url:
+                matched.append({**action, "score": score, "url": url})
+
+    matched.sort(key=lambda row: row["score"], reverse=True)
+    primary = matched[0] if matched else None
+    wants_open = any(word in normalized for word in ("افتح", "اذهب", "روح", "انتقل", "اعرض", "أظهر", "نفذ", "ابدأ"))
+    wants_create = any(word in normalized for word in ("أضف", "اضف", "أنشئ", "انشئ", "سجل", "ادخل"))
+
+    financial_answer = answer_financial_question(branch_id, text)
+    answer_text = financial_answer.get("answer") or financial_answer.get("message") or ""
+
+    if primary:
+        action_text = f"فهمت طلبك: {primary['description']}"
+        if wants_create:
+            action_text += " يمكنك إدخال البيانات من النموذج ثم الحفظ."
+        elif wants_open:
+            action_text += " سأفتح الصفحة المناسبة."
+        else:
+            action_text += " وجدت صفحة مناسبة لهذا الطلب."
+        answer_text = f"{action_text}\n\n{answer_text}".strip()
+
+    return {
+        "ok": True,
+        "answer": answer_text,
+        "source": financial_answer.get("source", "local"),
+        "action": {
+            "type": "navigate" if primary else "answer",
+            "title": primary["title"] if primary else "",
+            "url": primary["url"] if primary else "",
+            "auto_open": bool(primary and wants_open),
+        },
+        "suggestions": [
+            {"title": row["title"], "url": row["url"], "description": row["description"]}
+            for row in matched[:4]
+        ],
+        "context": financial_answer.get("context", {}),
+    }
 
 
 def extract_invoice_from_image(uploaded_file):

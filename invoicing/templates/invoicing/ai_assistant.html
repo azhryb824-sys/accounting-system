@@ -1,7 +1,7 @@
 {% extends 'core/base.html' %}
 
-{% block page_title %}المساعد المالي الخاص{% endblock %}
-{% block page_subtitle %}اسأل نموذجك المحاسبي عن المبيعات والمشتريات والمخزون ومؤشرات الفرع{% endblock %}
+{% block page_title %}المساعد المالي الصوتي{% endblock %}
+{% block page_subtitle %}اسأل بالصوت أو الكتابة، ودع المساعد يحلل طلبك ويفتح الإجراء المناسب داخل النظام{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
@@ -13,14 +13,35 @@
     <div class="row g-4">
         <div class="col-lg-7">
             <div class="glass-card p-4 h-100">
-                <form method="post">
+                <form method="post" id="classic-ai-form">
                     {% csrf_token %}
-                    <label class="form-label" for="ai-question">سؤالك</label>
-                    <textarea id="ai-question" name="question" class="form-control" rows="5" placeholder="مثال: ما أهم مخاطر هذا الشهر؟ أو كيف أحسن التدفق النقدي؟">{{ question }}</textarea>
-                    <button class="btn btn-primary mt-3" type="submit">
-                        <i class="fa-solid fa-paper-plane"></i> اسأل النموذج الخاص
-                    </button>
+                    <label class="form-label" for="ai-question">سؤالك أو أمرك</label>
+                    <textarea id="ai-question" name="question" class="form-control" rows="5" placeholder="مثال: افتح كشف الرواتب، أو حلل المبيعات والمشتريات، أو اذهب إلى فاتورة مصورة">{{ question }}</textarea>
+                    <div class="d-flex flex-wrap gap-2 mt-3">
+                        <button class="btn btn-primary" type="submit">
+                            <i class="fa-solid fa-paper-plane"></i> اسأل
+                        </button>
+                        <button class="btn btn-outline-light" type="button" id="voice-start">
+                            <i class="fa-solid fa-microphone"></i> تحدث
+                        </button>
+                        <button class="btn btn-outline-light" type="button" id="voice-stop" disabled>
+                            <i class="fa-solid fa-microphone-slash"></i> إيقاف
+                        </button>
+                        <button class="btn btn-outline-light" type="button" id="assistant-run">
+                            <i class="fa-solid fa-bolt"></i> تحليل وتنفيذ
+                        </button>
+                    </div>
+                    <div class="small text-muted-soft mt-2" id="voice-status">الصوت يعمل من المتصفح مباشرة إذا كان مدعوما.</div>
                 </form>
+
+                <div class="glass-soft p-3 mt-4 d-none" id="live-answer-card">
+                    <div class="text-muted-soft mb-2">
+                        نتيجة المساعد
+                        <span class="badge bg-success ms-2" id="live-source">مساعد النظام</span>
+                    </div>
+                    <div id="live-answer" style="white-space: pre-line;"></div>
+                    <div class="d-flex flex-wrap gap-2 mt-3" id="assistant-actions"></div>
+                </div>
 
                 {% if answer %}
                 <div class="glass-soft p-3 mt-4">
@@ -48,6 +69,14 @@
 
         <div class="col-lg-5">
             <div class="glass-card p-4 h-100">
+                <h5 class="mb-3">أوامر صوتية جاهزة</h5>
+                <div class="d-grid gap-2 mb-4">
+                    <button class="btn btn-outline-light text-start quick-command" type="button" data-command="افتح تقرير العمليات غير المرحلة">افتح تقرير العمليات غير المرحلة</button>
+                    <button class="btn btn-outline-light text-start quick-command" type="button" data-command="اذهب إلى رواتب الموظفين">اذهب إلى رواتب الموظفين</button>
+                    <button class="btn btn-outline-light text-start quick-command" type="button" data-command="افتح إضافة فاتورة مصورة">افتح إضافة فاتورة مصورة</button>
+                    <button class="btn btn-outline-light text-start quick-command" type="button" data-command="حلل المبيعات والمشتريات والمخزون">حلل المبيعات والمشتريات والمخزون</button>
+                </div>
+
                 <h5 class="mb-3">قراءة فورية</h5>
                 <div class="d-grid gap-2">
                     {% for tip in insights.tips %}
@@ -63,4 +92,132 @@
         </div>
     </div>
 </div>
+
+<script>
+(() => {
+    const questionInput = document.getElementById('ai-question');
+    const startButton = document.getElementById('voice-start');
+    const stopButton = document.getElementById('voice-stop');
+    const runButton = document.getElementById('assistant-run');
+    const statusBox = document.getElementById('voice-status');
+    const answerCard = document.getElementById('live-answer-card');
+    const answerBox = document.getElementById('live-answer');
+    const actionsBox = document.getElementById('assistant-actions');
+    const commandUrl = "{% url 'ai_assistant_command' %}";
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+
+    function speak(text) {
+        if (!('speechSynthesis' in window) || !text) return;
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text.replace(/\s+/g, ' ').slice(0, 700));
+        utterance.lang = 'ar-SA';
+        utterance.rate = 1;
+        window.speechSynthesis.speak(utterance);
+    }
+
+    function setStatus(text) {
+        statusBox.textContent = text;
+    }
+
+    async function runAssistant(command, autoNavigate = false) {
+        const value = (command || questionInput.value || '').trim();
+        if (!value) {
+            setStatus('اكتب أو قل طلبك أولا.');
+            return;
+        }
+
+        questionInput.value = value;
+        setStatus('جاري تحليل الطلب...');
+        answerCard.classList.remove('d-none');
+        answerBox.textContent = 'لحظة...';
+        actionsBox.innerHTML = '';
+
+        try {
+            const response = await fetch(commandUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken,
+                },
+                body: JSON.stringify({ command: value }),
+            });
+            const data = await response.json();
+            if (!response.ok || !data.ok) {
+                throw new Error(data.message || 'تعذر تنفيذ الطلب.');
+            }
+
+            answerBox.textContent = data.answer || 'تم تحليل الطلب.';
+            setStatus('تم التحليل.');
+            speak(data.answer || '');
+
+            if (data.action && data.action.url) {
+                const openButton = document.createElement('a');
+                openButton.className = 'btn btn-primary';
+                openButton.href = data.action.url;
+                openButton.innerHTML = `<i class="fa-solid fa-arrow-up-right-from-square"></i> ${data.action.title || 'فتح الإجراء'}`;
+                actionsBox.appendChild(openButton);
+                if (data.action.auto_open || autoNavigate) {
+                    window.setTimeout(() => { window.location.href = data.action.url; }, 900);
+                }
+            }
+
+            (data.suggestions || []).forEach((item) => {
+                if (!item.url || (data.action && item.url === data.action.url)) return;
+                const link = document.createElement('a');
+                link.className = 'btn btn-outline-light';
+                link.href = item.url;
+                link.textContent = item.title;
+                actionsBox.appendChild(link);
+            });
+        } catch (error) {
+            answerBox.textContent = error.message;
+            setStatus('تعذر إكمال الطلب.');
+        }
+    }
+
+    if (SpeechRecognition) {
+        recognition = new SpeechRecognition();
+        recognition.lang = 'ar-SA';
+        recognition.interimResults = true;
+        recognition.continuous = false;
+
+        recognition.onstart = () => {
+            startButton.disabled = true;
+            stopButton.disabled = false;
+            setStatus('أستمع الآن...');
+        };
+        recognition.onend = () => {
+            startButton.disabled = false;
+            stopButton.disabled = true;
+        };
+        recognition.onerror = () => {
+            setStatus('تعذر التقاط الصوت. تأكد من إذن الميكروفون.');
+        };
+        recognition.onresult = (event) => {
+            let transcript = '';
+            for (let i = event.resultIndex; i < event.results.length; i += 1) {
+                transcript += event.results[i][0].transcript;
+            }
+            questionInput.value = transcript.trim();
+            if (event.results[event.results.length - 1].isFinal) {
+                runAssistant(questionInput.value, false);
+            }
+        };
+
+        startButton.addEventListener('click', () => recognition.start());
+        stopButton.addEventListener('click', () => recognition.stop());
+    } else {
+        startButton.disabled = true;
+        stopButton.disabled = true;
+        setStatus('المتصفح الحالي لا يدعم التعرف الصوتي. يمكنك استخدام الكتابة.');
+    }
+
+    runButton.addEventListener('click', () => runAssistant('', false));
+    document.querySelectorAll('.quick-command').forEach((button) => {
+        button.addEventListener('click', () => runAssistant(button.dataset.command, false));
+    });
+})();
+</script>
 {% endblock %}
