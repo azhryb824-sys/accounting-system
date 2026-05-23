@@ -26,7 +26,7 @@ def _private_ai_url():
 
 
 def _private_ai_request(prompt, max_new_tokens=350, **extra_payload):
-    max_new_tokens = min(int(max_new_tokens or 220), 300)
+    max_new_tokens = min(int(max_new_tokens or 350), 900)
     payload = {
         "question": prompt,
         "max_new_tokens": max_new_tokens,
@@ -151,7 +151,7 @@ def generate_financial_insights(branch_id):
         "حلل بيانات الفرع التالية بالعربية وقدم 5 توصيات عملية قصيرة دون اختراع أرقام غير موجودة:\n"
         f"{json.dumps(context, ensure_ascii=False, default=str)}"
     )
-    result = _private_ai_request(prompt, max_new_tokens=300, task="financial_insights", context=context)
+    result = _private_ai_request(prompt, max_new_tokens=650, task="financial_insights", context=context)
     if not result.get("ok") or not result.get("text"):
         return {
             "ok": True,
@@ -173,7 +173,7 @@ def answer_financial_question(branch_id, question):
         f"بيانات الفرع: {json.dumps(context, ensure_ascii=False, default=str)}\n"
         f"سؤال المستخدم: {question}"
     )
-    result = _private_ai_request(prompt, max_new_tokens=300, task="financial_question", context=context)
+    result = _private_ai_request(prompt, max_new_tokens=750, task="financial_question", context=context)
     if not result.get("ok") or not result.get("text"):
         return {
             "ok": True,

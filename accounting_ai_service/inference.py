@@ -23,7 +23,7 @@ MODEL_PATH = Path(__file__).resolve().parent / "models" / "my_model"
 
 SYSTEM_PROMPT = f"""
 أنت {MODEL_NAME}، مساعد ذكاء اصطناعي خاص بـ {MODEL_OWNER}.
-تجيب بالعربية بوضوح واختصار، وتركز على المحاسبة والفواتير والمخزون والقيود اليومية والرواتب والسلف.
+تجيب بالعربية بوضوح وبنقاط متعددة عند الحاجة، وتركز على المحاسبة والفواتير والمخزون والقيود اليومية والرواتب والسلف.
 إذا كانت البيانات غير كافية فاذكر ذلك بوضوح ولا تخترع أرقاما.
 """.strip()
 
@@ -41,26 +41,32 @@ PRIVATE_KNOWLEDGE = {
 
 ACCOUNTING_PATTERNS = [
     (
+        "الرواتب",
         ("راتب", "رواتب", "مسير", "موظف", "الموظفين"),
-        "الرواتب في النظام تمر بمرحلتين: اعتماد الراتب ثم دفعه. عند الاعتماد يتم إثبات مصروف الرواتب مقابل رواتب مستحقة، وإذا وُجد خصم سلفة يتم تخفيض حساب سلف الموظفين. عند الدفع يتم تخفيض الرواتب المستحقة مقابل الصندوق أو البنك.",
+        "الرواتب تمر بمرحلتين: اعتماد الراتب ثم دفعه. عند الاعتماد يثبت مصروف الرواتب مقابل رواتب مستحقة، وإذا وُجد خصم سلفة يخفض حساب سلف الموظفين. عند الدفع تخفض الرواتب المستحقة مقابل الصندوق أو البنك.",
     ),
     (
+        "السلف",
         ("سلفة", "سلف", "advance"),
-        "سلفة الموظف تسجل كأصل على حساب سلف الموظفين عند صرفها. وعند خصمها من الراتب ينخفض رصيد السلفة ويظهر الخصم ضمن قيد استحقاق الراتب حتى تصبح السلفة مسددة بالكامل.",
+        "سلفة الموظف تسجل كأصل على حساب سلف الموظفين عند صرفها. عند خصمها من الراتب ينخفض رصيد السلفة ويظهر الخصم ضمن قيد استحقاق الراتب حتى تصبح السلفة مسددة بالكامل.",
     ),
     (
+        "فواتير البيع",
         ("فاتورة بيع", "مبيعات", "بيع", "عميل"),
         "فاتورة البيع تؤثر على الإيرادات وضريبة القيمة المضافة. إذا كانت نقدية أو بطاقة أو تحويل يكون الطرف المدين الصندوق أو البنك، وإذا كانت آجلة يكون الطرف المدين العملاء. كما ينخفض المخزون وتثبت تكلفة البضاعة المباعة عند الترحيل.",
     ),
     (
+        "فواتير الشراء",
         ("فاتورة شراء", "مشتريات", "شراء", "مورد"),
-        "فاتورة الشراء تزيد المخزون وتثبت ضريبة المدخلات، ويكون الطرف الدائن غالبا الموردين إذا لم يتم السداد مباشرة. ويجب التأكد من عدم تكرار تحديث المخزون عند إدخال بنود الشراء.",
+        "فاتورة الشراء تزيد المخزون وتثبت ضريبة المدخلات، ويكون الطرف الدائن غالبا الموردين إذا لم يتم السداد مباشرة. يجب التأكد من عدم تكرار تحديث المخزون عند إدخال بنود الشراء.",
     ),
     (
+        "القيود",
         ("قيد", "قيود", "مدين", "دائن"),
         "أي عملية محاسبية صحيحة يجب أن تنتج قيدا متوازنا: مجموع المدين يساوي مجموع الدائن. إذا لم يتوازن القيد فهناك خطأ في الحسابات أو في اختيار الحسابات المرتبطة بالعملية.",
     ),
     (
+        "التقارير",
         ("تقرير", "تقارير", "تحليل", "مؤشرات"),
         "ابدأ بقراءة المبيعات والمشتريات وقيمة المخزون والرواتب والسلف المفتوحة. أهم التنبيهات تكون عند زيادة المشتريات عن المبيعات، ارتفاع السلف المفتوحة، انخفاض المخزون عن حد التنبيه، أو وجود عمليات غير مرحلة محاسبيا.",
     ),
@@ -122,7 +128,7 @@ def _answer_from_financial_context(question: str) -> str | None:
     if inventory <= 0:
         lines.append("- قيمة المخزون صفر أو غير مسجلة؛ تأكد من إدخال تكاليف الأصناف وفواتير الشراء.")
 
-    lines.append("الأولوية المقترحة: راجع العمليات غير المرحلة، ثم المخزون، ثم التحصيل والسلف والرواتب.")
+    lines.append("- الأولوية: راجع العمليات غير المرحلة، ثم المخزون، ثم التحصيل والسلف والرواتب.")
     return "\n".join(lines)
 
 
@@ -160,11 +166,11 @@ def _parse_amount(text: str, labels: tuple[str, ...]) -> float:
 
 
 def _parse_field(text: str, labels: tuple[str, ...]) -> str:
+    stop_words = (
+        "invoice_number|invoice no|invoice number|date|subtotal|sub total|total|vat|tax|"
+        "supplier_name|supplier|vendor|رقم الفاتورة|التاريخ|قبل الضريبة|الإجمالي|المجموع|ضريبة|المورد|البائع"
+    )
     for label in labels:
-        stop_words = (
-            "invoice_number|invoice no|invoice number|date|subtotal|sub total|total|vat|tax|"
-            "supplier_name|supplier|vendor|رقم الفاتورة|التاريخ|قبل الضريبة|الإجمالي|المجموع|ضريبة|المورد|البائع"
-        )
         pattern = rf"(?<![a-zA-Z]){label}(?![a-zA-Z])\s*[:\-]?\s*(.+?)(?=\s+(?:{stop_words})\s*[:\-]?|[\n\r|,؛]|$)"
         match = re.search(pattern, text, re.IGNORECASE)
         if match:
@@ -280,7 +286,7 @@ class PrivateAccountingModel:
         question = question.strip()
         return f"{SYSTEM_PROMPT}\n\nسؤال: {question}\nالإجابة:"
 
-    def answer(self, question: str, max_new_tokens: int = 120) -> str:
+    def answer(self, question: str, max_new_tokens: int = 240) -> str:
         if not question or not question.strip():
             raise ValueError("السؤال لا يمكن أن يكون فارغا.")
 
@@ -290,8 +296,10 @@ class PrivateAccountingModel:
 
         if self.model is None or self.tokenizer is None:
             return (
-                "لم يتم تحميل أوزان النموذج على الخادم، لذلك أعمل حاليا بطبقة المعرفة المحاسبية المدمجة. "
-                "اسأل عن الرواتب، السلف، فواتير البيع والشراء، القيود، الضريبة، المخزون أو التقارير."
+                "لم يتم تحميل أوزان النموذج على الخادم، لذلك أعمل حاليا بطبقة المعرفة المحاسبية المدمجة.\n"
+                "- أستطيع الإجابة عن الرواتب والسلف وفواتير البيع والشراء.\n"
+                "- أستطيع شرح القيود والضريبة والمخزون والتقارير.\n"
+                "- إذا سألت عن أكثر من موضوع سأجمع لك الإجابة في نقاط متعددة."
             )
 
         with torch.inference_mode():
@@ -320,22 +328,32 @@ class PrivateAccountingModel:
         if context_answer:
             return context_answer
 
-        for words, answer in ACCOUNTING_PATTERNS:
+        matched_sections: list[str] = []
+        for title, words, answer in ACCOUNTING_PATTERNS:
             if _contains_any(normalized_question, words):
-                return answer
+                matched_sections.append(f"- {title}: {answer}")
 
+        if matched_sections:
+            if len(matched_sections) == 1:
+                return matched_sections[0].removeprefix("- ").strip()
+            return "إجابة مجمعة حسب المواضيع التي سألت عنها:\n" + "\n".join(matched_sections[:6])
+
+        exact_answers: list[str] = []
         best_key = None
         best_score = 0.0
         for key in PRIVATE_KNOWLEDGE:
             normalized_key = key.lower()
             if normalized_key in normalized_question:
-                return PRIVATE_KNOWLEDGE[key]
+                exact_answers.append(f"- {key}: {PRIVATE_KNOWLEDGE[key]}")
+                continue
 
             score = SequenceMatcher(None, normalized_key, normalized_question).ratio()
             if score > best_score:
                 best_key = key
                 best_score = score
 
+        if exact_answers:
+            return "\n".join(exact_answers[:5])
         if best_key and best_score >= 0.45:
             return PRIVATE_KNOWLEDGE[best_key]
         return None
@@ -360,7 +378,7 @@ def get_model() -> PrivateAccountingModel:
     return PrivateAccountingModel()
 
 
-def ask(question: str, max_new_tokens: int = 120) -> str:
+def ask(question: str, max_new_tokens: int = 240) -> str:
     return get_model().answer(question, max_new_tokens=max_new_tokens)
 
 
@@ -369,4 +387,4 @@ if __name__ == "__main__":
         sys.stdout.reconfigure(encoding="utf-8")
 
     print(f"{MODEL_NAME} جاهز.")
-    print(ask("ما هي الفاتورة الضريبية؟"))
+    print(ask("اشرح الرواتب والسلف والمبيعات والمشتريات"))
