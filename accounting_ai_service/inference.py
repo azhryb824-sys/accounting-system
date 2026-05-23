@@ -173,7 +173,50 @@ def _money(value: Any) -> float:
         return 0.0
 
 
+def _extract_user_question(text: str) -> str:
+    markers = (
+        "سؤال المستخدم:",
+        "سؤال:",
+        "User question:",
+        "question:",
+        "ط³ط¤ط§ظ„ ط§ظ„ظ…ط³طھط®ط¯ظ…:",
+        "ط³ط¤ط§ظ„:",
+    )
+    for marker in markers:
+        if marker in text:
+            return text.rsplit(marker, 1)[-1].strip()
+    return text.strip()
+
+
+def _wants_financial_context_answer(text: str) -> bool:
+    user_question = _extract_user_question(text).lower()
+    keywords = (
+        "حلل",
+        "تحليل",
+        "مؤشرات",
+        "توصيات",
+        "الأداء",
+        "اداء",
+        "المبيعات",
+        "المشتريات",
+        "المخزون",
+        "التدفق",
+        "الربح",
+        "الخسارة",
+        "بيانات الفرع",
+        "financial",
+        "analysis",
+        "ط­ظ„ظ„",
+        "طھط­ظ„ظٹظ„",
+        "ظ…ط¤ط´ط±ط§طھ",
+    )
+    return any(keyword in user_question for keyword in keywords)
+
+
 def _answer_from_financial_context(question: str) -> str | None:
+    if not _wants_financial_context_answer(question):
+        return None
+
     context = _extract_json_object(question)
     if not context:
         return None
@@ -466,10 +509,8 @@ class PrivateAccountingModel:
 
     @staticmethod
     def _answer_from_private_knowledge(question: str) -> str | None:
-        normalized_question = question.strip().lower()
-        context_answer = _answer_from_financial_context(question)
-        if context_answer:
-            return context_answer
+        user_question = _extract_user_question(question)
+        normalized_question = user_question.strip().lower()
 
         matched_sections: list[str] = []
         for words, answer in SYSTEM_USAGE_PATTERNS:
@@ -484,6 +525,10 @@ class PrivateAccountingModel:
             if len(matched_sections) == 1:
                 return matched_sections[0].removeprefix("- ").strip()
             return "إجابة مجمعة حسب المواضيع التي سألت عنها:\n" + "\n".join(matched_sections[:6])
+
+        context_answer = _answer_from_financial_context(question)
+        if context_answer:
+            return context_answer
 
         exact_answers: list[str] = []
         best_key = None

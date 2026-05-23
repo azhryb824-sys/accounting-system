@@ -221,6 +221,15 @@ def answer_financial_question(branch_id, question):
     usage_answer = local_system_usage_answer(question)
     result = _model_answer_financial_question(branch_id, question)
     answer_text = result.get("answer") or result.get("message") or ""
+    if usage_answer and (
+        result.get("source") == "local"
+        or "قراءة النموذج للبيانات الحالية" in answer_text
+        or "تعذر الاتصال" in answer_text
+        or "طھط¹ط°ط±" in answer_text
+    ):
+        result["answer"] = usage_answer
+        result["source"] = "local"
+        return result
     if usage_answer and usage_answer not in answer_text:
         answer_text = f"{usage_answer}\n\n{answer_text}".strip()
     result["answer"] = answer_text
