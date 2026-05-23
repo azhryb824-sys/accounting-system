@@ -1,7 +1,10 @@
 from decimal import Decimal
+import json
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -159,7 +162,12 @@ def invoice_create(request):
 
 @login_required(login_url='login')
 def pos_terminal(request):
-    return render(request, 'invoicing/pos_terminal.html', {"title": _("POS Terminal")})
+    branch_id = request.session.get('branch_id')
+    return render(request, 'invoicing/pos_terminal.html', {
+        "title": _("POS Terminal"),
+        "customers": Customer.objects.all().order_by("name"),
+        "products": Item.objects.filter(branch_id=branch_id, is_active=True).order_by("name")[:12],
+    })
 
 
 @login_required(login_url='login')
@@ -214,4 +222,127 @@ def zatca_dashboard(request):
 
 @login_required(login_url='login')
 def product_lookup(request):
-    return render(request, 'invoicing/pos_terminal.html', {"title": _("Product Lookup")})
+    branch_id = request.session.get('branch_id')
+    barcode = (request.GET.get("barcode") or "").strip()
+    query = (request.GET.get("q") or "").strip()
+    products = Item.objects.filter(branch_id=branch_id, is_active=True)
+    if barcode:
+        product = products.filter(barcode=barcode).first()
+    elif query:
+        product = products.filter(name__icontains=query).first()
+    else:
+        return JsonResponse({"ok": False, "message": _("Enter a barcode or product name.")})
+
+    if not product:
+        return JsonResponse({"ok": False, "message": _("Product was not found.")}, status=404)
+
+    return JsonResponse({
+        "ok": True,
+        "product": {
+            "id": product.id,
+            "name": product.name,
+            "price": str(product.selling_price or product.cost),
+            "quantity": str(product.quantity),
+            "stock": str(product.quantity),
+        },
+    })
+
+
+@login_required(login_url='login')
+def pos_checkout(request):
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "message": _("POST is required.")}, status=405)
+
+    branch_id = request.session.get('branch_id')
+    branch = get_object_or_404(Branch, id=branch_id)
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "message": _("Invalid checkout payload.")}, status=400)
+
+    lines = payload.get("lines") or []
+    if not lines:
+        return JsonResponse({"ok": False, "message": _("Cart is empty.")}, status=400)
+
+    customer_id = payload.get("customer_id")
+    if customer_id:
+        customer = get_object_or_404(Customer, id=customer_id)
+    else:
+        customer, created_customer = Customer.objects.get_or_create(
+            name="عميل نقدي",
+            defaults={"country": "SA"},
+        )
+
+    tax, created_tax = Tax.objects.get_or_create(name="VAT 15%", defaults={"rate": Decimal("15.00")})
+    invoice_number = f"POS-{timezone.now().strftime('%Y%m%d%H%M%S')}-{Invoice.objects.count() + 1}"
+    payment_method = payload.get("payment_method") or "نقدي"
+
+    with transaction.atomic():
+        assert_month_open(branch.company, timezone.localdate())
+        invoice = Invoice.objects.create(
+            branch=branch,
+            invoice_number=invoice_number,
+            invoice_type="simplified",
+            customer=customer,
+            payment_method=payment_method,
+        )
+        total_amount = Decimal("0.00")
+        total_vat = Decimal("0.00")
+        total_with_vat = Decimal("0.00")
+
+        for row in lines:
+            item = get_object_or_404(Item.objects.select_for_update(), id=row.get("id"), branch=branch)
+            quantity = Decimal(str(row.get("quantity") or "0"))
+            unit_price = Decimal(str(row.get("price") or item.selling_price or item.cost or "0"))
+            if quantity <= 0:
+                return JsonResponse({"ok": False, "message": _("Quantity must be greater than zero.")}, status=400)
+            if item.quantity < quantity:
+                return JsonResponse({
+                    "ok": False,
+                    "message": _("Insufficient stock for item: {item_name}").format(item_name=item.name),
+                }, status=400)
+
+            line_total = quantity * unit_price
+            line_vat = line_total * (tax.rate / Decimal("100"))
+            line_total_with_vat = line_total + line_vat
+            InvoiceItem.objects.create(
+                branch=branch,
+                invoice=invoice,
+                item=item,
+                description=item.name,
+                quantity=quantity,
+                unit_price=unit_price,
+                tax=tax,
+                line_total=line_total,
+                line_vat=line_vat,
+                line_total_with_vat=line_total_with_vat,
+            )
+            total_amount += line_total
+            total_vat += line_vat
+            total_with_vat += line_total_with_vat
+
+        invoice.total_amount = total_amount
+        invoice.total_vat = total_vat
+        invoice.total_with_vat = total_with_vat
+        invoice.save(update_fields=["total_amount", "total_vat", "total_with_vat"])
+
+        zatca_payload = prepare_zatca_payload(invoice)
+        if zatca_payload["warnings"]:
+            invoice.zatca_warnings = "\n".join(str(warning) for warning in zatca_payload["warnings"])
+            invoice.zatca_status = "غير مستوفية"
+            invoice.save(update_fields=["zatca_warnings", "zatca_status"])
+        else:
+            post_sales_invoice(invoice)
+            invoice.is_posted = True
+            invoice.zatca_qr = zatca_payload["qr"]
+            invoice.zatca_xml = zatca_payload["xml"]
+            invoice.zatca_hash = zatca_payload["hash"]
+            invoice.zatca_status = "جاهزة للإرسال"
+            invoice.save(update_fields=["is_posted", "zatca_qr", "zatca_xml", "zatca_hash", "zatca_status", "journal_entry"])
+
+    return JsonResponse({
+        "ok": True,
+        "invoice_number": invoice.invoice_number,
+        "zatca_status": invoice.zatca_status,
+        "detail_url": f"/invoicing/{invoice.id}/",
+    })

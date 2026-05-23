@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
@@ -11,6 +12,10 @@ from invoicing.views import post_sales_invoice
 
 class InvoiceAccountingTests(TestCase):
     def setUp(self):
+        self.user = get_user_model().objects.create_user(username="tester", password="pass")
+        self.user.is_staff = True
+        self.user.is_superuser = True
+        self.user.save()
         self.company = Company.objects.create(name="Test Co", unified_number="200")
         self.branch = Branch.objects.create(company=self.company, name="Main")
         self.tax = Tax.objects.create(name="VAT", rate=Decimal("15.00"))
@@ -21,6 +26,20 @@ class InvoiceAccountingTests(TestCase):
             cost=Decimal("20.00"),
             selling_price=Decimal("50.00"),
         )
+
+    def test_pos_terminal_and_lookup_pages_render(self):
+        self.client.force_login(self.user)
+        session = self.client.session
+        session["branch_id"] = self.branch.id
+        session["company_id"] = self.company.id
+        session.save()
+
+        terminal_response = self.client.get("/invoicing/pos/")
+        lookup_response = self.client.get("/invoicing/pos/product/", {"q": "Item"})
+
+        self.assertEqual(terminal_response.status_code, 200)
+        self.assertEqual(lookup_response.status_code, 200)
+        self.assertTrue(lookup_response.json()["ok"])
 
     def test_sales_invoice_posts_once_and_reduces_inventory_once(self):
         customer = Customer.objects.create(name="Customer")

@@ -14,5 +14,6 @@ urlpatterns = [
     # مسارات POS والبحث التي تسببت في الخطأ
     path('pos/', views.pos_terminal, name='pos_terminal'),
     path('pos/product/', views.product_lookup, name='pos_product_lookup'),
+    path('pos/checkout/', views.pos_checkout, name='pos_checkout'),
     path('zatca/', views.zatca_dashboard, name='zatca_dashboard'),
 ]
