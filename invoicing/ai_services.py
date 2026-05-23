@@ -257,6 +257,164 @@ def local_system_usage_answer(question):
     return "\n".join(f"- {answer}" for answer in dict.fromkeys(matches))
 
 
+FREE_WEB_GENERAL_SOURCES = {
+    "wikipedia": {
+        "name": "Wikipedia",
+        "license": "CC BY-SA؛ متاح للاستخدام التجاري مع النسبة والالتزام بشروط الترخيص.",
+    }
+}
+
+GENERAL_WEB_TRIGGERS = (
+    "ابحث",
+    "من هو",
+    "من هي",
+    "ما هو",
+    "ما هي",
+    "متى",
+    "أين",
+    "اين",
+    "عرفني على",
+    "معلومات عن",
+    "اشرح لي عن",
+    "who is",
+    "what is",
+    "when is",
+    "where is",
+)
+
+SYSTEM_OR_COMPANY_TERMS = (
+    "فاتورة",
+    "فواتير",
+    "مبيعات",
+    "مشتريات",
+    "مخزون",
+    "راتب",
+    "رواتب",
+    "سلفة",
+    "سلف",
+    "قيد",
+    "قيود",
+    "تقرير",
+    "تقارير",
+    "الشركة",
+    "شركتي",
+    "فرع",
+    "النظام",
+    "المحاسبة",
+    "محاسبي",
+    "مدين",
+    "دائن",
+    "ضريبة",
+    "vat",
+    "invoice",
+    "sales",
+    "purchase",
+    "inventory",
+    "salary",
+    "journal",
+)
+
+
+def _free_web_answers_enabled():
+    return bool(getattr(settings, "ENABLE_FREE_WEB_ANSWERS", True))
+
+
+def _is_general_web_question(question):
+    normalized = (question or "").strip().lower()
+    if not normalized:
+        return False
+    if any(term in normalized for term in SYSTEM_OR_COMPANY_TERMS):
+        return False
+    return any(trigger in normalized for trigger in GENERAL_WEB_TRIGGERS)
+
+
+def _wikipedia_language(question):
+    text = question or ""
+    if re.search(r"[\u0980-\u09FF]", text):
+        return "bn"
+    if re.search(r"[پچژگٹڈڑںے]", text):
+        return "ur"
+    if re.search(r"[\u0600-\u06FF]", text):
+        return "ar"
+    return "en"
+
+
+def _clean_general_web_query(question):
+    cleaned = (question or "").strip()
+    cleaned = re.sub(
+        r"^(ابحث\s+عن|ابحث|من\s+هو|من\s+هي|ما\s+هو|ما\s+هي|معلومات\s+عن|عرفني\s+على|اشرح\s+لي\s+عن)\s+",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(r"^(who\s+is|what\s+is|when\s+is|where\s+is)\s+", "", cleaned, flags=re.IGNORECASE)
+    return cleaned.strip(" ؟?،,.") or (question or "").strip()
+
+
+def _wikipedia_summary(question):
+    if not _free_web_answers_enabled() or not _is_general_web_question(question):
+        return {}
+
+    lang = _wikipedia_language(question)
+    query = _clean_general_web_query(question)
+    headers = {"User-Agent": "AccountingSystemAI/1.0 (free-commercial-source: Wikipedia CC BY-SA)"}
+    try:
+        search_response = requests.get(
+            f"https://{lang}.wikipedia.org/w/api.php",
+            params={
+                "action": "opensearch",
+                "search": query,
+                "limit": 1,
+                "namespace": 0,
+                "format": "json",
+            },
+            headers=headers,
+            timeout=6,
+        )
+        search_response.raise_for_status()
+        search_data = search_response.json()
+        titles = search_data[1] if len(search_data) > 1 else []
+        if not titles:
+            return {}
+
+        title = titles[0]
+        summary_response = requests.get(
+            f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/{title}",
+            headers=headers,
+            timeout=6,
+        )
+        summary_response.raise_for_status()
+        summary = summary_response.json()
+    except (requests.RequestException, ValueError, IndexError, TypeError):
+        return {}
+
+    extract = (summary.get("extract") or "").strip()
+    source_url = summary.get("content_urls", {}).get("desktop", {}).get("page") or ""
+    if not extract:
+        return {}
+    return {
+        "title": summary.get("title") or title,
+        "extract": extract,
+        "source_url": source_url,
+        "source_name": FREE_WEB_GENERAL_SOURCES["wikipedia"]["name"],
+        "license": FREE_WEB_GENERAL_SOURCES["wikipedia"]["license"],
+    }
+
+
+def free_web_general_answer(question):
+    summary = _wikipedia_summary(question)
+    if not summary:
+        return ""
+    answer = (
+        f"وجدت لك إجابة عامة من مصدر مجاني موثوق:\n"
+        f"- الموضوع: {summary['title']}\n"
+        f"- الإجابة: {summary['extract']}\n"
+        f"- المصدر: {summary['source_name']} {summary['source_url']}\n"
+        f"- الترخيص: {summary['license']}"
+    )
+    return answer.strip()
+
+
 def generate_financial_insights(branch_id):
     context = branch_ai_context(branch_id)
     fallback = local_financial_insights(context)
@@ -307,6 +465,15 @@ _model_answer_financial_question = answer_financial_question
 def answer_financial_question(branch_id, question):
     local_direct_answer = local_greeting_or_concept_answer(question)
     usage_answer = local_system_usage_answer(question)
+    if not local_direct_answer and not usage_answer:
+        web_answer = free_web_general_answer(question)
+        if web_answer:
+            return {
+                "ok": True,
+                "source": "free_web",
+                "answer": web_answer,
+                "context": {},
+            }
     result = _model_answer_financial_question(branch_id, question)
     answer_text = result.get("answer") or result.get("message") or ""
     if local_direct_answer and (
