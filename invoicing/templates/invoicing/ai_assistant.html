@@ -30,6 +30,9 @@
                         <button class="btn btn-outline-light" type="button" id="assistant-run">
                             <i class="fa-solid fa-bolt"></i> تحليل وتنفيذ
                         </button>
+                        <button class="btn btn-outline-light" type="button" id="voice-read">
+                            <i class="fa-solid fa-volume-high"></i> قراءة الرد
+                        </button>
                     </div>
                     <div class="small text-muted-soft mt-2" id="voice-status">الصوت يعمل من المتصفح مباشرة إذا كان مدعوما.</div>
                 </form>
@@ -57,7 +60,7 @@
                     <div class="alert alert-warning py-2">{{ answer.warning }}</div>
                     {% endif %}
                     {% if answer.ok %}
-                    <div style="white-space: pre-line;">{{ answer.answer }}</div>
+                    <div id="classic-answer" style="white-space: pre-line;">{{ answer.answer }}</div>
                     {% else %}
                     <div class="text-warning">{{ answer.message }}</div>
                     {% if answer.raw %}<pre class="small mt-2 mb-0 text-wrap">{{ answer.raw }}</pre>{% endif %}
@@ -99,26 +102,79 @@
     const startButton = document.getElementById('voice-start');
     const stopButton = document.getElementById('voice-stop');
     const runButton = document.getElementById('assistant-run');
+    const readButton = document.getElementById('voice-read');
     const statusBox = document.getElementById('voice-status');
     const answerCard = document.getElementById('live-answer-card');
     const answerBox = document.getElementById('live-answer');
+    const classicAnswerBox = document.getElementById('classic-answer');
     const actionsBox = document.getElementById('assistant-actions');
     const commandUrl = "{% url 'ai_assistant_command' %}";
     const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognitionLanguages = ['ar-SA', 'ar', 'ar-EG'];
     let recognition = null;
-
-    function speak(text) {
-        if (!('speechSynthesis' in window) || !text) return;
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text.replace(/\s+/g, ' ').slice(0, 700));
-        utterance.lang = 'ar-SA';
-        utterance.rate = 1;
-        window.speechSynthesis.speak(utterance);
-    }
+    let recognitionLanguageIndex = 0;
+    let arabicVoice = null;
+    let lastSpokenText = '';
 
     function setStatus(text) {
         statusBox.textContent = text;
+    }
+
+    function normalizeArabicSpeechText(text) {
+        return (text || '')
+            .replace(/[\u064B-\u065F\u0670]/g, '')
+            .replace(/[•*_`#>|[\]{}]/g, ' ')
+            .replace(/https?:\/\/\S+/g, 'رابط')
+            .replace(/\bSAR\b/gi, 'ريال')
+            .replace(/\bVAT\b/gi, 'ضريبة القيمة المضافة')
+            .replace(/\bPDF\b/gi, 'ملف بي دي إف')
+            .replace(/\bOCR\b/gi, 'قراءة النص من الصورة')
+            .replace(/\bAI\b/gi, 'الذكاء الاصطناعي')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function loadArabicVoice() {
+        if (!('speechSynthesis' in window)) return null;
+        const voices = window.speechSynthesis.getVoices();
+        const preferredNames = ['Hoda', 'Naayf', 'Maged', 'Microsoft Naayf', 'Microsoft Hoda', 'Google العربية'];
+        arabicVoice =
+            voices.find((voice) => preferredNames.some((name) => voice.name.includes(name))) ||
+            voices.find((voice) => (voice.lang || '').toLowerCase() === 'ar-sa') ||
+            voices.find((voice) => (voice.lang || '').toLowerCase().startsWith('ar')) ||
+            null;
+        return arabicVoice;
+    }
+
+    function speak(text) {
+        if (!('speechSynthesis' in window) || !text) {
+            setStatus('المتصفح لا يدعم قراءة الصوت.');
+            return;
+        }
+        const cleanText = normalizeArabicSpeechText(text).slice(0, 900);
+        if (!cleanText) return;
+        lastSpokenText = cleanText;
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(cleanText);
+        const selectedVoice = arabicVoice || loadArabicVoice();
+        if (selectedVoice) {
+            utterance.voice = selectedVoice;
+            utterance.lang = selectedVoice.lang || 'ar-SA';
+            setStatus(`سيتم قراءة الرد بصوت عربي: ${selectedVoice.name}`);
+        } else {
+            utterance.lang = 'ar-SA';
+            setStatus('لم أجد صوتا عربيا مثبتا في المتصفح. سأستخدم الصوت الافتراضي.');
+        }
+        utterance.rate = 0.9;
+        utterance.pitch = 1;
+        utterance.volume = 1;
+        utterance.onerror = () => setStatus('تعذرت قراءة الصوت العربي من المتصفح.');
+        window.speechSynthesis.speak(utterance);
+    }
+
+    function currentAnswerText() {
+        return (answerBox.textContent || classicAnswerBox?.textContent || '').trim();
     }
 
     async function runAssistant(command, autoNavigate = false) {
@@ -177,23 +233,36 @@
         }
     }
 
+    if ('speechSynthesis' in window) {
+        loadArabicVoice();
+        window.speechSynthesis.onvoiceschanged = loadArabicVoice;
+    }
+
     if (SpeechRecognition) {
         recognition = new SpeechRecognition();
-        recognition.lang = 'ar-SA';
+        recognition.lang = recognitionLanguages[recognitionLanguageIndex];
         recognition.interimResults = true;
         recognition.continuous = false;
+        recognition.maxAlternatives = 3;
 
         recognition.onstart = () => {
             startButton.disabled = true;
             stopButton.disabled = false;
-            setStatus('أستمع الآن...');
+            setStatus(`أستمع الآن باللغة ${recognition.lang}...`);
         };
         recognition.onend = () => {
             startButton.disabled = false;
             stopButton.disabled = true;
         };
-        recognition.onerror = () => {
-            setStatus('تعذر التقاط الصوت. تأكد من إذن الميكروفون.');
+        recognition.onerror = (event) => {
+            if ((event.error === 'language-not-supported' || event.error === 'no-speech') && recognitionLanguageIndex < recognitionLanguages.length - 1) {
+                recognitionLanguageIndex += 1;
+                recognition.lang = recognitionLanguages[recognitionLanguageIndex];
+                setStatus(`سأحاول التعرف الصوتي باللغة ${recognition.lang}.`);
+                window.setTimeout(() => recognition.start(), 250);
+                return;
+            }
+            setStatus('تعذر التقاط الصوت. تأكد من إذن الميكروفون وتحدث بوضوح.');
         };
         recognition.onresult = (event) => {
             let transcript = '';
@@ -206,7 +275,11 @@
             }
         };
 
-        startButton.addEventListener('click', () => recognition.start());
+        startButton.addEventListener('click', () => {
+            recognitionLanguageIndex = 0;
+            recognition.lang = recognitionLanguages[recognitionLanguageIndex];
+            recognition.start();
+        });
         stopButton.addEventListener('click', () => recognition.stop());
     } else {
         startButton.disabled = true;
@@ -214,6 +287,7 @@
         setStatus('المتصفح الحالي لا يدعم التعرف الصوتي. يمكنك استخدام الكتابة.');
     }
 
+    readButton.addEventListener('click', () => speak(currentAnswerText() || lastSpokenText));
     runButton.addEventListener('click', () => runAssistant('', false));
     document.querySelectorAll('.quick-command').forEach((button) => {
         button.addEventListener('click', () => runAssistant(button.dataset.command, false));
