@@ -306,5 +306,10 @@ def ai_assistant_command(request):
     if not command:
         return JsonResponse({"ok": False, "message": "اكتب أو قل طلبك أولا."}, status=400)
 
-    result = analyze_and_route_user_request(branch_id, command)
+    pending = request.session.get("ai_pending_command")
+    result = analyze_and_route_user_request(branch_id, command, pending=pending, user=request.user)
+    if result.get("pending"):
+        request.session["ai_pending_command"] = result["pending"]
+    else:
+        request.session.pop("ai_pending_command", None)
     return JsonResponse(result, json_dumps_params={"ensure_ascii": False})

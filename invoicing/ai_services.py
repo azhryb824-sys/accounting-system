@@ -11,11 +11,41 @@ from django.db.models.functions import Coalesce
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
-from .models import Invoice, InvoiceItem, Item, PurchaseInvoice
+from .models import Customer, Invoice, InvoiceItem, Item, PurchaseInvoice, Supplier
 
 
 PRIVATE_AI_URL = "http://127.0.0.1:8010/ask"
 PRIVATE_AI_NAME = "نموذج عبدالرحمن المحاسبي"
+
+
+AI_MANAGED_ENTITY_LABELS = {
+    "customer": "العميل",
+    "supplier": "المورد",
+    "item": "الصنف",
+}
+
+AI_MANAGED_FIELDS = {
+    "customer": ["name"],
+    "supplier": ["name"],
+    "item": ["name", "cost", "selling_price", "quantity"],
+}
+
+AI_INTENT_LABELS = {
+    "create": "إضافة",
+    "update": "تعديل",
+    "delete": "حذف",
+    "read": "عرض",
+}
+
+AI_FIELD_QUESTIONS = {
+    "name": "ما الاسم؟",
+    "cost": "ما تكلفة الصنف؟",
+    "selling_price": "ما سعر البيع؟",
+    "quantity": "ما الكمية الافتتاحية؟",
+    "target": "ما اسم السجل الذي تريد تعديله أو حذفه؟",
+    "field": "ما الحقل الذي تريد تعديله؟ مثل الاسم أو التكلفة أو سعر البيع أو الكمية.",
+    "value": "ما القيمة الجديدة؟",
+}
 
 
 def _private_ai_url():
@@ -98,6 +128,283 @@ def _json_from_text(text):
     if start >= 0 and end > start:
         cleaned = cleaned[start:end + 1]
     return json.loads(cleaned)
+
+
+def _normalize_ai_text(text):
+    return (text or "").strip().lower()
+
+
+def _extract_decimal(text):
+    match = re.search(r"(-?\d+(?:[.,]\d+)?)", text or "")
+    if not match:
+        return None
+    return Decimal(match.group(1).replace(",", "."))
+
+
+def _detect_ai_intent(text):
+    normalized = _normalize_ai_text(text)
+    if any(word in normalized for word in ("اضف", "أضف", "انشئ", "أنشئ", "سجل", "ادخل", "إضافة")):
+        return "create"
+    if any(word in normalized for word in ("احذف", "حذف", "امسح", "ازل", "أزل")):
+        return "delete"
+    if any(word in normalized for word in ("عدل", "تعديل", "غيّر", "غير", "حدث", "تحديث")):
+        return "update"
+    if any(word in normalized for word in ("اعرض", "عرض", "اسمع", "اقرأ", "اقرا", "ما هي", "ما هو")) or re.search(r"(^|\s)كم(\s|$)", normalized):
+        return "read"
+    return ""
+
+
+def _detect_ai_entity(text):
+    normalized = _normalize_ai_text(text)
+    if any(word in normalized for word in ("عميل", "العميل", "عملاء", "زبون")):
+        return "customer"
+    if any(word in normalized for word in ("مورد", "المورد", "موردين")):
+        return "supplier"
+    if any(word in normalized for word in ("صنف", "الصنف", "منتج", "مخزون", "باركود")):
+        return "item"
+    return ""
+
+
+def _strip_command_words(text):
+    cleaned = re.sub(
+        r"(اضف|أضف|انشئ|أنشئ|سجل|ادخل|إضافة|عدل|تعديل|غيّر|غير|حدث|تحديث|احذف|حذف|امسح|ازل|أزل|عميل|العميل|عملاء|زبون|مورد|المورد|موردين|صنف|الصنف|منتج|مخزون|باسم|اسمه|اسمها|اسم|اسمو|اسمه)",
+        " ",
+        text or "",
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" .،")
+    return cleaned
+
+
+def _extract_ai_name(text):
+    match = re.search(r"(?:باسم|اسمه|اسمها|اسم|اسمو)\s+(.+?)(?:\s+(?:بتكلفة|تكلفة|بسعر|سعر|كمية|والكمية|وكمية)|$)", text or "", re.IGNORECASE)
+    if match:
+        return match.group(1).strip(" .،")
+    cleaned = _strip_command_words(text)
+    return cleaned if cleaned and not re.fullmatch(r"[-\d\s.,]+", cleaned) else ""
+
+
+def _extract_item_fields(text):
+    fields = {}
+    name = _extract_ai_name(text)
+    if name:
+        fields["name"] = name
+    patterns = {
+        "cost": r"(?:تكلفة|التكلفة|بسعر تكلفة|سعر الشراء)\s*(-?\d+(?:[.,]\d+)?)",
+        "selling_price": r"(?:سعر البيع|بيع|بسعر)\s*(-?\d+(?:[.,]\d+)?)",
+        "quantity": r"(?:كمية|الكمية|عدد)\s*(-?\d+(?:[.,]\d+)?)",
+    }
+    for field, pattern in patterns.items():
+        match = re.search(pattern, text or "", re.IGNORECASE)
+        if match:
+            fields[field] = Decimal(match.group(1).replace(",", "."))
+    return fields
+
+
+def _extract_ai_fields(entity, text):
+    if entity == "item":
+        return _extract_item_fields(text)
+    name = _extract_ai_name(text)
+    return {"name": name} if name else {}
+
+
+def _next_missing_field(entity, fields, intent):
+    if intent in ("update", "delete") and not fields.get("target"):
+        return "target"
+    if intent == "update":
+        if not fields.get("field"):
+            return "field"
+        if fields.get("value") in (None, ""):
+            return "value"
+        return ""
+    if intent == "delete":
+        return ""
+    for field in AI_MANAGED_FIELDS.get(entity, []):
+        if fields.get(field) in (None, ""):
+            return field
+    return ""
+
+
+def _model_for_ai_entity(entity):
+    return {
+        "customer": Customer,
+        "supplier": Supplier,
+        "item": Item,
+    }.get(entity)
+
+
+def _ai_permission_codename(entity, intent):
+    action = {
+        "create": "add",
+        "update": "change",
+        "delete": "delete",
+        "read": "view",
+    }.get(intent, "view")
+    model_name = {
+        "customer": "customer",
+        "supplier": "supplier",
+        "item": "item",
+    }.get(entity)
+    return f"invoicing.{action}_{model_name}" if model_name else ""
+
+
+def _user_can_ai_manage(user, entity, intent):
+    if not user:
+        return True
+    if getattr(user, "is_superuser", False):
+        return True
+    permission = _ai_permission_codename(entity, intent)
+    return bool(permission and user.has_perm(permission))
+
+
+def _find_entity_record(entity, branch_id, target):
+    model = _model_for_ai_entity(entity)
+    if not model or not target:
+        return None
+    qs = model.objects.all()
+    if entity == "item":
+        qs = qs.filter(branch_id=branch_id)
+    return qs.filter(name__icontains=target).first()
+
+
+def _create_ai_entity(entity, branch_id, fields):
+    if entity == "customer":
+        obj = Customer.objects.create(name=fields["name"])
+        return f"تمت إضافة العميل: {obj.name}."
+    if entity == "supplier":
+        obj = Supplier.objects.create(name=fields["name"])
+        return f"تمت إضافة المورد: {obj.name}."
+    if entity == "item":
+        obj = Item.objects.create(
+            branch_id=branch_id,
+            name=fields["name"],
+            cost=fields["cost"],
+            selling_price=fields["selling_price"],
+            quantity=fields["quantity"],
+        )
+        return f"تمت إضافة الصنف: {obj.name}، الكمية {obj.quantity}، تكلفة {obj.cost}، وسعر البيع {obj.selling_price}."
+    return ""
+
+
+def _map_update_field(entity, field_text):
+    normalized = _normalize_ai_text(field_text)
+    if entity in ("customer", "supplier") or "اسم" in normalized:
+        return "name"
+    if any(word in normalized for word in ("تكلفة", "شراء", "cost")):
+        return "cost"
+    if any(word in normalized for word in ("سعر البيع", "بيع", "price")):
+        return "selling_price"
+    if any(word in normalized for word in ("كمية", "عدد", "quantity")):
+        return "quantity"
+    return ""
+
+
+def _update_ai_entity(entity, branch_id, fields):
+    obj = _find_entity_record(entity, branch_id, fields.get("target"))
+    if not obj:
+        return f"لم أجد {AI_MANAGED_ENTITY_LABELS.get(entity, 'السجل')} باسم {fields.get('target')}."
+    field = _map_update_field(entity, fields.get("field"))
+    if not field:
+        return "لم أفهم الحقل المطلوب تعديله. قل مثلاً: الاسم، التكلفة، سعر البيع، أو الكمية."
+    value = fields.get("value")
+    if field in ("cost", "selling_price", "quantity"):
+        value = _extract_decimal(str(value))
+        if value is None:
+            return "القيمة الجديدة يجب أن تكون رقماً."
+    setattr(obj, field, value)
+    obj.save(update_fields=[field])
+    return f"تم تعديل {AI_MANAGED_ENTITY_LABELS.get(entity, 'السجل')} {obj.name} بنجاح."
+
+
+def _delete_ai_entity(entity, branch_id, fields):
+    obj = _find_entity_record(entity, branch_id, fields.get("target"))
+    if not obj:
+        return f"لم أجد {AI_MANAGED_ENTITY_LABELS.get(entity, 'السجل')} باسم {fields.get('target')}."
+    name = obj.name
+    obj.delete()
+    return f"تم حذف {AI_MANAGED_ENTITY_LABELS.get(entity, 'السجل')}: {name}."
+
+
+def _read_ai_entity(entity, branch_id):
+    model = _model_for_ai_entity(entity)
+    if not model:
+        return ""
+    qs = model.objects.all()
+    if entity == "item":
+        qs = qs.filter(branch_id=branch_id)
+    rows = list(qs.order_by("name")[:10])
+    if not rows:
+        return f"لا توجد بيانات مسجلة حالياً في {AI_MANAGED_ENTITY_LABELS.get(entity, 'هذا القسم')}."
+    if entity == "item":
+        details = [f"- {row.name}: الكمية {row.quantity}، التكلفة {row.cost}، سعر البيع {row.selling_price}" for row in rows]
+    else:
+        details = [f"- {row.name}" for row in rows]
+    return "هذه أول النتائج:\n" + "\n".join(details)
+
+
+def handle_ai_management_command(branch_id, text, pending=None, user=None):
+    pending = pending or {}
+    if pending:
+        intent = pending["intent"]
+        entity = pending["entity"]
+        fields = pending.get("fields", {})
+        missing_field = pending.get("missing_field")
+        if missing_field:
+            fields[missing_field] = text.strip()
+            if entity == "item" and missing_field in ("cost", "selling_price", "quantity"):
+                number = _extract_decimal(text)
+                fields[missing_field] = number if number is not None else ""
+    else:
+        intent = _detect_ai_intent(text)
+        entity = _detect_ai_entity(text)
+        fields = _extract_ai_fields(entity, text) if entity else {}
+
+    if not intent or not entity:
+        return None
+
+    if not _user_can_ai_manage(user, entity, intent):
+        return {
+            "ok": True,
+            "source": "ai_actions",
+            "answer": f"لا أستطيع تنفيذ {AI_INTENT_LABELS.get(intent, intent)} {AI_MANAGED_ENTITY_LABELS.get(entity)} لأن حسابك لا يملك الصلاحية المطلوبة.",
+            "pending": None,
+        }
+
+    if intent in ("update", "delete") and not fields.get("target"):
+        fields["target"] = _extract_ai_name(text)
+    if intent == "update" and not fields.get("field"):
+        for word in ("الاسم", "اسم", "التكلفة", "تكلفة", "سعر البيع", "الكمية", "كمية"):
+            if word in text:
+                fields["field"] = word
+                break
+    if intent == "update" and fields.get("field") and not fields.get("value"):
+        number = _extract_decimal(text)
+        if number is not None:
+            fields["value"] = str(number)
+
+    missing_field = _next_missing_field(entity, fields, intent)
+    if missing_field:
+        return {
+            "ok": True,
+            "source": "ai_actions",
+            "answer": f"تمام، فهمت أنك تريد {AI_INTENT_LABELS.get(intent, intent)} {AI_MANAGED_ENTITY_LABELS.get(entity)}. {AI_FIELD_QUESTIONS[missing_field]}",
+            "pending": {
+                "intent": intent,
+                "entity": entity,
+                "fields": {key: str(value) for key, value in fields.items()},
+                "missing_field": missing_field,
+            },
+        }
+
+    if intent == "create":
+        answer = _create_ai_entity(entity, branch_id, fields)
+    elif intent == "update":
+        answer = _update_ai_entity(entity, branch_id, fields)
+    elif intent == "delete":
+        answer = _delete_ai_entity(entity, branch_id, fields)
+    else:
+        answer = _read_ai_entity(entity, branch_id)
+    return {"ok": True, "source": "ai_actions", "answer": answer, "pending": None}
 
 
 def branch_ai_context(branch_id):
@@ -625,8 +932,20 @@ def _safe_reverse(url_name):
         return ""
 
 
-def analyze_and_route_user_request(branch_id, request_text):
+def analyze_and_route_user_request(branch_id, request_text, pending=None, user=None):
     text = (request_text or "").strip()
+    management_result = handle_ai_management_command(branch_id, text, pending=pending, user=user)
+    if management_result:
+        return {
+            "ok": True,
+            "answer": management_result.get("answer", ""),
+            "source": management_result.get("source", "ai_actions"),
+            "pending": management_result.get("pending"),
+            "action": {"type": "answer", "title": "", "url": "", "auto_open": False},
+            "suggestions": [],
+            "context": {},
+        }
+
     normalized = text.lower()
     matched = []
     for action in ASSISTANT_ACTIONS:

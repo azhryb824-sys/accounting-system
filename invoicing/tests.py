@@ -6,6 +6,7 @@ from django.utils import timezone
 
 from core.models import Branch, Company
 from invoicing.models import Customer, Invoice, InvoiceItem, Item, PurchaseInvoice, PurchaseItem, Supplier, Tax
+from invoicing.ai_services import handle_ai_management_command
 from invoicing.purchase_views import post_purchase_invoice
 from invoicing.views import post_sales_invoice
 
@@ -48,6 +49,16 @@ class InvoiceAccountingTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertIn("/select/", response["Location"])
+
+    def test_ai_management_command_asks_for_missing_item_data_then_creates(self):
+        first = handle_ai_management_command(self.branch.id, "أضف صنف باسم قلم بسعر 3 كمية 10")
+        self.assertIsNotNone(first.get("pending"))
+        self.assertIn("تكلفة", first["answer"])
+
+        second = handle_ai_management_command(self.branch.id, "2", pending=first["pending"])
+
+        self.assertIsNone(second.get("pending"))
+        self.assertTrue(Item.objects.filter(branch=self.branch, name="قلم").exists())
 
     def test_sales_invoice_posts_once_and_reduces_inventory_once(self):
         customer = Customer.objects.create(name="Customer")
