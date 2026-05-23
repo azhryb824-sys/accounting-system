@@ -162,6 +162,45 @@ SYSTEM_HELP_PATTERNS = [
 ]
 
 
+LOCAL_GREETING_PATTERNS = (
+    "السلام عليكم",
+    "سلام عليكم",
+    "مرحبا",
+    "أهلا",
+    "اهلا",
+    "هلا",
+    "صباح الخير",
+    "مساء الخير",
+    "hello",
+    "hi",
+)
+
+LOCAL_ACCOUNTING_CONCEPTS = [
+    (("مدين", "دائن"), "المدين والدائن هما طرفا القيد. المدين تزيد فيه الأصول والمصروفات غالبا، والدائن تزيد فيه الالتزامات والإيرادات وحقوق الملكية غالبا. يجب أن يتساوى مجموع المدين مع مجموع الدائن."),
+    (("الأصول", "اصل", "أصل"), "الأصول هي موارد تملكها المنشأة أو تسيطر عليها مثل النقدية والبنك والعملاء والمخزون. غالبا تزيد في الجانب المدين."),
+    (("الخصوم", "الالتزامات"), "الخصوم أو الالتزامات هي مبالغ مستحقة على المنشأة مثل الموردين والقروض والرواتب المستحقة. غالبا تزيد في الجانب الدائن."),
+    (("حقوق الملكية", "رأس المال", "راس المال"), "حقوق الملكية تمثل حق المالك في المنشأة بعد طرح الالتزامات من الأصول. تشمل رأس المال والأرباح المحتجزة والمسحوبات."),
+    (("الإيرادات", "الايرادات", "إيراد"), "الإيرادات هي ما تحققه المنشأة من بيع السلع أو تقديم الخدمات. في العادة تسجل دائنة."),
+    (("المصروفات", "مصروف"), "المصروفات هي تكاليف تشغيل النشاط مثل الرواتب والإيجار والمصاريف الإدارية. في العادة تسجل مدينة وتخفض الربح."),
+    (("القيد المزدوج", "double entry"), "القيد المزدوج يعني تسجيل كل عملية بطرف مدين وطرف دائن على الأقل، ولا يكون القيد صحيحا إلا إذا توازن الطرفان."),
+    (("ميزان المراجعة",), "ميزان المراجعة يجمع أرصدة الحسابات للتأكد من توازن المدين والدائن، لكنه لا يضمن عدم وجود أخطاء تصنيف أو ترحيل."),
+    (("قائمة الدخل", "الربح والخسارة"), "قائمة الدخل تعرض الإيرادات والمصروفات خلال فترة معينة للوصول إلى صافي الربح أو الخسارة."),
+    (("المركز المالي", "الميزانية"), "قائمة المركز المالي تعرض الأصول والخصوم وحقوق الملكية. معادلتها: الأصول = الخصوم + حقوق الملكية."),
+    (("التدفق النقدي", "السيولة"), "التدفق النقدي يوضح حركة دخول وخروج النقد، وهو مهم لأن الربح لا يعني دائما توفر السيولة."),
+    (("ضريبة القيمة المضافة", "vat"), "ضريبة القيمة المضافة تظهر في المبيعات كضريبة مخرجات وفي المشتريات كضريبة مدخلات، وصافي المستحق هو الفرق بينهما غالبا."),
+]
+
+
+def local_greeting_or_concept_answer(question):
+    normalized = (question or "").strip().lower()
+    if any(word in normalized for word in LOCAL_GREETING_PATTERNS):
+        return "وعليكم السلام ورحمة الله وبركاته، أهلا وسهلا بك. أنا مساعدك المحاسبي داخل النظام، أستطيع مساعدتك في استخدام النظام وشرح المفاهيم المحاسبية وتحليل البيانات."
+    matches = [answer for words, answer in LOCAL_ACCOUNTING_CONCEPTS if any(word.lower() in normalized for word in words)]
+    if not matches:
+        return ""
+    return "\n".join(f"- {answer}" for answer in dict.fromkeys(matches))
+
+
 def local_system_usage_answer(question):
     normalized = (question or "").strip().lower()
     matches = [answer for words, answer in SYSTEM_HELP_PATTERNS if any(word.lower() in normalized for word in words)]
@@ -218,9 +257,21 @@ _model_answer_financial_question = answer_financial_question
 
 
 def answer_financial_question(branch_id, question):
+    local_direct_answer = local_greeting_or_concept_answer(question)
     usage_answer = local_system_usage_answer(question)
     result = _model_answer_financial_question(branch_id, question)
     answer_text = result.get("answer") or result.get("message") or ""
+    if local_direct_answer and (
+        result.get("source") == "local"
+        or "قراءة النموذج للبيانات الحالية" in answer_text
+        or "تعذر الاتصال" in answer_text
+        or "طھط¹ط°ط±" in answer_text
+    ):
+        result["answer"] = local_direct_answer
+        result["source"] = "local"
+        return result
+    if local_direct_answer and local_direct_answer not in answer_text:
+        answer_text = f"{local_direct_answer}\n\n{answer_text}".strip()
     if usage_answer and (
         result.get("source") == "local"
         or "قراءة النموذج للبيانات الحالية" in answer_text
