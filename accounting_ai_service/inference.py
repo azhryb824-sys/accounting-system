@@ -1,4 +1,5 @@
 import base64
+import io
 import json
 import re
 import sys
@@ -15,6 +16,19 @@ except ImportError:
     torch = None
     AutoModelForCausalLM = None
     AutoTokenizer = None
+
+try:
+    from PIL import Image, ImageEnhance, ImageFilter, ImageOps
+except ImportError:
+    Image = None
+    ImageEnhance = None
+    ImageFilter = None
+    ImageOps = None
+
+try:
+    import pytesseract
+except ImportError:
+    pytesseract = None
 
 
 MODEL_NAME = "نموذج عبدالرحمن المحاسبي"
@@ -152,6 +166,68 @@ def _decode_payload_text(image_base64: str) -> str:
     return re.sub(r"\s+", " ", merged).strip()[:12000]
 
 
+def _preprocess_invoice_image(raw: bytes):
+    if Image is None:
+        return None
+    try:
+        image = Image.open(io.BytesIO(raw))
+    except Exception:
+        return None
+
+    image = ImageOps.exif_transpose(image)
+    image = image.convert("L")
+    max_side = max(image.size)
+    if max_side and max_side < 1800:
+        scale = 1800 / max_side
+        image = image.resize((int(image.width * scale), int(image.height * scale)))
+    image = ImageOps.autocontrast(image)
+    image = ImageEnhance.Contrast(image).enhance(1.8)
+    image = ImageEnhance.Sharpness(image).enhance(1.6)
+    image = image.filter(ImageFilter.MedianFilter(size=3))
+    return image
+
+
+def _ocr_invoice_image(image_base64: str, media_type: str | None = None) -> tuple[str, str]:
+    if not image_base64 or not (media_type or "").lower().startswith("image/"):
+        return "", ""
+    if Image is None:
+        return "", "مكتبة Pillow غير مثبتة، لذلك لم يتم تحسين الصورة قبل القراءة."
+    if pytesseract is None:
+        return "", "مكتبة pytesseract غير مثبتة، لذلك لم يتم تشغيل قراءة OCR للصورة."
+
+    try:
+        raw = base64.b64decode(image_base64, validate=False)
+    except (ValueError, TypeError):
+        return "", "تعذر فك ترميز الصورة المرفقة."
+
+    image = _preprocess_invoice_image(raw)
+    if image is None:
+        return "", "تعذر فتح الصورة المرفقة لمعالجتها."
+
+    configs = [
+        ("ara+eng", "--psm 6"),
+        ("eng", "--psm 6"),
+        ("ara+eng", "--psm 11"),
+    ]
+    texts: list[str] = []
+    warnings: list[str] = []
+    for lang, config in configs:
+        try:
+            text = pytesseract.image_to_string(image, lang=lang, config=config)
+        except Exception as exc:
+            warnings.append(str(exc)[:180])
+            continue
+        text = re.sub(r"\s+", " ", text or "").strip()
+        if len(text) >= 10:
+            texts.append(text)
+
+    if texts:
+        return "\n".join(dict.fromkeys(texts))[:12000], ""
+    if warnings:
+        return "", "لم يستطع OCR قراءة النص من الصورة. تأكد من تثبيت Tesseract مع اللغتين العربية والإنجليزية على الخادم."
+    return "", "لم يستخرج OCR نصا واضحا من الصورة."
+
+
 def _parse_amount(text: str, labels: tuple[str, ...]) -> float:
     for label in labels:
         if label == "total":
@@ -223,8 +299,10 @@ def _parse_invoice_items(text: str) -> list[dict[str, Any]]:
 
 def extract_invoice_data(question: str, image_base64: str | None = None, media_type: str | None = None) -> dict[str, Any]:
     text = question or ""
-    decoded = _decode_payload_text(image_base64 or "")
-    searchable = f"{text}\n{decoded}".strip()
+    is_image = (media_type or "").lower().startswith("image/")
+    decoded = "" if is_image else _decode_payload_text(image_base64 or "")
+    ocr_text, ocr_warning = _ocr_invoice_image(image_base64 or "", media_type)
+    searchable = f"{text}\n{decoded}\n{ocr_text}".strip()
 
     supplier_name = _parse_field(searchable, ("supplier_name", "supplier", "vendor", "اسم المورد", "المورد", "البائع"))
     invoice_number = _parse_field(searchable, ("invoice_number", "invoice no", "invoice number", "رقم الفاتورة", "فاتورة رقم"))
@@ -235,7 +313,7 @@ def extract_invoice_data(question: str, image_base64: str | None = None, media_t
 
     if not any((supplier_name, invoice_number, subtotal, vat, total, items)):
         return {
-            "error": "لم أتمكن من قراءة بيانات الفاتورة من الصورة. ارفع صورة أوضح، أو PDF نصي، أو أدخل البيانات يدويا ثم أعد المحاولة.",
+            "error": ocr_warning or "لم أتمكن من قراءة بيانات الفاتورة من الصورة. ارفع صورة أوضح، أو PDF نصي، أو أدخل البيانات يدويا ثم أعد المحاولة.",
             "media_type": media_type or "",
             "supplier_name": "",
             "invoice_number": "",
@@ -260,6 +338,7 @@ def extract_invoice_data(question: str, image_base64: str | None = None, media_t
         "total": round(total, 2),
         "items": items,
         "media_type": media_type or "",
+        "ocr_warning": ocr_warning,
     }
 
 
