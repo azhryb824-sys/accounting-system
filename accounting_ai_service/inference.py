@@ -10,14 +10,6 @@ from pathlib import Path
 from typing import Any
 
 try:
-    import torch
-    from transformers import AutoModelForCausalLM, AutoTokenizer
-except ImportError:
-    torch = None
-    AutoModelForCausalLM = None
-    AutoTokenizer = None
-
-try:
     from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 except ImportError:
     Image = None
@@ -34,6 +26,15 @@ except ImportError:
 MODEL_NAME = "نموذج عبدالرحمن المحاسبي"
 MODEL_OWNER = "عبدالرحمن"
 MODEL_PATH = Path(__file__).resolve().parent / "models" / "my_model"
+
+
+def _load_transformers_runtime():
+    try:
+        import torch
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+    except ImportError:
+        return None, None, None
+    return torch, AutoModelForCausalLM, AutoTokenizer
 
 SYSTEM_PROMPT = f"""
 أنت {MODEL_NAME}، مساعد ذكاء اصطناعي خاص بـ {MODEL_OWNER}.
@@ -454,13 +455,17 @@ class PrivateAccountingModel:
         self.model_path = Path(model_path)
         self.tokenizer = None
         self.model = None
-        if torch is None or AutoModelForCausalLM is None or AutoTokenizer is None:
-            return
         if not self.model_path.exists():
             return
 
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
-        self.model = AutoModelForCausalLM.from_pretrained(self.model_path)
+        torch_runtime, model_cls, tokenizer_cls = _load_transformers_runtime()
+        if torch_runtime is None or model_cls is None or tokenizer_cls is None:
+            return
+
+        self.torch = torch_runtime
+
+        self.tokenizer = tokenizer_cls.from_pretrained(self.model_path)
+        self.model = model_cls.from_pretrained(self.model_path)
 
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
@@ -488,7 +493,7 @@ class PrivateAccountingModel:
                 "- إذا سألت عن أكثر من موضوع سأجمع لك الإجابة في نقاط متعددة."
             )
 
-        with torch.inference_mode():
+        with self.torch.inference_mode():
             prompt = self.build_prompt(question)
             inputs = self.tokenizer(prompt, return_tensors="pt")
 
