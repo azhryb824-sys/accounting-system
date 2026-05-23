@@ -111,7 +111,7 @@
     const commandUrl = "{% url 'ai_assistant_command' %}";
     const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const recognitionLanguages = ['ar-SA', 'ar', 'ar-EG'];
+    const recognitionLanguages = ['ar-SA', 'ar', 'ar-SD', 'ur-PK', 'bn-BD', 'ar-EG'];
     let recognition = null;
     let recognitionLanguageIndex = 0;
     let arabicVoice = null;
@@ -158,10 +158,18 @@
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(cleanText);
         const selectedVoice = arabicVoice || loadArabicVoice();
-        if (selectedVoice) {
+        const hasUrdu = /[\u0600-\u06FF]/.test(cleanText) && /[پچژگٹڈڑںے]/.test(cleanText);
+        const hasBangla = /[\u0980-\u09FF]/.test(cleanText);
+        if (selectedVoice && !hasUrdu && !hasBangla) {
             utterance.voice = selectedVoice;
             utterance.lang = selectedVoice.lang || 'ar-SA';
             setStatus(`سيتم قراءة الرد بصوت عربي: ${selectedVoice.name}`);
+        } else if (hasUrdu) {
+            utterance.lang = 'ur-PK';
+            setStatus('سيتم قراءة الرد بلغة الأوردو إذا كان المتصفح يدعمها.');
+        } else if (hasBangla) {
+            utterance.lang = 'bn-BD';
+            setStatus('سيتم قراءة الرد باللغة البنغالية إذا كان المتصفح يدعمها.');
         } else {
             utterance.lang = 'ar-SA';
             setStatus('لم أجد صوتا عربيا مثبتا في المتصفح. سأستخدم الصوت الافتراضي.');
