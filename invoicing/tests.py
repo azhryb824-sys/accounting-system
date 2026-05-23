@@ -41,6 +41,14 @@ class InvoiceAccountingTests(TestCase):
         self.assertEqual(lookup_response.status_code, 200)
         self.assertTrue(lookup_response.json()["ok"])
 
+    def test_pos_terminal_requires_selected_company_and_branch(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get("/invoicing/pos/")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/select/", response["Location"])
+
     def test_sales_invoice_posts_once_and_reduces_inventory_once(self):
         customer = Customer.objects.create(name="Customer")
         invoice = Invoice.objects.create(

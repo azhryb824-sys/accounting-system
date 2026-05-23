@@ -19,6 +19,14 @@ from .models import Customer, Invoice, InvoiceItem, Item, StockMovement, Tax
 from .zatca import prepare_zatca_payload
 
 
+def _selected_branch(request):
+    company_id = request.session.get("company_id")
+    branch_id = request.session.get("branch_id")
+    if not company_id or not branch_id:
+        return None
+    return Branch.objects.filter(id=branch_id, company_id=company_id).first()
+
+
 def post_sales_invoice(invoice):
     if invoice.journal_entry_id:
         return invoice.journal_entry
@@ -162,11 +170,16 @@ def invoice_create(request):
 
 @login_required(login_url='login')
 def pos_terminal(request):
-    branch_id = request.session.get('branch_id')
+    branch = _selected_branch(request)
+    if not branch:
+        messages.warning(request, _("Please select a company and branch before opening the POS terminal."))
+        return redirect("select_company_branch")
     return render(request, 'invoicing/pos_terminal.html', {
         "title": _("POS Terminal"),
         "customers": Customer.objects.all().order_by("name"),
-        "products": Item.objects.filter(branch_id=branch_id, is_active=True).order_by("name")[:12],
+        "products": Item.objects.filter(branch=branch, is_active=True).order_by("name")[:12],
+        "branch": branch,
+        "company": branch.company,
     })
 
 
@@ -222,10 +235,12 @@ def zatca_dashboard(request):
 
 @login_required(login_url='login')
 def product_lookup(request):
-    branch_id = request.session.get('branch_id')
+    branch = _selected_branch(request)
+    if not branch:
+        return JsonResponse({"ok": False, "message": _("Please select a company and branch first.")}, status=403)
     barcode = (request.GET.get("barcode") or "").strip()
     query = (request.GET.get("q") or "").strip()
-    products = Item.objects.filter(branch_id=branch_id, is_active=True)
+    products = Item.objects.filter(branch=branch, is_active=True)
     if barcode:
         product = products.filter(barcode=barcode).first()
     elif query:
@@ -253,8 +268,9 @@ def pos_checkout(request):
     if request.method != "POST":
         return JsonResponse({"ok": False, "message": _("POST is required.")}, status=405)
 
-    branch_id = request.session.get('branch_id')
-    branch = get_object_or_404(Branch, id=branch_id)
+    branch = _selected_branch(request)
+    if not branch:
+        return JsonResponse({"ok": False, "message": _("Please select a company and branch first.")}, status=403)
     try:
         payload = json.loads(request.body.decode("utf-8") or "{}")
     except json.JSONDecodeError:
