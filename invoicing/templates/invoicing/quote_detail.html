@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h2 class="mb-1">عرض سعر {{ quote.quote_number }}</h2>
+    <div class="text-muted">{{ quote.customer.name }} - {{ quote.issue_date }}</div>
+  </div>
+  <a href="{% url 'quote_pdf' quote.id %}" class="btn btn-primary">تنزيل PDF</a>
+</div>
+<div class="mb-3">
+  <strong>الشركة:</strong> {{ quote.branch.company.name }}
+  <span class="mx-2">|</span>
+  <strong>الفرع:</strong> {{ quote.branch.name }}
+  {% if quote.valid_until %}<span class="mx-2">|</span><strong>صالح حتى:</strong> {{ quote.valid_until }}{% endif %}
+</div>
+<div class="table-responsive">
+  <table class="table table-dark table-striped align-middle">
+    <thead>
+      <tr>
+        <th>الوصف</th>
+        <th>الكمية</th>
+        <th>السعر</th>
+        <th>الضريبة</th>
+        <th>الإجمالي</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in items %}
+      <tr>
+        <td>{{ item.description }}</td>
+        <td>{{ item.quantity }}</td>
+        <td>{{ item.unit_price }}</td>
+        <td>{{ item.line_vat }}</td>
+        <td>{{ item.line_total_with_vat }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div class="text-end fs-5">
+  <div>قبل الضريبة: {{ quote.total_amount }}</div>
+  <div>الضريبة: {{ quote.total_vat }}</div>
+  <strong>الإجمالي شامل الضريبة: {{ quote.total_with_vat }}</strong>
+</div>
+{% if quote.notes %}<div class="alert alert-secondary mt-3">{{ quote.notes }}</div>{% endif %}
+{% endblock %}

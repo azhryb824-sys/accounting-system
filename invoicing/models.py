@@ -84,6 +84,41 @@ class InvoiceItem(models.Model):
         return self.description
 
 
+class Quote(models.Model):
+    branch = models.ForeignKey(Branch, on_delete=models.PROTECT)
+    quote_number = models.CharField(max_length=50, unique=True)
+    customer = models.ForeignKey(Customer, on_delete=models.PROTECT)
+    issue_date = models.DateField(auto_now_add=True)
+    valid_until = models.DateField(null=True, blank=True)
+    notes = models.TextField(blank=True, default="")
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    total_vat = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    total_with_vat = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"عرض سعر {self.quote_number}"
+
+
+class QuoteItem(models.Model):
+    branch = models.ForeignKey(Branch, on_delete=models.PROTECT)
+    quote = models.ForeignKey(Quote, related_name="items", on_delete=models.CASCADE)
+    item = models.ForeignKey("Item", on_delete=models.PROTECT, null=True, blank=True)
+    description = models.CharField(max_length=220)
+    quantity = models.DecimalField(max_digits=10, decimal_places=2)
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2)
+    tax_rate = models.DecimalField(max_digits=5, decimal_places=2, default=15)
+    line_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    line_vat = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    line_total_with_vat = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    def __str__(self):
+        return self.description
+
+
 # ============================
 #  الموردين
 # ============================

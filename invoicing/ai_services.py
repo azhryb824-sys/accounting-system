@@ -14,7 +14,7 @@ from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
 from core.models import Branch, Employee, EmployeeAdvance, JournalEntry, JournalEntryLine, SalaryRecord
-from .models import AIInteractionLearning, AIKnowledgeEntry, AIKnowledgeSource, Customer, Invoice, InvoiceItem, Item, PurchaseInvoice, PurchaseItem, Supplier, Tax
+from .models import AIInteractionLearning, AIKnowledgeEntry, AIKnowledgeSource, Customer, Invoice, InvoiceItem, Item, PurchaseInvoice, PurchaseItem, Quote, QuoteItem, Supplier, Tax
 from .zatca import prepare_zatca_payload
 
 
@@ -1978,6 +1978,143 @@ def _build_pos_sale_draft(branch_id, text, user=None):
     }
 
 
+def _detect_quote_intent(text):
+    normalized = _normalize_ai_text(text)
+    return any(word in normalized for word in (
+        "عرض سعر", "عرض اسعار", "عرض أسعار", "quotation", "quote", "price offer", "تسعيرة",
+    ))
+
+
+def _extract_customer_name_for_quote(text):
+    patterns = (
+        r"(?:للعميل|لعميل|لشركة|للشركة)\s+([^\n،,]+)",
+        r"(?:customer|client)\s+([A-Za-z0-9\u0600-\u06FF\s]{2,60})",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text or "", re.IGNORECASE)
+        if match:
+            return match.group(1).strip()[:180]
+    return "عميل عرض سعر"
+
+
+def _build_quote_draft(branch_id, text, user=None):
+    if not _detect_quote_intent(text):
+        return None
+    if not _user_can_read_context(user, "add_invoice", branch_id):
+        return {
+            "ok": True,
+            "source": "ai_quote",
+            "answer": "لا أستطيع تجهيز عرض سعر لأن حسابك لا يملك صلاحية إضافة مستندات البيع.",
+            "pending": None,
+        }
+
+    items = list(Item.objects.filter(branch_id=branch_id, is_active=True).order_by("name"))
+    normalized = _normalize_ai_text(text)
+    matched = []
+    for item in items:
+        if item.name and item.name.lower() in normalized:
+            quantity = _extract_requested_quantity(text, item.name)
+            price = item.selling_price or item.cost or Decimal("0")
+            line_total = quantity * price
+            vat = line_total * Decimal("0.15")
+            matched.append({
+                "id": item.id,
+                "name": item.name,
+                "description": item.name,
+                "quantity": str(quantity),
+                "price": str(price),
+                "tax_rate": "15.00",
+                "line_total": str(line_total),
+                "line_vat": str(vat),
+                "line_total_with_vat": str(line_total + vat),
+            })
+    if not matched:
+        return {
+            "ok": True,
+            "source": "ai_quote",
+            "answer": "فهمت أنك تريد عرض سعر، لكن لم أجد أصنافا واضحة مطابقة للمخزون. قل مثلا: أنشئ عرض سعر للعميل أحمد 2 Item.",
+            "pending": None,
+        }
+    subtotal = sum(Decimal(row["line_total"]) for row in matched)
+    vat_total = sum(Decimal(row["line_vat"]) for row in matched)
+    total = subtotal + vat_total
+    customer_name = _extract_customer_name_for_quote(text)
+    summary = [
+        "جهزت مسودة عرض سعر ولم أحفظها بعد.",
+        f"العميل: {customer_name}",
+        "البنود:",
+        *[f"- {row['name']}: كمية {row['quantity']} × سعر {row['price']} = {_money(Decimal(row['line_total_with_vat']))}" for row in matched],
+        f"الإجمالي قبل الضريبة: {_money(subtotal)}",
+        f"الضريبة: {_money(vat_total)}",
+        f"الإجمالي شامل الضريبة: {_money(total)}",
+        "للحفظ وإنشاء PDF قل أو اكتب: تأكيد. ولإلغاء المسودة قل: إلغاء.",
+    ]
+    return {
+        "ok": True,
+        "source": "ai_quote",
+        "answer": "\n".join(summary),
+        "pending": {
+            "type": "quote_create",
+            "customer_name": customer_name,
+            "lines": matched,
+            "notes": "تم إنشاؤه بواسطة الذكاء الاصطناعي بعد موافقة المستخدم.",
+        },
+    }
+
+
+def _execute_quote_create(branch_id, draft, user=None):
+    if not _user_can_read_context(user, "add_invoice", branch_id):
+        return {"ok": True, "source": "ai_quote", "answer": "لا أستطيع حفظ عرض السعر لأن حسابك لا يملك الصلاحية المطلوبة.", "pending": None}
+    branch = Branch.objects.select_related("company").get(id=branch_id)
+    customer, _ = Customer.objects.get_or_create(name=draft.get("customer_name") or "عميل عرض سعر", defaults={"country": "SA"})
+    quote_number = f"Q-AI-{timezone.now().strftime('%Y%m%d%H%M%S')}-{Quote.objects.count() + 1}"
+    with transaction.atomic():
+        quote = Quote.objects.create(
+            branch=branch,
+            customer=customer,
+            quote_number=quote_number,
+            valid_until=timezone.localdate() + timezone.timedelta(days=15),
+            notes=draft.get("notes", ""),
+        )
+        subtotal = Decimal("0.00")
+        vat_total = Decimal("0.00")
+        total = Decimal("0.00")
+        for row in draft.get("lines") or []:
+            item = Item.objects.filter(id=row.get("id"), branch=branch).first()
+            quantity = Decimal(str(row.get("quantity") or "0"))
+            unit_price = Decimal(str(row.get("price") or "0"))
+            tax_rate = Decimal(str(row.get("tax_rate") or "15"))
+            line_total = quantity * unit_price
+            line_vat = line_total * (tax_rate / Decimal("100"))
+            line_total_with_vat = line_total + line_vat
+            QuoteItem.objects.create(
+                branch=branch,
+                quote=quote,
+                item=item,
+                description=row.get("description") or row.get("name") or "بند عرض سعر",
+                quantity=quantity,
+                unit_price=unit_price,
+                tax_rate=tax_rate,
+                line_total=line_total,
+                line_vat=line_vat,
+                line_total_with_vat=line_total_with_vat,
+            )
+            subtotal += line_total
+            vat_total += line_vat
+            total += line_total_with_vat
+        quote.total_amount = subtotal
+        quote.total_vat = vat_total
+        quote.total_with_vat = total
+        quote.save(update_fields=["total_amount", "total_vat", "total_with_vat"])
+    return {
+        "ok": True,
+        "source": "ai_quote",
+        "answer": f"تم حفظ عرض السعر {quote.quote_number} بإجمالي {_money(quote.total_with_vat)}. يمكنك تنزيله PDF من صفحة عرض السعر. هذا المستند لا يؤثر محاسبيا حتى يتم تحويله إلى فاتورة.",
+        "pending": None,
+        "action": {"type": "navigate", "title": "عرض وتنزيل PDF", "url": f"/invoicing/quotes/{quote.id}/", "auto_open": False},
+    }
+
+
 def _execute_pos_sale(branch_id, draft, user=None):
     if not _user_can_read_context(user, "add_invoice", branch_id):
         return {"ok": True, "source": "ai_pos", "answer": "لا أستطيع حفظ عملية الكاشير لأن حسابك لا يملك صلاحية إضافة فواتير بيع.", "pending": None}
@@ -2248,6 +2385,20 @@ ASSISTANT_ACTIONS = [
         "description": "فتح قائمة فواتير الشراء.",
     },
     {
+        "name": "quotes",
+        "title": "عروض الأسعار",
+        "url_name": "quote_list",
+        "keywords": ("عروض الأسعار", "عروض سعر", "عرض سعر", "quotation", "quote"),
+        "description": "فتح قائمة عروض الأسعار.",
+    },
+    {
+        "name": "quote_create",
+        "title": "إنشاء عرض سعر",
+        "url_name": "quote_create",
+        "keywords": ("إنشاء عرض سعر", "انشاء عرض سعر", "أضف عرض سعر", "اضف عرض سعر", "عرض سعر جديد"),
+        "description": "فتح نموذج إنشاء عرض سعر.",
+    },
+    {
         "name": "add_purchase",
         "title": "إضافة فاتورة شراء",
         "url_name": "purchase_add",
@@ -2309,6 +2460,8 @@ ASSISTANT_ACTIONS = [
 ASSISTANT_ACTION_PERMISSIONS = {
     "invoice_list": "view_invoice",
     "invoice_create": "add_invoice",
+    "quote_list": "view_invoice",
+    "quote_create": "add_invoice",
     "pos_terminal": "add_invoice",
     "purchase_list": "view_purchaseinvoice",
     "purchase_add": "add_purchaseinvoice",
@@ -2343,6 +2496,43 @@ def _safe_reverse(url_name):
 def analyze_and_route_user_request(branch_id, request_text, pending=None, user=None):
     text = (request_text or "").strip()
     pending = pending or {}
+    if pending.get("type") == "quote_create":
+        if _is_cancel_text(text):
+            return {
+                "ok": True,
+                "answer": "تم إلغاء مسودة عرض السعر. لم يتم حفظ أي شيء في النظام.",
+                "source": "ai_quote",
+                "pending": None,
+                "action": {"type": "answer", "title": "", "url": "", "auto_open": False},
+                "suggestions": [],
+                "followups": ["إنشاء عرض سعر جديد", "افتح عروض الأسعار"],
+                "context": {},
+            }
+        if _is_confirm_text(text):
+            try:
+                result = _execute_quote_create(branch_id, pending, user=user)
+            except Exception as exc:
+                result = {"ok": True, "source": "ai_quote", "answer": f"لم أحفظ عرض السعر بسبب مشكلة: {exc}", "pending": None}
+            return {
+                "ok": True,
+                "answer": _polish_answer(result.get("answer", ""), text),
+                "source": result.get("source", "ai_quote"),
+                "pending": result.get("pending"),
+                "action": result.get("action") or {"type": "answer", "title": "", "url": "", "auto_open": False},
+                "suggestions": [],
+                "followups": ["تنزيل PDF", "إنشاء عرض سعر جديد"],
+                "context": {},
+            }
+        return {
+            "ok": True,
+            "answer": "مسودة عرض السعر بانتظار موافقتك. قل أو اكتب: تأكيد للحفظ، أو إلغاء للتراجع.",
+            "source": "ai_quote",
+            "pending": pending,
+            "action": {"type": "answer", "title": "", "url": "", "auto_open": False},
+            "suggestions": [],
+            "followups": ["تأكيد", "إلغاء"],
+            "context": {},
+        }
     if pending.get("type") == "pos_checkout":
         if _is_cancel_text(text):
             return {
@@ -2378,6 +2568,19 @@ def analyze_and_route_user_request(branch_id, request_text, pending=None, user=N
             "action": {"type": "answer", "title": "", "url": "", "auto_open": False},
             "suggestions": [],
             "followups": ["تأكيد", "إلغاء"],
+            "context": {},
+        }
+
+    quote_draft = _build_quote_draft(branch_id, text, user=user)
+    if quote_draft:
+        return {
+            "ok": True,
+            "answer": _polish_answer(quote_draft.get("answer", ""), text),
+            "source": quote_draft.get("source", "ai_quote"),
+            "pending": quote_draft.get("pending"),
+            "action": {"type": "answer", "title": "", "url": "", "auto_open": False},
+            "suggestions": [],
+            "followups": ["تأكيد", "إلغاء"] if quote_draft.get("pending") else _quality_followups(text),
             "context": {},
         }
 

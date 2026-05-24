@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block content %}
+<h2 class="mb-3">إنشاء عرض سعر</h2>
+<form method="post" dir="rtl">
+  {% csrf_token %}
+  <div class="row g-3 mb-3">
+    <div class="col-md-3">{{ form.quote_number.label_tag }}{{ form.quote_number }}</div>
+    <div class="col-md-4">{{ form.customer.label_tag }}{{ form.customer }}</div>
+    <div class="col-md-3">{{ form.valid_until.label_tag }}{{ form.valid_until }}</div>
+    <div class="col-12">{{ form.notes.label_tag }}{{ form.notes }}</div>
+  </div>
+  {{ formset.management_form }}
+  <div class="table-responsive">
+    <table class="table table-dark align-middle">
+      <thead>
+        <tr>
+          <th>الصنف</th>
+          <th>الوصف</th>
+          <th>الكمية</th>
+          <th>السعر</th>
+          <th>الضريبة %</th>
+          <th>حذف</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for line in formset %}
+        <tr>
+          <td>{{ line.item }}</td>
+          <td>{{ line.description }}</td>
+          <td>{{ line.quantity }}</td>
+          <td>{{ line.unit_price }}</td>
+          <td>{{ line.tax_rate }}</td>
+          <td>{{ line.DELETE }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <button class="btn btn-primary">حفظ عرض السعر</button>
+  <a href="{% url 'quote_list' %}" class="btn btn-outline-light">إلغاء</a>
+</form>
+{% endblock %}

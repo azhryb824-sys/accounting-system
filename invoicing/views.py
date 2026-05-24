@@ -1,10 +1,12 @@
 from decimal import Decimal
+from io import BytesIO
 import json
+import os
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.http import JsonResponse
+from django.http import FileResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -14,8 +16,8 @@ from core.services.accounting import create_balanced_entry
 from core.services.monthly_close import assert_month_open
 
 from accounts.views import role_required
-from .forms import InvoiceForm, InvoiceItemFormSet
-from .models import Customer, Invoice, InvoiceItem, Item, StockMovement, Tax
+from .forms import InvoiceForm, InvoiceItemFormSet, QuoteForm, QuoteItemFormSet
+from .models import Customer, Invoice, InvoiceItem, Item, Quote, QuoteItem, StockMovement, Tax
 from .zatca import prepare_zatca_payload
 
 
@@ -170,6 +172,164 @@ def invoice_create(request):
         'formset': formset,
         "title": _("Create New Invoice"),
     })
+
+
+def _quote_totals(lines):
+    total_amount = Decimal("0.00")
+    total_vat = Decimal("0.00")
+    total_with_vat = Decimal("0.00")
+    for line in lines:
+        line.line_total = line.quantity * line.unit_price
+        line.line_vat = line.line_total * (line.tax_rate / Decimal("100"))
+        line.line_total_with_vat = line.line_total + line.line_vat
+        total_amount += line.line_total
+        total_vat += line.line_vat
+        total_with_vat += line.line_total_with_vat
+    return total_amount, total_vat, total_with_vat
+
+
+@login_required(login_url='login')
+@role_required('view_invoice')
+def quote_list(request):
+    branch_id = request.session.get('branch_id')
+    quotes = Quote.objects.filter(branch_id=branch_id).select_related("customer").order_by("-created_at")
+    return render(request, 'invoicing/quote_list.html', {"quotes": quotes, "title": "عروض الأسعار"})
+
+
+@login_required(login_url='login')
+@role_required('view_invoice')
+def quote_detail(request, id):
+    quote = get_object_or_404(Quote.objects.select_related("branch__company", "customer"), id=id)
+    items = QuoteItem.objects.filter(quote=quote)
+    return render(request, 'invoicing/quote_detail.html', {"quote": quote, "items": items, "title": "تفاصيل عرض السعر"})
+
+
+@login_required(login_url='login')
+@role_required('add_invoice')
+def quote_create(request):
+    branch_id = request.session.get('branch_id')
+    if request.method == 'POST':
+        form = QuoteForm(request.POST)
+        formset = QuoteItemFormSet(request.POST)
+        if form.is_valid() and formset.is_valid():
+            quote = form.save(commit=False)
+            quote.branch_id = branch_id
+            items = formset.save(commit=False)
+            for line in items:
+                line.branch_id = branch_id
+            quote.total_amount, quote.total_vat, quote.total_with_vat = _quote_totals(items)
+            quote.save()
+            for line in items:
+                line.quote = quote
+                line.save()
+            messages.success(request, "تم إنشاء عرض السعر. لا يوجد أثر محاسبي حتى يتم تحويله إلى فاتورة.")
+            return redirect('quote_detail', id=quote.id)
+    else:
+        form = QuoteForm(initial={"quote_number": f"Q-{timezone.now().strftime('%Y%m%d%H%M%S')}"})
+        formset = QuoteItemFormSet()
+    return render(request, 'invoicing/quote_create.html', {"form": form, "formset": formset, "title": "إنشاء عرض سعر"})
+
+
+def _pdf_arabic(text):
+    from arabic_reshaper import reshape
+    from bidi.algorithm import get_display
+
+    return get_display(reshape(str(text or "")))
+
+
+def _register_pdf_font():
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+
+    candidates = [
+        r"C:\Windows\Fonts\arial.ttf",
+        r"C:\Windows\Fonts\tahoma.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            try:
+                pdfmetrics.registerFont(TTFont("ArabicFont", path))
+                return "ArabicFont"
+            except Exception:
+                continue
+    return "Helvetica"
+
+
+@login_required(login_url='login')
+@role_required('view_invoice')
+def quote_pdf(request, id):
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import cm
+    from reportlab.pdfgen import canvas
+
+    quote = get_object_or_404(Quote.objects.select_related("branch__company", "customer"), id=id)
+    items = list(QuoteItem.objects.filter(quote=quote))
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    font = _register_pdf_font()
+
+    def draw_right(text, y, size=11, bold=False):
+        pdf.setFont(font, size)
+        pdf.drawRightString(width - 2 * cm, y, _pdf_arabic(text))
+
+    pdf.setFillColor(colors.HexColor("#0f766e"))
+    pdf.rect(0, height - 4.2 * cm, width, 4.2 * cm, stroke=0, fill=1)
+    pdf.setFillColor(colors.white)
+    draw_right("عرض سعر", height - 1.5 * cm, 22)
+    draw_right(f"رقم: {quote.quote_number}", height - 2.4 * cm, 12)
+    draw_right(f"التاريخ: {quote.issue_date:%Y-%m-%d}", height - 3.1 * cm, 11)
+    if quote.valid_until:
+        draw_right(f"صالح حتى: {quote.valid_until:%Y-%m-%d}", height - 3.7 * cm, 11)
+
+    y = height - 5.2 * cm
+    pdf.setFillColor(colors.HexColor("#111827"))
+    draw_right(f"الشركة: {quote.branch.company.name}", y, 12)
+    draw_right(f"الفرع: {quote.branch.name}", y - 0.6 * cm, 11)
+    draw_right(f"العميل: {quote.customer.name}", y - 1.2 * cm, 11)
+
+    y -= 2.2 * cm
+    headers = ["الإجمالي", "الضريبة", "السعر", "الكمية", "الوصف"]
+    col_x = [2.2 * cm, 5.0 * cm, 7.3 * cm, 9.6 * cm, width - 2 * cm]
+    pdf.setFillColor(colors.HexColor("#e0f2f1"))
+    pdf.rect(1.5 * cm, y - 0.25 * cm, width - 3 * cm, 0.8 * cm, stroke=0, fill=1)
+    pdf.setFillColor(colors.HexColor("#0f172a"))
+    pdf.setFont(font, 10)
+    for header, x in zip(headers, col_x):
+        pdf.drawRightString(x, y, _pdf_arabic(header))
+    y -= 0.75 * cm
+    pdf.setStrokeColor(colors.HexColor("#d1d5db"))
+    for line in items:
+        if y < 4 * cm:
+            pdf.showPage()
+            y = height - 2 * cm
+            pdf.setFont(font, 10)
+        values = [
+            f"{line.line_total_with_vat:.2f}",
+            f"{line.line_vat:.2f}",
+            f"{line.unit_price:.2f}",
+            f"{line.quantity:.2f}",
+            line.description,
+        ]
+        for value, x in zip(values, col_x):
+            pdf.drawRightString(x, y, _pdf_arabic(value))
+        pdf.line(1.5 * cm, y - 0.25 * cm, width - 1.5 * cm, y - 0.25 * cm)
+        y -= 0.65 * cm
+
+    y -= 0.4 * cm
+    draw_right(f"الإجمالي قبل الضريبة: {quote.total_amount:.2f}", y, 11)
+    draw_right(f"ضريبة القيمة المضافة: {quote.total_vat:.2f}", y - 0.6 * cm, 11)
+    pdf.setFillColor(colors.HexColor("#0f766e"))
+    draw_right(f"الإجمالي شامل الضريبة: {quote.total_with_vat:.2f}", y - 1.25 * cm, 14)
+    pdf.setFillColor(colors.HexColor("#111827"))
+    if quote.notes:
+        draw_right(f"ملاحظات: {quote.notes}", y - 2.2 * cm, 10)
+    draw_right("هذا عرض سعر ولا يعد فاتورة ضريبية ولا يترتب عليه أثر محاسبي حتى اعتماده كفاتورة.", 1.8 * cm, 9)
+    pdf.save()
+    buffer.seek(0)
+    return FileResponse(buffer, as_attachment=True, filename=f"quote-{quote.quote_number}.pdf")
 
 
 @login_required(login_url='login')

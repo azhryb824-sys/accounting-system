@@ -7,6 +7,8 @@ from .models import (
     InvoiceItem,
     Item,
     PurchaseInvoice,
+    Quote,
+    QuoteItem,
     Supplier,
     Tax,
 )
@@ -50,6 +52,53 @@ InvoiceItemFormSet = inlineformset_factory(
     Invoice,
     InvoiceItem,
     form=InvoiceItemForm,
+    extra=1,
+    can_delete=True,
+)
+
+
+class QuoteForm(forms.ModelForm):
+    class Meta:
+        model = Quote
+        fields = ["quote_number", "customer", "valid_until", "notes"]
+        labels = {
+            "quote_number": "رقم عرض السعر",
+            "customer": "العميل",
+            "valid_until": "صالح حتى",
+            "notes": "ملاحظات",
+        }
+        widgets = {
+            "quote_number": forms.TextInput(attrs={"class": "form-control"}),
+            "customer": forms.Select(attrs={"class": "form-select"}),
+            "valid_until": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "notes": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+        }
+
+
+class QuoteItemForm(forms.ModelForm):
+    class Meta:
+        model = QuoteItem
+        fields = ["item", "description", "quantity", "unit_price", "tax_rate"]
+        labels = {
+            "item": "الصنف",
+            "description": "الوصف",
+            "quantity": "الكمية",
+            "unit_price": "سعر الوحدة",
+            "tax_rate": "الضريبة %",
+        }
+        widgets = {
+            "item": forms.Select(attrs={"class": "form-select"}),
+            "description": forms.TextInput(attrs={"class": "form-control"}),
+            "quantity": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "unit_price": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "tax_rate": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+        }
+
+
+QuoteItemFormSet = inlineformset_factory(
+    Quote,
+    QuoteItem,
+    form=QuoteItemForm,
     extra=1,
     can_delete=True,
 )

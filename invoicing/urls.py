@@ -4,6 +4,10 @@ from . import views
 urlpatterns = [
     path('', views.invoice_list, name='invoice_list'),
     path('create/', views.invoice_create, name='invoice_create'),
+    path('quotes/', views.quote_list, name='quote_list'),
+    path('quotes/create/', views.quote_create, name='quote_create'),
+    path('quotes/<int:id>/', views.quote_detail, name='quote_detail'),
+    path('quotes/<int:id>/pdf/', views.quote_pdf, name='quote_pdf'),
     path('<int:id>/', views.invoice_detail, name='invoice_detail'),
     path('customers/', include('invoicing.customer_urls')),
     path('taxes/', include('invoicing.tax_urls')),

@@ -7,7 +7,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from core.models import Branch, Company
-from invoicing.models import AIInteractionLearning, AIKnowledgeEntry, AIKnowledgeSource, Customer, Invoice, InvoiceItem, Item, PurchaseInvoice, PurchaseItem, Supplier, Tax
+from invoicing.models import AIInteractionLearning, AIKnowledgeEntry, AIKnowledgeSource, Customer, Invoice, InvoiceItem, Item, PurchaseInvoice, PurchaseItem, Quote, QuoteItem, Supplier, Tax
 from invoicing.ai_services import analyze_and_route_user_request, answer_financial_question, handle_ai_management_command, record_ai_interaction_learning
 from invoicing.purchase_views import post_purchase_invoice
 from invoicing.views import post_sales_invoice
@@ -120,6 +120,55 @@ class InvoiceAccountingTests(TestCase):
         self.assertIsNotNone(invoice.journal_entry_id)
         self.item.refresh_from_db()
         self.assertEqual(self.item.quantity, Decimal("8.00"))
+
+    def test_ai_quote_requires_confirmation_then_creates_pdf_ready_quote(self):
+        draft = analyze_and_route_user_request(self.branch.id, "أنشئ عرض سعر للعميل أحمد 2 Item", user=self.user)
+
+        self.assertTrue(draft["ok"])
+        self.assertEqual(draft["source"], "ai_quote")
+        self.assertIsNotNone(draft.get("pending"))
+        self.assertEqual(Quote.objects.count(), 0)
+
+        confirmed = analyze_and_route_user_request(self.branch.id, "تأكيد", pending=draft["pending"], user=self.user)
+
+        self.assertTrue(confirmed["ok"])
+        quote = Quote.objects.get(quote_number__startswith="Q-AI-")
+        self.assertEqual(quote.items.count(), 1)
+        self.assertEqual(quote.total_with_vat, Decimal("115.0000"))
+        self.assertIn("/invoicing/quotes/", confirmed["action"]["url"])
+
+    def test_quote_pdf_download_returns_pdf(self):
+        customer = Customer.objects.create(name="عميل PDF")
+        quote = Quote.objects.create(
+            branch=self.branch,
+            quote_number="Q-PDF-1",
+            customer=customer,
+            total_amount=Decimal("100.00"),
+            total_vat=Decimal("15.00"),
+            total_with_vat=Decimal("115.00"),
+        )
+        QuoteItem.objects.create(
+            branch=self.branch,
+            quote=quote,
+            item=self.item,
+            description="منتج عربي",
+            quantity=Decimal("2.00"),
+            unit_price=Decimal("50.00"),
+            tax_rate=Decimal("15.00"),
+            line_total=Decimal("100.00"),
+            line_vat=Decimal("15.00"),
+            line_total_with_vat=Decimal("115.00"),
+        )
+        self.client.force_login(self.user)
+        session = self.client.session
+        session["branch_id"] = self.branch.id
+        session["company_id"] = self.company.id
+        session.save()
+
+        response = self.client.get(f"/invoicing/quotes/{quote.id}/pdf/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/pdf")
 
     @patch("invoicing.ai_services._openalex_research")
     @patch("invoicing.ai_services._wikidata_facts")
