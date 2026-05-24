@@ -164,6 +164,78 @@ class InvoiceAccountingTests(TestCase):
         self.assertIn("الفوترة الإلكترونية", result["answer"])
         self.assertIn("ضريبة القيمة المضافة", result["answer"])
 
+    def test_ai_estimates_profit_for_adding_product_quantity(self):
+        customer = Customer.objects.create(name="Customer")
+        invoice = Invoice.objects.create(
+            branch=self.branch,
+            invoice_number="S-PROFIT-1",
+            invoice_type="standard",
+            customer=customer,
+            total_amount=Decimal("250.00"),
+            total_vat=Decimal("37.50"),
+            total_with_vat=Decimal("287.50"),
+            payment_method="نقدي",
+        )
+        InvoiceItem.objects.create(
+            branch=self.branch,
+            invoice=invoice,
+            item=self.item,
+            description="Item",
+            quantity=Decimal("5.00"),
+            unit_price=Decimal("50.00"),
+            tax=self.tax,
+            line_total=Decimal("250.00"),
+            line_vat=Decimal("37.50"),
+            line_total_with_vat=Decimal("287.50"),
+        )
+
+        result = answer_financial_question(self.branch.id, "إذا أضفت 500 حبة من Item كم متوقع تزيد الأرباح؟")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "accounting_data")
+        self.assertIn("500", result["answer"])
+        self.assertIn("15000.00", result["answer"])
+        self.assertIn("ربح الوحدة", result["answer"])
+
+    def test_ai_flags_low_margin_products(self):
+        low_item = Item.objects.create(
+            branch=self.branch,
+            name="LowMargin",
+            quantity=Decimal("20.00"),
+            cost=Decimal("9.50"),
+            selling_price=Decimal("10.00"),
+        )
+        customer = Customer.objects.create(name="Customer")
+        invoice = Invoice.objects.create(
+            branch=self.branch,
+            invoice_number="S-LOW-1",
+            invoice_type="standard",
+            customer=customer,
+            total_amount=Decimal("100.00"),
+            total_vat=Decimal("15.00"),
+            total_with_vat=Decimal("115.00"),
+            payment_method="نقدي",
+        )
+        InvoiceItem.objects.create(
+            branch=self.branch,
+            invoice=invoice,
+            item=low_item,
+            description="LowMargin",
+            quantity=Decimal("10.00"),
+            unit_price=Decimal("10.00"),
+            tax=self.tax,
+            line_total=Decimal("100.00"),
+            line_vat=Decimal("15.00"),
+            line_total_with_vat=Decimal("115.00"),
+        )
+
+        result = answer_financial_question(self.branch.id, "ما المنتجات ذات الربح المنخفض للتقليل منها؟")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "accounting_data")
+        self.assertIn("LowMargin", result["answer"])
+        self.assertIn("منخفضة الهامش", result["answer"])
+
     @patch("invoicing.purchase_views.analyze_and_route_user_request")
     @patch("invoicing.purchase_views.command_from_camera_image")
     def test_ai_assistant_command_merges_screen_analysis_with_user_question(self, camera_reader, analyzer):

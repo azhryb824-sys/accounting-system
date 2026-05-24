@@ -12,7 +12,7 @@ from django.db.models.functions import Coalesce
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
-from core.models import Employee, EmployeeAdvance, JournalEntry, JournalEntryLine, SalaryRecord
+from core.models import Branch, Employee, EmployeeAdvance, JournalEntry, JournalEntryLine, SalaryRecord
 from .models import Customer, Invoice, InvoiceItem, Item, PurchaseInvoice, PurchaseItem, Supplier, Tax
 from .zatca import prepare_zatca_payload
 
@@ -777,6 +777,180 @@ def _format_money(value):
     return f"{_money(value)}"
 
 
+def _extract_decimal_from_question(question, default=None):
+    match = re.search(r"(\d+(?:[.,]\d+)?)", question or "")
+    if not match:
+        return default
+    try:
+        return Decimal(match.group(1).replace(",", "."))
+    except Exception:
+        return default
+
+
+def _find_item_mentioned(branch_id, question):
+    normalized = (question or "").lower()
+    candidates = Item.objects.filter(branch_id=branch_id, is_active=True).order_by("-id")
+    exact = [item for item in candidates if item.name and item.name.lower() in normalized]
+    if exact:
+        return exact[0]
+    words = [word for word in re.split(r"\s+", normalized) if len(word) >= 3]
+    scored = []
+    for item in candidates:
+        item_words = [word for word in re.split(r"\s+", item.name.lower()) if len(word) >= 3]
+        score = len(set(words) & set(item_words))
+        if score:
+            scored.append((score, item))
+    return sorted(scored, key=lambda row: row[0], reverse=True)[0][1] if scored else None
+
+
+def _item_sales_stats(branch_id, item_id, days=90):
+    today = timezone.localdate()
+    start = today - timezone.timedelta(days=days)
+    rows = InvoiceItem.objects.filter(
+        invoice__branch_id=branch_id,
+        item_id=item_id,
+        invoice__issue_date__date__range=[start, today],
+    )
+    return {
+        "start": start,
+        "end": today,
+        "quantity": rows.aggregate(total=Coalesce(Sum("quantity"), Decimal("0")))["total"],
+        "revenue": rows.aggregate(total=Coalesce(Sum("line_total"), Decimal("0")))["total"],
+        "invoice_count": rows.values("invoice_id").distinct().count(),
+    }
+
+
+def _build_product_performance_rows(branch_id, start, end):
+    if not Item.objects.filter(branch_id=branch_id, is_active=True).exists():
+        return []
+    sold = {
+        row["item_id"]: row
+        for row in InvoiceItem.objects.filter(
+            invoice__branch_id=branch_id,
+            invoice__issue_date__date__range=[start, end],
+            item_id__isnull=False,
+        ).values("item_id").annotate(
+            sold_qty=Coalesce(Sum("quantity"), Decimal("0")),
+            revenue=Coalesce(Sum("line_total"), Decimal("0")),
+        )
+    }
+    rows = []
+    for item in Item.objects.filter(branch_id=branch_id, is_active=True):
+        sold_row = sold.get(item.id, {})
+        unit_profit = _money((item.selling_price or Decimal("0")) - (item.cost or Decimal("0")))
+        margin_percent = _safe_ratio(unit_profit, item.selling_price)
+        sold_qty = sold_row.get("sold_qty") or Decimal("0")
+        revenue = sold_row.get("revenue") or Decimal("0")
+        estimated_profit = _money(unit_profit * sold_qty)
+        rows.append({
+            "item": item,
+            "sold_qty": sold_qty,
+            "revenue": revenue,
+            "unit_profit": unit_profit,
+            "margin_percent": margin_percent,
+            "estimated_profit": estimated_profit,
+            "stock": item.quantity,
+        })
+    return rows
+
+
+def product_performance_advice(branch_id, question, user=None):
+    normalized = (question or "").lower()
+    triggers = (
+        "ربح المنتج", "ربحية", "الأرباح", "ارباح", "أداء المنتجات", "اداء المنتجات",
+        "منتجات ضعيفة", "ربح منخفض", "الربح المنخفض", "أضفت", "اضفت", "إضافة 500", "500 حبة",
+        "توقع", "متوقع", "سيناريو", "زودت المخزون", "زيادة المخزون",
+        "اقترح منتجات", "اقتراح منتجات", "أفكار منتجات", "افكار منتجات", "أفكار مناسبة", "افكار مناسبة",
+    )
+    if not any(trigger in normalized for trigger in triggers):
+        return ""
+    if not _user_can_read_context(user, "view_item", branch_id):
+        return "لا أستطيع تحليل المنتجات والمخزون لأن حسابك لا يملك صلاحية عرض الأصناف."
+    if not _user_can_read_context(user, "view_invoice", branch_id):
+        return "لا أستطيع تقدير ربحية المنتجات بدقة لأن حسابك لا يملك صلاحية عرض فواتير البيع."
+
+    branch = Branch.objects.select_related("company").filter(id=branch_id).first()
+    start, end = _date_range_from_question(question)
+    rows = _build_product_performance_rows(branch_id, start, end)
+    if not rows:
+        return "لا توجد منتجات نشطة كافية لتحليل الأداء في الفرع الحالي."
+
+    item = _find_item_mentioned(branch_id, question)
+    requested_qty = _extract_decimal_from_question(question)
+    lines = [
+        f"تقرير أداء المنتجات للفترة {start} إلى {end}:",
+        f"- الشركة: {branch.company.name if branch and branch.company_id else 'غير محددة'}",
+        f"- الفرع: {branch.name if branch else branch_id}",
+    ]
+
+    if item and requested_qty:
+        stats = _item_sales_stats(branch_id, item.id)
+        unit_profit = _money((item.selling_price or Decimal("0")) - (item.cost or Decimal("0")))
+        gross_profit_if_sold = _money(unit_profit * requested_qty)
+        expected_daily_sales = (stats["quantity"] / Decimal("90")) if stats["quantity"] else Decimal("0")
+        expected_sell_days = (requested_qty / expected_daily_sales).quantize(Decimal("0.1")) if expected_daily_sales else None
+        current_stock_profit = _money(unit_profit * (item.quantity or Decimal("0")))
+        after_stock_profit_capacity = _money(unit_profit * ((item.quantity or Decimal("0")) + requested_qty))
+        margin_percent = _safe_ratio(unit_profit, item.selling_price)
+        lines.extend([
+            f"سيناريو إضافة {requested_qty} حبة من {item.name}:",
+            f"- تكلفة الوحدة الحالية: {_format_money(item.cost)}",
+            f"- سعر البيع الحالي: {_format_money(item.selling_price)}",
+            f"- ربح الوحدة التقريبي قبل المصاريف العامة: {_format_money(unit_profit)}",
+            f"- هامش الوحدة التقريبي: {margin_percent if margin_percent is not None else 'غير متاح'}%",
+            f"- إذا تم بيع كامل الكمية المضافة بنفس السعر والتكلفة فمتوقع زيادة مجمل الربح بنحو {_format_money(gross_profit_if_sold)}.",
+            f"- الطاقة الربحية للمخزون الحالي تقريبا: {_format_money(current_stock_profit)}، وبعد الإضافة تصبح {_format_money(after_stock_profit_capacity)} إذا بيع كامل المخزون.",
+        ])
+        if expected_sell_days:
+            lines.append(f"- بناء على بيع آخر 90 يوما ({stats['quantity']} حبة)، قد تحتاج الكمية المضافة حوالي {expected_sell_days} يوم للبيع إذا بقي الطلب بنفس المستوى.")
+        else:
+            lines.append("- لا توجد مبيعات تاريخية كافية لهذا المنتج؛ اعتبر التوقع ربحا محتملا وليس توقع طلب مؤكد.")
+        if unit_profit <= 0:
+            lines.append("- تحذير: ربح الوحدة صفر أو سلبي. لا أنصح بزيادة الكمية قبل تعديل السعر أو التكلفة.")
+        elif margin_percent is not None and margin_percent < 15:
+            lines.append("- الهامش منخفض؛ زد الكمية فقط إذا كان المنتج يجذب عملاء أو يرفع مبيعات منتجات أخرى ذات هامش أعلى.")
+
+    top_profit = sorted(rows, key=lambda row: row["estimated_profit"], reverse=True)[:5]
+    low_margin = sorted(
+        [row for row in rows if row["margin_percent"] is not None],
+        key=lambda row: (row["margin_percent"], -row["sold_qty"]),
+    )[:5]
+    slow_or_dead = sorted(
+        [row for row in rows if row["sold_qty"] <= 0 and row["stock"] > 0],
+        key=lambda row: row["stock"] * row["item"].cost,
+        reverse=True,
+    )[:5]
+
+    lines.append("أفضل منتجات حسب الربح التقديري:")
+    lines.extend(
+        f"- {row['item'].name}: مبيعات {row['sold_qty']}، ربح وحدة {_format_money(row['unit_profit'])}، ربح تقديري {_format_money(row['estimated_profit'])}"
+        for row in top_profit
+    )
+    lines.append("منتجات تحتاج مراجعة لأنها منخفضة الهامش أو تؤثر على الربحية:")
+    lines.extend(
+        f"- {row['item'].name}: هامش {row['margin_percent']}%، ربح وحدة {_format_money(row['unit_profit'])}، مبيعات {row['sold_qty']}"
+        for row in low_margin
+    )
+    if slow_or_dead:
+        lines.append("مخزون راكد أو بلا مبيعات في الفترة:")
+        lines.extend(
+            f"- {row['item'].name}: مخزون {row['stock']}، قيمة تقريبية {_format_money(row['stock'] * row['item'].cost)}"
+            for row in slow_or_dead
+        )
+    lines.extend([
+        "توصية عملية:",
+        "- زد شراء المنتجات عالية الربح وعالية الدوران أولا.",
+        "- قلل أو أوقف المنتجات منخفضة الربح إلا إذا كانت تجذب العملاء أو تكمل سلة البيع.",
+        "- قبل شراء كمية كبيرة، اختبر كمية أصغر أو عرضا محدودا، ثم قارن سرعة البيع والهامش خلال أسبوعين.",
+        "- للأفكار والمنتجات الجديدة، اسألني: اقترح منتجات مناسبة لنشاطي في السوق السعودي، وسأجمع بين بيانات نظامك ومصادر عامة موثوقة عند توفر الإنترنت.",
+    ])
+    if any(term in normalized for term in ("اقترح", "اقتراح", "أفكار", "افكار", "منتجات جديدة")):
+        market_answer = free_web_general_answer("أفكار منتجات وتجارة مناسبة للسوق السعودي والمشاريع الصغيرة")
+        if market_answer:
+            lines.extend(["معلومات سوقية عامة من مصادر مفتوحة:", market_answer])
+    return "\n".join(lines)
+
+
 def _date_range_from_question(question):
     today = timezone.localdate()
     normalized = (question or "").lower()
@@ -857,6 +1031,10 @@ def _answer_precise_accounting_question(branch_id, question, user=None):
     invoice_details = _answer_invoice_details(branch_id, question, user)
     if invoice_details:
         return invoice_details
+
+    product_advice = product_performance_advice(branch_id, question, user=user)
+    if product_advice:
+        return product_advice
 
     if any(word in normalized for word in ("تقرير", "ملخص", "الوضع المالي", "الأرقام", "تحليل", "dashboard", "report")):
         context = branch_ai_context(branch_id, user=user)
