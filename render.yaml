@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: accounting-ai-service
+    env: docker
+    rootDir: accounting_ai_service
+    healthCheckPath: /health
+    envVars:
+      - key: ACCOUNTING_AI_BACKEND
+        value: auto
+      - key: PYTHONUNBUFFERED
+        value: "1"

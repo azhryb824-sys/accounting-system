@@ -83,10 +83,24 @@ Recommended Render settings for the AI service:
 - Root directory: `accounting_ai_service`
 - Runtime: Docker
 - Dockerfile path: `Dockerfile`
-- Start command: leave empty
+- Start command: leave empty when Runtime is Docker
+
+If you deploy it as a native Python web service instead of Docker, use this Start Command:
+
+```bash
+sh render-start.sh
+```
+
+or:
+
+```bash
+uvicorn app:app --host 0.0.0.0 --port $PORT
+```
+
+Do not run `python manage.py ...` inside this AI service. It is FastAPI, not Django.
 
 The Dockerfile installs Tesseract with Arabic and English language packs, then starts:
 
 ```bash
-uvicorn app:app --host 0.0.0.0 --port $PORT
+uvicorn app:app --host 0.0.0.0 --port ${PORT:-10000}
 ```
