@@ -74,6 +74,10 @@
                             <input id="assistant-voice-rate" class="form-range" type="range" min="0.7" max="1.05" step="0.05" value="0.82">
                         </div>
                     </div>
+                    <div class="form-check form-switch mt-2">
+                        <input class="form-check-input" type="checkbox" role="switch" id="assistant-auto-speak" checked>
+                        <label class="form-check-label" for="assistant-auto-speak">قراءة الرد تلقائيا</label>
+                    </div>
                     <div class="small text-muted-soft mt-2" id="voice-status">الصوت يعمل من المتصفح مباشرة إذا كان مدعوما.</div>
                     <div class="glass-soft p-2 mt-3 d-none" id="camera-panel">
                         <video id="camera-preview" class="w-100 rounded" autoplay playsinline muted style="max-height: 320px; object-fit: cover; background:#020617;"></video>
@@ -170,6 +174,7 @@
     const dialectSelect = document.getElementById('assistant-dialect-select');
     const voiceSelect = document.getElementById('assistant-voice-select');
     const voiceRate = document.getElementById('assistant-voice-rate');
+    const autoSpeakToggle = document.getElementById('assistant-auto-speak');
     const statusBox = document.getElementById('voice-status');
     const answerCard = document.getElementById('live-answer-card');
     const answerBox = document.getElementById('live-answer');
@@ -409,6 +414,59 @@
             resumeLiveConversation();
             return;
         }
+        const improvedText = improveSpeechText(normalizeDialectForSpeech(text)).slice(0, 900);
+        const speechChunks = splitSpeechChunks(improvedText);
+        if (!speechChunks.length) return;
+        lastSpokenText = improvedText;
+        window.speechSynthesis.cancel();
+        assistantIsSpeaking = true;
+        const availableVoices = window.speechSynthesis.getVoices();
+        const voice = preferredVoiceForDialect(availableVoices) || arabicVoice || loadArabicVoice();
+        const hasUrduText = selectedDialect() === 'ur-PK' || (/[\u0600-\u06FF]/.test(improvedText) && /[پچژگٹڈڑںے]/.test(improvedText));
+        const hasBanglaText = /[\u0980-\u09FF]/.test(improvedText);
+        let speechIndex = 0;
+        const finishSpeech = () => {
+            assistantIsSpeaking = false;
+            if (liveConversationMode) setStatus('أستمع لك... قل طلبك التالي أو قل إلغاء/تأكيد عند وجود مسودة.');
+            resumeLiveConversation();
+        };
+        const playChunk = () => {
+            if (speechIndex >= speechChunks.length) {
+                finishSpeech();
+                return;
+            }
+            const utterance = new SpeechSynthesisUtterance(speechChunks[speechIndex]);
+            if (voice && !hasUrduText && !hasBanglaText) {
+                utterance.voice = voice;
+                utterance.lang = voice.lang || selectedDialect();
+                setStatus(`جاري قراءة الرد بصوت: ${voice.name}`);
+            } else if (hasUrduText) {
+                utterance.lang = 'ur-PK';
+                setStatus('جاري قراءة الرد بالأوردو إذا كان المتصفح يدعمها.');
+            } else if (hasBanglaText) {
+                utterance.lang = 'bn-BD';
+                setStatus('جاري قراءة الرد بالبنغالية إذا كان المتصفح يدعمها.');
+            } else {
+                utterance.lang = selectedDialect();
+                setStatus('لم أجد صوتا عربيا مناسبا. سأستخدم صوت المتصفح المتاح.');
+            }
+            utterance.rate = Math.min(0.9, Number(voiceRate.value || 0.78));
+            utterance.pitch = 0.95;
+            utterance.volume = 1;
+            utterance.onend = () => {
+                speechIndex += 1;
+                window.setTimeout(playChunk, 180);
+            };
+            utterance.onerror = finishSpeech;
+            window.speechSynthesis.speak(utterance);
+        };
+        playChunk();
+        return;
+        if (!('speechSynthesis' in window) || !text) {
+            setStatus('المتصفح لا يدعم قراءة الصوت.');
+            resumeLiveConversation();
+            return;
+        }
         const cleanText = improveSpeechText(normalizeDialectForSpeech(text)).slice(0, 650);
         if (!cleanText) return;
         lastSpokenText = cleanText;
@@ -498,7 +556,7 @@
             }
             const dialectAnswer = applyAssistantDialect(data.answer || 'تم تحليل الطلب.');
             answerBox.textContent = dialectAnswer;
-            speak(dialectAnswer);
+            if (liveConversationMode || autoSpeakToggle.checked) speak(dialectAnswer);
             assistantIsProcessing = false;
 
             if (data.action && data.action.url) {
