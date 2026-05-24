@@ -1298,6 +1298,8 @@ LOCAL_BUSINESS_ENCYCLOPEDIA = [
 
 def local_greeting_or_concept_answer(question):
     normalized = (question or "").strip().lower()
+    if _calculation_needs_more_numbers(question):
+        return "أرسل العملية الحسابية أو الأرقام المطلوبة بوضوح. مثال: احسب 1500 + 375، أو احسب ضريبة 15% على 2000."
     for words, answer in LOCAL_GENERAL_CHAT:
         if any(word in normalized for word in words):
             return answer
@@ -1353,7 +1355,7 @@ def _quality_followups(question, primary=None):
 
 
 def _polish_answer(answer, question="", primary=None):
-    text = (answer or "").strip()
+    text = _remove_performance_stage_directions(answer)
     if not text:
         text = "أبشر، أحتاج تفاصيل أكثر حتى أساعدك بدقة. اكتب المطلوب أو استخدم الصوت، وسأسألك عن أي معلومة ناقصة قبل التنفيذ."
     needs_friendly_intro = (
@@ -1657,6 +1659,30 @@ def local_knowledge_answer(question):
         lines.append(f"- {entry.title}: {entry.summary} المصدر: {entry.source_url}")
     lines.append("تنبيه: هذه المعرفة مساعدة، وعند القرارات النظامية أو المالية راجع المصدر الرسمي الأحدث.")
     return "\n".join(lines)
+
+
+def _calculation_needs_more_numbers(question):
+    normalized = (question or "").strip().lower()
+    if not any(word in normalized for word in ("احسب", "حساب", "calculate")):
+        return False
+    return not re.search(r"\d", normalized)
+
+
+def _remove_performance_stage_directions(answer):
+    text = (answer or "").strip()
+    if not text:
+        return text
+    blocked_patterns = (
+        r"^ابتسامة[^:：]*[:：]\s*",
+        r"^نبرة[^:：]*[:：]\s*",
+        r"^بابتسامة[^:：]*[:：]?\s*",
+        r"^\([^)]*(ابتسامة|نبرة|يبتسم|بهدوء)[^)]*\)\s*",
+    )
+    for pattern in blocked_patterns:
+        text = re.sub(pattern, "", text, flags=re.IGNORECASE).strip()
+    if "المحاسب لا يخاف من الدائن" in text:
+        return "أرسل العملية الحسابية أو السؤال المطلوب بوضوح، وسأجيبك مباشرة بدون عبارات تمثيلية."
+    return text
 
 
 def upsert_ai_knowledge_entry(source, title, summary, source_url, topic=""):

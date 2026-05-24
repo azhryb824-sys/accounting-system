@@ -285,6 +285,14 @@ class InvoiceAccountingTests(TestCase):
         self.assertTrue(result["ok"])
         self.assertNotEqual(result["source"], "islamic_policy")
 
+    def test_calculate_without_numbers_asks_for_numbers_not_joke(self):
+        result = answer_financial_question(self.branch.id, "احسب")
+
+        self.assertTrue(result["ok"])
+        self.assertIn("الأرقام", result["answer"])
+        self.assertNotIn("ابتسامة", result["answer"])
+        self.assertNotIn("المحاسب لا يخاف", result["answer"])
+
     def test_zatca_regulation_questions_use_official_index(self):
         result = answer_financial_question(self.branch.id, "زودني بجميع لوائح هيئة الزكاة والضريبة والجمارك")
 
