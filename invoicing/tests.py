@@ -315,6 +315,19 @@ class InvoiceAccountingTests(TestCase):
         self.assertEqual(result["source"], "clarification")
         self.assertIn("أمثلة", result["answer"])
 
+    @patch("invoicing.ai_services.free_web_general_answer", return_value="")
+    @patch("invoicing.ai_services._answer_precise_accounting_question", return_value="")
+    @patch("invoicing.ai_services._private_ai_request")
+    def test_weak_private_ai_answer_uses_strong_local_fallback(self, private_ai, precise_answer, web_answer):
+        private_ai.return_value = {"ok": True, "text": "لا أملك معلومات كافية"}
+
+        result = answer_financial_question(self.branch.id, "قيّم أداء الفرع ماليا", user=self.user)
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "local_strong")
+        self.assertIn("الملخص", result["answer"])
+        self.assertNotIn("لا أملك معلومات كافية", result["answer"])
+
     def test_zatca_regulation_questions_use_official_index(self):
         result = answer_financial_question(self.branch.id, "زودني بجميع لوائح هيئة الزكاة والضريبة والجمارك")
 

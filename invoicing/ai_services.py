@@ -776,6 +776,37 @@ def local_financial_insights(context):
     return tips
 
 
+def strong_local_financial_answer(context, question="", restricted_message=""):
+    tips = local_financial_insights(context)[:4]
+    lines = []
+    if restricted_message:
+        lines.append(restricted_message)
+    lines.extend([
+        f"قرأت البيانات المتاحة للفرع خلال الفترة {context.get('period')}.",
+        "الملخص:",
+        f"- المبيعات: {_format_money(context.get('sales_total')) if context.get('sales_total') is not None else 'غير متاحة حسب الصلاحيات'}",
+        f"- المشتريات: {_format_money(context.get('purchases_total')) if context.get('purchases_total') is not None else 'غير متاحة حسب الصلاحيات'}",
+        f"- هامش الربح التقريبي: {context.get('gross_margin_percent') if context.get('gross_margin_percent') is not None else 'غير متاح'}%",
+        f"- قيمة المخزون: {_format_money(context.get('inventory_value')) if context.get('inventory_value') is not None else 'غير متاحة حسب الصلاحيات'}",
+        f"- العمليات غير المرحلة: مبيعات {context.get('unposted_sales_count') or 0}، مشتريات {context.get('unposted_purchases_count') or 0}",
+    ])
+    if context.get("top_items"):
+        top = context["top_items"][0]
+        lines.append(f"- أعلى صنف مبيعا: {top.get('item__name')} بإجمالي {top.get('total')}.")
+    lines.append("الاستنتاج:")
+    if context.get("gross_margin_percent") is not None and context["gross_margin_percent"] < 15:
+        lines.append("- الربحية تحتاج مراجعة؛ ابدأ بالخصومات وتكلفة الأصناف الأعلى مبيعا.")
+    elif context.get("sales_total") and context.get("sales_total") > 0:
+        lines.append("- يوجد نشاط بيع مسجل؛ الأهم الآن متابعة المخزون والتحصيل والعمليات غير المرحلة.")
+    else:
+        lines.append("- لا توجد مبيعات كافية في الفترة الحالية، لذلك الأولوية لإدخال الفواتير أو مراجعة نشاط الفرع.")
+    if tips:
+        lines.append("أفضل خطوات عملية الآن:")
+        lines.extend(f"- {tip}" for tip in tips)
+    lines.append("لتحليل أدق اكتب طلبا محددا مثل: حلل مبيعات هذا الشهر، أو ما المنتجات ضعيفة الربح؟")
+    return "\n".join(lines)
+
+
 def _format_money(value):
     return f"{_money(value)}"
 
@@ -1977,6 +2008,13 @@ def _weak_ai_answer(text):
         "I cannot",
         "I can't",
         "as an ai",
+        "how can I help",
+        "please clarify",
+        "need more information",
+        "كيف يمكنني مساعدتك",
+        "يرجى توضيح",
+        "أحتاج المزيد",
+        "لا توجد معلومات كافية",
         "ابتسامة",
         "نبرة",
         "كمساعد",
@@ -2352,10 +2390,11 @@ def answer_financial_question(branch_id, question, user=None):
     )
     result = _private_ai_request(prompt, max_new_tokens=1200, task="financial_question", context=context)
     if not result.get("ok") or _weak_ai_answer(result.get("text")):
+        fallback_answer = strong_local_financial_answer(context, question, restricted_message)
         return {
             "ok": True,
-            "source": "local",
-            "answer": ((restricted_message + "\n\n") if restricted_message else "") + "تعذر الاتصال بالنموذج الخاص حاليا. بناء على البيانات المسموح لك بها: " + " ".join(local_financial_insights(context)),
+            "source": "local_strong",
+            "answer": fallback_answer,
             "context": context,
             "warning": result.get("message"),
         }
@@ -2423,6 +2462,12 @@ def answer_financial_question(branch_id, question, user=None):
             }
     result = _model_answer_financial_question(branch_id, question, user=user)
     answer_text = result.get("answer") or result.get("message") or ""
+    if _weak_ai_answer(answer_text) and result.get("source") not in {"permissions", "accounting_data"}:
+        context = result.get("context") or branch_ai_context(branch_id, user=user)
+        result["answer"] = _polish_answer(strong_local_financial_answer(context, question), question)
+        result["source"] = "local_strong"
+        result["context"] = context
+        return result
     if local_direct_answer and (
         result.get("source") == "local"
         or "قراءة النموذج للبيانات الحالية" in answer_text

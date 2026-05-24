@@ -23,6 +23,14 @@ Model weights and virtual environments are not committed here. Keep trained mode
 D:\accounting-ai\models\my_model
 ```
 
+You can also point the service to a stronger local instruction model with:
+
+```powershell
+$env:ACCOUNTING_AI_MODEL_PATH="D:\accounting-ai\models\qwen2.5-7b-instruct"
+```
+
+For a ChatGPT-like local experience without paid APIs, use a commercially usable open model that your server can run. Good practical choices are Qwen2.5 Instruct or Mistral Instruct families. The stronger the model and hardware, the better the conversation quality; the Django app still protects weak answers with accounting-data fallbacks.
+
 ## Photographed invoice OCR
 
 The invoice image reader uses only free open-source components that can be used commercially:

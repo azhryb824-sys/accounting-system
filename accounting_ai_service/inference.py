@@ -1,6 +1,7 @@
 import base64
 import io
 import json
+import os
 import re
 import sys
 from datetime import date
@@ -25,7 +26,7 @@ except ImportError:
 
 MODEL_NAME = "نموذج عبدالرحمن المحاسبي"
 MODEL_OWNER = "عبدالرحمن"
-MODEL_PATH = Path(__file__).resolve().parent / "models" / "my_model"
+MODEL_PATH = Path(os.environ.get("ACCOUNTING_AI_MODEL_PATH") or Path(__file__).resolve().parent / "models" / "my_model")
 
 
 def _load_transformers_runtime():
