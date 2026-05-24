@@ -366,13 +366,28 @@
         const selected = voices.find((voice) => `${voice.name}::${voice.lang}` === voiceSelect.value);
         if (selected && /^ar/i.test(selected.lang || '')) return selected;
         const dialect = selectedDialect().toLowerCase();
+        const professionalMalePattern = /naayf|maged|tarik|tariq|omar|hassan|khalid|zayd|microsoft.*ar.*sa|google.*arabic.*male/i;
         return (
+            voices.find((voice) => (voice.lang || '').toLowerCase() === dialect && professionalMalePattern.test(voice.name || '')) ||
+            voices.find((voice) => professionalMalePattern.test(voice.name || '') && /^ar/i.test(voice.lang || '')) ||
             voices.find((voice) => (voice.lang || '').toLowerCase() === dialect) ||
-            voices.find((voice) => /microsoft naayf|microsoft hoda|naayf|hoda|maged|arabic|العربية/i.test(voice.name || '') && /^ar/i.test(voice.lang || '')) ||
+            voices.find((voice) => /arabic|???????/i.test(voice.name || '') && /^ar/i.test(voice.lang || '')) ||
             voices.find((voice) => (voice.lang || '').toLowerCase().startsWith('ar')) ||
             selected ||
             null
         );
+    }
+
+    function voicePriority(voice) {
+        const name = (voice.name || '').toLowerCase();
+        const lang = (voice.lang || '').toLowerCase();
+        let score = 0;
+        if (lang === selectedDialect().toLowerCase()) score += 40;
+        if (lang.startsWith('ar')) score += 30;
+        if (/naayf|maged|tarik|tariq|omar|hassan|khalid|zayd/.test(name)) score += 60;
+        if (/microsoft|google/.test(name)) score += 10;
+        if (/hoda|female|woman/.test(name)) score -= 25;
+        return score;
     }
 
     function loadArabicVoice() {
@@ -381,11 +396,13 @@
         const previousValue = voiceSelect.value;
         voiceSelect.innerHTML = '';
         voices
-            .filter((voice) => /^(ar|ur|bn)/i.test(voice.lang || '') || /arabic|urdu|bangla|bengali|hoda|naayf|maged/i.test(voice.name || ''))
+            .filter((voice) => /^(ar|ur|bn)/i.test(voice.lang || '') || /arabic|urdu|bangla|bengali|hoda|naayf|maged|tarik|tariq|omar|hassan|khalid|zayd/i.test(voice.name || ''))
+            .sort((a, b) => voicePriority(b) - voicePriority(a))
             .forEach((voice, index) => {
                 const option = document.createElement('option');
                 option.value = `${voice.name}::${voice.lang}`;
-                option.textContent = `${voice.name} (${voice.lang})`;
+                const maleHint = /naayf|maged|tarik|tariq|omar|hassan|khalid|zayd/i.test(voice.name || '') ? ' - ?????' : '';
+                option.textContent = `${voice.name} (${voice.lang})${maleHint}`;
                 voiceSelect.appendChild(option);
             });
         if (!voiceSelect.options.length) {
