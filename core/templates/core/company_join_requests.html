@@ -13,6 +13,7 @@
                     <th>المستخدم</th>
                     <th>الشركة</th>
                     <th>الدور المطلوب</th>
+                    <th>الفرع</th>
                     <th>الملاحظة</th>
                     <th>تاريخ الطلب</th>
                     <th>إجراءات</th>
@@ -24,6 +25,7 @@
                         <td>{{ req.user.get_full_name|default:req.user.username }}</td>
                         <td>{{ req.company.name }}</td>
                         <td>{{ req.requested_role.name|default:"-" }}</td>
+                        <td>{{ req.requested_branch.name|default:"كل الفروع" }}</td>
                         <td>{{ req.note|default:"-" }}</td>
                         <td>{{ req.created_at }}</td>
                         <td>
@@ -32,7 +34,7 @@
                         </td>
                     </tr>
                 {% empty %}
-                    <tr><td colspan="6" class="text-center text-muted-soft py-4">لا توجد طلبات انضمام.</td></tr>
+                    <tr><td colspan="7" class="text-center text-muted-soft py-4">لا توجد طلبات انضمام.</td></tr>
                 {% endfor %}
             </tbody>
         </table>

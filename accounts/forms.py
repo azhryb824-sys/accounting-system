@@ -17,7 +17,7 @@ class UserRegistrationForm(forms.ModelForm):
     national_id = forms.CharField(label="رقم الهوية", max_length=20, widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "أدخل رقم الهوية"}))
     phone = forms.CharField(label="رقم الجوال", max_length=15, widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "أدخل رقم الجوال"}))
 
-    role = forms.ModelChoiceField(label="الدور", queryset=Role.objects.all(), widget=forms.Select(attrs={"class": "form-select"}))
+    role = forms.ModelChoiceField(label="الدور", queryset=Role.objects.filter(requires_subscription=True), widget=forms.Select(attrs={"class": "form-select"}))
 
     class Meta:
         model = User
@@ -158,12 +158,13 @@ class RoleForm(forms.ModelForm):
 
     class Meta:
         model = Role
-        fields = ["name", "description", "requires_subscription", "permissions"]
-        labels = {"name": "اسم الدور", "description": "الوصف", "requires_subscription": "يتطلب اشتراك", "permissions": "الصلاحيات"}
+        fields = ["name", "description", "requires_subscription", "branch_access", "permissions"]
+        labels = {"name": "اسم الدور", "description": "الوصف", "requires_subscription": "يتطلب اشتراك", "branch_access": "نطاق الفروع", "permissions": "الصلاحيات"}
         widgets = {
             "name": forms.TextInput(attrs={"class": "form-control"}),
             "description": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
             "requires_subscription": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "branch_access": forms.Select(attrs={"class": "form-select"}),
         }
 
 

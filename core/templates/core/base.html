@@ -360,20 +360,32 @@
         {% endif %}
 
         <div class="sidebar-section-title">الحسابات</div>
+        {% can_access request 'view_account' as can_view_account %}
+        {% if can_view_account %}
         <a href="{% url 'accounts_list' %}" class="nav-link-custom {% if request.resolver_match.url_name == 'accounts_list' %}active{% endif %}">
             <i class="fa-solid fa-book"></i><span>دليل الحسابات</span>
         </a>
+        {% endif %}
+        {% can_access request 'add_account' as can_add_account %}
+        {% if can_add_account %}
         <a href="{% url 'account_add' %}" class="nav-link-custom {% if request.resolver_match.url_name == 'account_add' %}active{% endif %}">
             <i class="fa-solid fa-plus"></i><span>إضافة حساب</span>
         </a>
+        {% endif %}
 
         <div class="sidebar-section-title">القيود اليومية</div>
+        {% can_access request 'view_journalentry' as can_view_journalentry %}
+        {% if can_view_journalentry %}
         <a href="{% url 'journal_list' %}" class="nav-link-custom {% if request.resolver_match.url_name in 'journal_list journal_edit journal_copy journal_pdf' %}active{% endif %}">
             <i class="fa-solid fa-file-invoice"></i><span>قائمة القيود</span>
         </a>
+        {% endif %}
+        {% can_access request 'add_journalentry' as can_add_journalentry %}
+        {% if can_add_journalentry %}
         <a href="{% url 'journal_add' %}" class="nav-link-custom {% if request.resolver_match.url_name == 'journal_add' %}active{% endif %}">
             <i class="fa-solid fa-circle-plus"></i><span>إضافة قيد</span>
         </a>
+        {% endif %}
 
         {% can_access request 'view_employee' as can_view_employee_finance %}
         {% if can_view_employee_finance %}
@@ -404,39 +416,64 @@
         </a>
 
         <div class="sidebar-section-title">الفواتير والمخزون</div>
+        {% can_access request 'add_invoice' as can_add_invoice %}
+        {% if can_add_invoice %}
         <a href="{% url 'pos_terminal' %}" class="nav-link-custom {% if request.resolver_match.url_name in 'pos_terminal pos_product_lookup pos_checkout' %}active{% endif %}">
             <i class="fa-solid fa-cash-register"></i><span>الكاشير</span>
         </a>
+        {% endif %}
+        {% can_access request 'view_invoice' as can_view_invoice %}
+        {% if can_view_invoice %}
         <a href="{% url 'invoice_list' %}" class="nav-link-custom {% if request.resolver_match.url_name in 'invoice_list invoice_detail post_invoice' %}active{% endif %}">
             <i class="fa-solid fa-receipt"></i><span>فواتير البيع</span>
         </a>
+        {% endif %}
+        {% if can_add_invoice %}
         <a href="{% url 'invoice_create' %}" class="nav-link-custom {% if request.resolver_match.url_name == 'invoice_create' %}active{% endif %}">
             <i class="fa-solid fa-file-circle-plus"></i><span>إنشاء فاتورة</span>
         </a>
+        {% endif %}
+        {% can_access request 'view_customer' as can_view_customer %}
+        {% if can_view_customer %}
         <a href="{% url 'customer_list' %}" class="nav-link-custom {% if request.resolver_match.url_name in 'customer_list customer_detail customer_edit customer_delete' %}active{% endif %}">
             <i class="fa-solid fa-users"></i><span>العملاء</span>
         </a>
+        {% endif %}
+        {% can_access request 'view_supplier' as can_view_supplier %}
+        {% if can_view_supplier %}
         <a href="{% url 'supplier_list' %}" class="nav-link-custom {% if request.resolver_match.url_name in 'supplier_list supplier_detail supplier_edit supplier_delete' %}active{% endif %}">
             <i class="fa-solid fa-truck-field"></i><span>الموردون</span>
         </a>
+        {% endif %}
+        {% can_access request 'view_purchaseinvoice' as can_view_purchaseinvoice %}
+        {% if can_view_purchaseinvoice %}
         <a href="{% url 'purchase_list' %}" class="nav-link-custom {% if request.resolver_match.url_name in 'purchase_list purchase_edit purchase_delete' %}active{% endif %}">
             <i class="fa-solid fa-cart-shopping"></i><span>فواتير الشراء</span>
         </a>
+        {% endif %}
+        {% can_access request 'add_purchaseinvoice' as can_add_purchaseinvoice %}
+        {% if can_add_purchaseinvoice %}
         <a href="{% url 'purchase_add' %}" class="nav-link-custom {% if request.resolver_match.url_name == 'purchase_add' %}active{% endif %}">
             <i class="fa-solid fa-cart-plus"></i><span>إضافة شراء</span>
         </a>
+        {% endif %}
         {% can_access request 'view_item' as can_view_products %}
         {% if can_view_products %}
         <a href="{% url 'inventory_list' %}" class="nav-link-custom {% if request.resolver_match.url_name == 'inventory_list' %}active{% endif %}">
             <i class="fa-solid fa-boxes-stacked"></i><span>المنتجات</span>
         </a>
         {% endif %}
+        {% can_access request 'view_tax' as can_view_tax %}
+        {% if can_view_tax %}
         <a href="{% url 'tax_list' %}" class="nav-link-custom {% if request.resolver_match.url_name in 'tax_list tax_create tax_edit tax_delete' %}active{% endif %}">
             <i class="fa-solid fa-percent"></i><span>الضرائب</span>
         </a>
+        {% endif %}
+        {% if can_view_invoice %}
         <a href="{% url 'zatca_dashboard' %}" class="nav-link-custom {% if request.resolver_match.url_name == 'zatca_dashboard' %}active{% endif %}">
             <i class="fa-solid fa-shield-halved"></i><span>جاهزية هيئة الزكاة</span>
         </a>
+        {% endif %}
 
         <div class="sidebar-section-title">الذكاء الاصطناعي</div>
         {% can_access request 'import_ai_invoice' as can_import_ai_invoice %}
@@ -498,6 +535,23 @@
                     <button type="button" data-calendar-choice="gregorian">ميلادي</button>
                     <button type="button" data-calendar-choice="hijri">هجري</button>
                 </div>
+                {% if switcher_companies and switcher_branches %}
+                <form class="d-flex gap-2 flex-wrap align-items-center" method="post" action="{% url 'select_company_branch' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <select class="form-select form-select-sm" name="company_id" aria-label="الشركة" required>
+                        {% for company in switcher_companies %}
+                        <option value="{{ company.id }}" {% if request.session.company_id == company.id %}selected{% endif %}>{{ company.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <select class="form-select form-select-sm" name="branch_id" aria-label="الفرع" required>
+                        {% for branch in switcher_branches %}
+                        <option value="{{ branch.id }}" data-company="{{ branch.company_id }}" {% if request.session.branch_id == branch.id %}selected{% endif %}>{{ branch.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button class="btn btn-sm btn-outline-light" type="submit">تحديث</button>
+                </form>
+                {% endif %}
                 <div class="topbar-session">
                     {{ request.session.company_name|default:"بدون شركة" }} - {{ request.session.branch_name|default:"بدون فرع" }}
                 </div>
@@ -528,6 +582,28 @@
     if (sidebarBackdrop) {
         sidebarBackdrop.addEventListener('click', closeMobileSidebar);
     }
+
+    document.querySelectorAll('form[action="{% url 'select_company_branch' %}"]').forEach((form) => {
+        const companySelect = form.querySelector('select[name="company_id"]');
+        const branchSelect = form.querySelector('select[name="branch_id"]');
+        if (!companySelect || !branchSelect) return;
+        function syncBranches() {
+            const companyId = companySelect.value;
+            let selectedVisible = false;
+            branchSelect.querySelectorAll('option').forEach((option) => {
+                const visible = option.dataset.company === companyId;
+                option.hidden = !visible;
+                option.disabled = !visible;
+                if (visible && option.selected) selectedVisible = true;
+            });
+            if (!selectedVisible) {
+                const first = Array.from(branchSelect.options).find((option) => !option.disabled);
+                if (first) first.selected = true;
+            }
+        }
+        companySelect.addEventListener('change', syncBranches);
+        syncBranches();
+    });
 
     document.querySelectorAll('.sidebar .nav-link-custom').forEach((link) => {
         link.addEventListener('click', closeMobileSidebar);

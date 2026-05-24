@@ -71,6 +71,7 @@ class CompanyMembership(models.Model):
     user = models.ForeignKey('auth.User', on_delete=models.CASCADE, related_name='company_memberships')
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='memberships')
     role = models.ForeignKey('accounts.Role', null=True, blank=True, on_delete=models.SET_NULL, related_name='company_memberships')
+    branch = models.ForeignKey(Branch, null=True, blank=True, on_delete=models.SET_NULL, related_name='memberships')
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -91,6 +92,7 @@ class CompanyJoinRequest(models.Model):
     user = models.ForeignKey('auth.User', on_delete=models.CASCADE, related_name='company_join_requests')
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='join_requests')
     requested_role = models.ForeignKey('accounts.Role', null=True, blank=True, on_delete=models.SET_NULL, related_name='company_join_requests')
+    requested_branch = models.ForeignKey(Branch, null=True, blank=True, on_delete=models.SET_NULL, related_name='join_requests')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     note = models.TextField(blank=True)
     reviewed_by = models.ForeignKey('auth.User', null=True, blank=True, on_delete=models.SET_NULL, related_name='reviewed_company_join_requests')

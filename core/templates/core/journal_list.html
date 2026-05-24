@@ -1,4 +1,5 @@
 {% extends 'core/base.html' %}
+{% load permission_tags %}
 
 {% block title %}قيود اليومية{% endblock %}
 {% block page_title %}قيود اليومية{% endblock %}
@@ -7,10 +8,16 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h5 class="text-light mb-0">قائمة القيود</h5>
+    {% can_access request 'add_journalentry' as can_add_journalentry %}
+    {% if can_add_journalentry %}
     <a href="{% url 'journal_add' %}" class="btn btn-primary px-4">
         <i class="fa-solid fa-plus"></i> إضافة قيد
     </a>
+    {% endif %}
 </div>
+{% can_access request 'change_journalentry' as can_change_journalentry %}
+{% can_access request 'add_journalentry' as can_copy_journalentry %}
+{% can_access request 'view_journalentry' as can_view_journalentry %}
 <div class="glass-card p-0">
     <div class="table-responsive">
         <table class="table table-dark table-hover mb-0 align-middle">
@@ -33,9 +40,15 @@
                     <td>{{ entry.total_debit }}</td>
                     <td>{{ entry.total_credit }}</td>
                     <td>
+                        {% if can_change_journalentry %}
                         <a href="{% url 'journal_edit' entry.id %}" class="btn btn-sm btn-outline-light">تعديل</a>
+                        {% endif %}
+                        {% if can_copy_journalentry %}
                         <a href="{% url 'journal_copy' entry.id %}" class="btn btn-sm btn-outline-info">نسخ</a>
+                        {% endif %}
+                        {% if can_view_journalentry %}
                         <a href="{% url 'journal_pdf' entry.id %}" class="btn btn-sm btn-outline-secondary">طباعة</a>
+                        {% endif %}
                     </td>
                 </tr>
                 {% empty %}

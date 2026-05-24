@@ -1,4 +1,5 @@
 {% extends 'core/base.html' %}
+{% load permission_tags %}
 
 {% block title %}الموردين{% endblock %}
 
@@ -7,7 +8,10 @@
 
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2>الموردين</h2>
+        {% can_access request 'add_supplier' as can_add_supplier %}
+        {% if can_add_supplier %}
         <a href="{% url 'supplier_add' %}" class="btn btn-primary">إضافة مورد</a>
+        {% endif %}
     </div>
 
     <table class="table table-bordered table-striped">
@@ -31,10 +35,15 @@
                 <td>{{ supplier.address }}</td>
                 <td>{{ supplier.country }}</td>
                 <td>
-                    <a href="{% url 'supplier_detail' supplier.id %}" class="btn btn-sm btn-info">عرض</a>
-                    <a href="{% url 'supplier_edit' supplier.id %}" class="btn btn-sm btn-warning">تعديل</a>
+                    {% can_access request 'view_supplier' as can_view_supplier %}
+                    {% can_access request 'change_supplier' as can_change_supplier %}
+                    {% can_access request 'delete_supplier' as can_delete_supplier %}
+                    {% if can_view_supplier %}<a href="{% url 'supplier_detail' supplier.id %}" class="btn btn-sm btn-info">عرض</a>{% endif %}
+                    {% if can_change_supplier %}<a href="{% url 'supplier_edit' supplier.id %}" class="btn btn-sm btn-warning">تعديل</a>{% endif %}
+                    {% if can_delete_supplier %}
                     <a href="{% url 'supplier_delete' supplier.id %}" class="btn btn-sm btn-danger"
                        onclick="return confirm('هل أنت متأكد من الحذف؟')">حذف</a>
+                    {% endif %}
                 </td>
             </tr>
             {% empty %}

@@ -4,10 +4,16 @@ from django.db import models
 
 
 class Role(models.Model):
+    BRANCH_ACCESS_CHOICES = [
+        ("all", "كل فروع الشركة"),
+        ("single", "فرع واحد فقط"),
+    ]
+
     name = models.CharField(max_length=120, unique=True)
     description = models.TextField(blank=True)
     permissions = models.ManyToManyField(Permission, blank=True)
     requires_subscription = models.BooleanField(default=False)
+    branch_access = models.CharField(max_length=10, choices=BRANCH_ACCESS_CHOICES, default="all")
 
     def __str__(self):
         return self.name

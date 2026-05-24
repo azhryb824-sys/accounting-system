@@ -7,6 +7,7 @@ from django.db.models.functions import Coalesce
 from django.contrib import messages
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils import timezone
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import logout, login
@@ -15,9 +16,10 @@ from .forms import CompanyForm, CompanyJoinRequestForm, CompanySubscriptionReque
 from .services.accounting import create_balanced_entry
 from .services.monthly_close import assert_month_open
 from .services.payroll import approve_salary, pay_salary
+from .access import user_accessible_branches, user_can_access_branch
 from accounts.forms import UserRegistrationForm
 from accounts.models import Role, SubscriptionRequest, UserProfile
-from accounts.views import role_required
+from accounts.views import role_required, user_has_business_permission
 
 APP_VERSION = "2026-05-21-company-plan-fix-2"
 
@@ -54,9 +56,12 @@ def dashboard(request):
             return redirect('company_access')
         return redirect('select_company_branch')
 
+    company = Company.objects.filter(id=request.session.get('company_id')).first()
+    can_view_account = user_has_business_permission(request.user, 'view_account', company)
+    can_view_journal = user_has_business_permission(request.user, 'view_journalentry', company)
     context = {
-        "accounts_count": Account.objects.count(),
-        "entries_count": JournalEntry.objects.filter(branch_id=branch_id).count(),
+        "accounts_count": Account.objects.filter(company_id=request.session.get('company_id')).count() if can_view_account else 0,
+        "entries_count": JournalEntry.objects.filter(branch_id=branch_id).count() if can_view_journal else 0,
         "branch_name": request.session.get("branch_name"),
         "company_name": request.session.get("company_name"),
         "title": "ظ„ظˆط­ط© ط§ظ„طھط­ظƒظ…",
@@ -69,19 +74,26 @@ def dashboard(request):
     salaries = SalaryRecord.objects.filter(branch_id=branch_id)
     advances = EmployeeAdvance.objects.filter(branch_id=branch_id, status='open')
     today = timezone.localdate()
-    salary_total = salaries.aggregate(total=Coalesce(Sum('net_salary'), Decimal('0')))['total']
-    advances_total = advances.aggregate(total=Coalesce(Sum(F('amount') - F('paid_amount')), Decimal('0')))['total']
+    can_view_invoice = user_has_business_permission(request.user, 'view_invoice', company)
+    can_view_purchase = user_has_business_permission(request.user, 'view_purchaseinvoice', company)
+    can_view_item = user_has_business_permission(request.user, 'view_item', company)
+    can_view_salary = user_has_business_permission(request.user, 'view_salaryrecord', company)
+    can_view_advance = user_has_business_permission(request.user, 'view_employeeadvance', company)
+    salary_total = salaries.aggregate(total=Coalesce(Sum('net_salary'), Decimal('0')))['total'] if can_view_salary else Decimal('0')
+    advances_total = advances.aggregate(total=Coalesce(Sum(F('amount') - F('paid_amount')), Decimal('0')))['total'] if can_view_advance else Decimal('0')
+    sales_total = invoices.aggregate(total=Coalesce(Sum('total_with_vat'), Decimal('0')))['total'] if can_view_invoice else Decimal('0')
+    purchases_total = purchases.aggregate(total=Coalesce(Sum('total_with_vat'), Decimal('0')))['total'] if can_view_purchase else Decimal('0')
     context.update({
-        "invoices_count": invoices.count(),
-        "today_invoices_count": invoices.filter(issue_date__date=today).count(),
-        "sales_total": invoices.aggregate(total=Coalesce(Sum('total_with_vat'), Decimal('0')))['total'],
-        "purchases_total": purchases.aggregate(total=Coalesce(Sum('total_with_vat'), Decimal('0')))['total'],
+        "invoices_count": invoices.count() if can_view_invoice else 0,
+        "today_invoices_count": invoices.filter(issue_date__date=today).count() if can_view_invoice else 0,
+        "sales_total": sales_total,
+        "purchases_total": purchases_total,
         "salary_total": salary_total,
         "employee_advances_total": advances_total,
-        "operating_result": invoices.aggregate(total=Coalesce(Sum('total_amount'), Decimal('0')))['total'] - purchases.aggregate(total=Coalesce(Sum('total_before_vat'), Decimal('0')))['total'] - salary_total,
-        "inventory_value": items.aggregate(total=Coalesce(Sum(F('quantity') * F('cost')), Decimal('0')))['total'],
-        "low_stock_count": items.filter(quantity__lte=F('min_quantity'), is_active=True).count(),
-        "low_stock_items": items.filter(quantity__lte=F('min_quantity'), is_active=True).order_by('quantity')[:6],
+        "operating_result": sales_total - purchases_total - salary_total,
+        "inventory_value": items.aggregate(total=Coalesce(Sum(F('quantity') * F('cost')), Decimal('0')))['total'] if can_view_item else Decimal('0'),
+        "low_stock_count": items.filter(quantity__lte=F('min_quantity'), is_active=True).count() if can_view_item else 0,
+        "low_stock_items": items.filter(quantity__lte=F('min_quantity'), is_active=True).order_by('quantity')[:6] if can_view_item else [],
     })
     return render(request, 'core/dashboard.html', context)
 
@@ -91,6 +103,10 @@ def _user_companies(user):
         return Company.objects.all()
     member_company_ids = CompanyMembership.objects.filter(user=user, is_active=True).values_list('company_id', flat=True)
     return Company.objects.filter(Q(owner=user) | Q(id__in=member_company_ids)).distinct()
+
+
+def _user_branches(user):
+    return user_accessible_branches(user)
 
 # ============================
 #  Reports Center
@@ -103,6 +119,7 @@ def _date_range_from_request(request):
 
 
 @login_required(login_url='login')
+@role_required('view_journalentry')
 def reports_center(request):
     branch_id = request.session.get('branch_id')
     if not branch_id:
@@ -149,12 +166,13 @@ def reports_center(request):
 
 
 @login_required(login_url='login')
+@role_required('view_salaryrecord')
 def payroll_report(request):
     companies = _user_companies(request.user)
     selected_company_id = request.GET.get("company") or request.session.get("company_id")
     year = int(request.GET.get("year") or timezone.localdate().year)
     month = int(request.GET.get("month") or timezone.localdate().month)
-    salaries = SalaryRecord.objects.filter(company__in=companies, year=year, month=month).select_related("employee", "company", "branch", "accrual_entry", "payment_entry")
+    salaries = SalaryRecord.objects.filter(branch__in=_user_branches(request.user), year=year, month=month).select_related("employee", "company", "branch", "accrual_entry", "payment_entry")
     if selected_company_id:
         salaries = salaries.filter(company_id=selected_company_id)
     totals = salaries.aggregate(
@@ -177,9 +195,10 @@ def payroll_report(request):
 
 
 @login_required(login_url='login')
+@role_required('view_employeeadvance')
 def advance_report(request):
     companies = _user_companies(request.user)
-    advances = EmployeeAdvance.objects.filter(company__in=companies).select_related("employee", "company", "branch", "journal_entry")
+    advances = EmployeeAdvance.objects.filter(branch__in=_user_branches(request.user)).select_related("employee", "company", "branch", "journal_entry")
     status = request.GET.get("status") or ""
     if status:
         advances = advances.filter(status=status)
@@ -197,6 +216,7 @@ def advance_report(request):
 
 
 @login_required(login_url='login')
+@role_required('view_journalentry')
 def unposted_operations_report(request):
     branch_id = request.session.get('branch_id')
     if not branch_id:
@@ -273,9 +293,10 @@ def monthly_close_reopen(request, close_id):
 @role_required('view_employee')
 def employee_finance_dashboard(request):
     companies = _user_companies(request.user)
-    employees = Employee.objects.filter(company__in=companies)
-    salaries = SalaryRecord.objects.filter(company__in=companies)
-    advances = EmployeeAdvance.objects.filter(company__in=companies)
+    branches = _user_branches(request.user)
+    employees = Employee.objects.filter(branch__in=branches)
+    salaries = SalaryRecord.objects.filter(branch__in=branches)
+    advances = EmployeeAdvance.objects.filter(branch__in=branches)
     return render(request, 'core/employee_finance_dashboard.html', {
         "title": "ظ…ط§ظ„ظٹط© ط§ظ„ظ…ظˆط¸ظپظٹظ†",
         "employees_count": employees.count(),
@@ -290,7 +311,7 @@ def employee_finance_dashboard(request):
 @login_required(login_url='login')
 @role_required('view_employee')
 def employee_list(request):
-    employees = Employee.objects.filter(company__in=_user_companies(request.user)).select_related("company", "branch")
+    employees = Employee.objects.filter(branch__in=_user_branches(request.user)).select_related("company", "branch")
     return render(request, 'core/employee_list.html', {"title": "ط§ظ„ظ…ظˆط¸ظپظˆظ†", "employees": employees})
 
 
@@ -298,6 +319,7 @@ def employee_list(request):
 @role_required('add_employee')
 def employee_add(request):
     form = EmployeeForm(request.POST or None, companies=_user_companies(request.user))
+    form.fields["branch"].queryset = _user_branches(request.user)
     if request.method == "POST" and form.is_valid():
         form.save()
         messages.success(request, "طھظ… ط¥ط¶ط§ظپط© ط§ظ„ظ…ظˆط¸ظپ ط¨ظ†ط¬ط§ط­.")
@@ -308,8 +330,9 @@ def employee_add(request):
 @login_required(login_url='login')
 @role_required('change_employee')
 def employee_edit(request, employee_id):
-    employee = get_object_or_404(Employee, id=employee_id, company__in=_user_companies(request.user))
+    employee = get_object_or_404(Employee, id=employee_id, branch__in=_user_branches(request.user))
     form = EmployeeForm(request.POST or None, instance=employee, companies=_user_companies(request.user))
+    form.fields["branch"].queryset = _user_branches(request.user)
     if request.method == "POST" and form.is_valid():
         form.save()
         messages.success(request, "طھظ… طھط¹ط¯ظٹظ„ ط¨ظٹط§ظ†ط§طھ ط§ظ„ظ…ظˆط¸ظپ.")
@@ -320,7 +343,7 @@ def employee_edit(request, employee_id):
 @login_required(login_url='login')
 @role_required('view_salaryrecord')
 def salary_list(request):
-    salaries = SalaryRecord.objects.filter(company__in=_user_companies(request.user)).select_related("employee", "company").order_by("-year", "-month")
+    salaries = SalaryRecord.objects.filter(branch__in=_user_branches(request.user)).select_related("employee", "company").order_by("-year", "-month")
     return render(request, 'core/salary_list.html', {"title": "ط±ظˆط§طھط¨ ط§ظ„ظ…ظˆط¸ظپظٹظ†", "salaries": salaries})
 
 
@@ -328,6 +351,7 @@ def salary_list(request):
 @role_required('add_salaryrecord')
 def salary_add(request):
     form = SalaryRecordForm(request.POST or None, companies=_user_companies(request.user))
+    form.fields["employee"].queryset = Employee.objects.filter(branch__in=_user_branches(request.user), status='active')
     if request.method == "POST" and form.is_valid():
         salary = form.save(commit=False)
         payment_date = salary.payment_date or timezone.localdate()
@@ -344,7 +368,7 @@ def salary_add(request):
             return render(request, 'core/salary_form.html', {"title": "ط·آ¥ط·آ¶ط·آ§ط¸ظ¾ط·آ© ط·آ±ط·آ§ط·ع¾ط·آ¨", "form": form})
         messages.success(request, "ط·ع¾ط¸â€¦ ط·آ­ط¸ظ¾ط·آ¸ ط¸â€¦ط·آ³ط¸ظ¹ط·آ± ط·آ§ط¸â€‍ط·آ±ط·آ§ط·ع¾ط·آ¨.")
         return redirect("salary_list")
-    employees = Employee.objects.filter(company__in=_user_companies(request.user), status='active')
+    employees = Employee.objects.filter(branch__in=_user_branches(request.user), status='active')
     salary_defaults = {}
     for employee in employees:
         open_advances = EmployeeAdvance.objects.filter(employee=employee, status='open').aggregate(
@@ -365,7 +389,7 @@ def salary_add(request):
 @login_required(login_url='login')
 @role_required('change_salaryrecord')
 def salary_approve(request, salary_id):
-    salary = get_object_or_404(SalaryRecord, id=salary_id, company__in=_user_companies(request.user))
+    salary = get_object_or_404(SalaryRecord, id=salary_id, branch__in=_user_branches(request.user))
     if request.method == "POST":
         try:
             entry = approve_salary(salary)
@@ -378,7 +402,7 @@ def salary_approve(request, salary_id):
 @login_required(login_url='login')
 @role_required('change_salaryrecord')
 def salary_pay(request, salary_id):
-    salary = get_object_or_404(SalaryRecord, id=salary_id, company__in=_user_companies(request.user))
+    salary = get_object_or_404(SalaryRecord, id=salary_id, branch__in=_user_branches(request.user))
     if request.method == "POST":
         try:
             entry = pay_salary(salary)
@@ -391,7 +415,7 @@ def salary_pay(request, salary_id):
 @login_required(login_url='login')
 @role_required('view_employeeadvance')
 def advance_list(request):
-    advances = EmployeeAdvance.objects.filter(company__in=_user_companies(request.user)).select_related("employee", "company")
+    advances = EmployeeAdvance.objects.filter(branch__in=_user_branches(request.user)).select_related("employee", "company")
     return render(request, 'core/advance_list.html', {"title": "ط³ظ„ظپ ط§ظ„ظ…ظˆط¸ظپظٹظ†", "advances": advances})
 
 
@@ -399,6 +423,7 @@ def advance_list(request):
 @role_required('add_employeeadvance')
 def advance_add(request):
     form = EmployeeAdvanceForm(request.POST or None, companies=_user_companies(request.user))
+    form.fields["employee"].queryset = Employee.objects.filter(branch__in=_user_branches(request.user), status='active')
     if request.method == "POST" and form.is_valid():
         advance = form.save(commit=False)
         assert_month_open(advance.employee.company, advance.date)
@@ -420,6 +445,7 @@ def advance_add(request):
 
 
 @login_required(login_url='login')
+@role_required('view_invoice')
 def export_sales_csv(request):
     branch_id = request.session.get('branch_id')
     if not branch_id:
@@ -483,6 +509,7 @@ def signup(request):
 #  Accounts
 # ============================
 @login_required(login_url='login')
+@role_required('view_account')
 def accounts_list(request):
     accounts = Account.objects.all().order_by('code') # _("Accounts List")
     return render(request, 'core/accounts_list.html', {"accounts": accounts, "title": "ط¯ظ„ظٹظ„ ط§ظ„ط­ط³ط§ط¨ط§طھ"})
@@ -492,6 +519,7 @@ def accounts_list(request):
 #  Journal Entries List
 # ============================
 @login_required(login_url='login')
+@role_required('view_journalentry')
 def journal_list(request):
     branch_id = request.session.get('branch_id') # _("Journal Entries List")
     entries = JournalEntry.objects.filter(branch_id=branch_id).order_by('-date', '-id') # _("Journal Entries List")
@@ -541,6 +569,7 @@ def journal_add(request):
 #  Edit Journal Entry
 # ============================
 @login_required(login_url='login')
+@role_required('change_journalentry')
 def journal_edit(request, pk):
     branch_id = request.session.get('branch_id')
     entry = get_object_or_404(JournalEntry, pk=pk, branch_id=branch_id)
@@ -577,6 +606,8 @@ def journal_edit(request, pk):
 def company_add(request):
     if request.method == 'POST':
         form = CompanySubscriptionRequestForm(request.POST, request.FILES)
+        if request.user.is_superuser:
+            form.fields["requested_role"].queryset = Role.objects.all()
         if form.is_valid():
             plan = form.cleaned_data.get("plan")
             if not plan:
@@ -630,6 +661,8 @@ def company_add(request):
             return redirect('company_list')
     else:
         form = CompanySubscriptionRequestForm()
+    if request.user.is_superuser:
+        form.fields["requested_role"].queryset = Role.objects.all()
 
     return render(request, 'core/company_form.html', {
         "form": form, "title": "ط¥ط¶ط§ظپط© ط´ط±ظƒط©"
@@ -654,10 +687,12 @@ def company_access(request):
 
 @login_required(login_url='login')
 def company_join_request(request):
-    form = CompanyJoinRequestForm(request.POST or None)
     found_company = None
+    if request.method == "POST":
+        unified_number = request.POST.get("unified_number")
+        found_company = Company.objects.filter(unified_number=unified_number).select_related("owner").first()
+    form = CompanyJoinRequestForm(request.POST or None, company=found_company)
     if request.method == "POST" and form.is_valid():
-        found_company = Company.objects.filter(unified_number=form.cleaned_data["unified_number"]).select_related("owner").first()
         if not found_company:
             form.add_error("unified_number", "ظ„ط§ طھظˆط¬ط¯ ط´ط±ظƒط© ط¨ظ‡ط°ط§ ط§ظ„ط±ظ‚ظ… ط§ظ„ظ…ظˆط­ط¯.")
         elif found_company.owner_id == request.user.id or CompanyMembership.objects.filter(user=request.user, company=found_company, is_active=True).exists():
@@ -670,6 +705,7 @@ def company_join_request(request):
                 status="pending",
                 defaults={
                     "requested_role": form.cleaned_data.get("requested_role"),
+                    "requested_branch": form.cleaned_data.get("requested_branch"),
                     "note": form.cleaned_data.get("note", ""),
                 }
             )
@@ -680,7 +716,7 @@ def company_join_request(request):
 
 @login_required(login_url='login')
 def company_join_requests(request):
-    requests = CompanyJoinRequest.objects.filter(company__owner=request.user, status="pending").select_related("user", "company", "requested_role").order_by("-created_at")
+    requests = CompanyJoinRequest.objects.filter(company__owner=request.user, status="pending").select_related("user", "company", "requested_role", "requested_branch").order_by("-created_at")
     return render(request, 'core/company_join_requests.html', {"requests": requests, "title": "ط·ظ„ط¨ط§طھ ط§ظ„ط§ظ†ط¶ظ…ط§ظ… ظ„ظ„ط´ط±ظƒط§طھ"})
 
 
@@ -700,7 +736,7 @@ def company_join_review(request, request_id, decision):
         CompanyMembership.objects.update_or_create(
             user=join_request.user,
             company=join_request.company,
-            defaults={"role": join_request.requested_role or join_request.company.owner_role, "is_active": True},
+            defaults={"role": join_request.requested_role or join_request.company.owner_role, "branch": join_request.requested_branch, "is_active": True},
         )
         messages.success(request, "طھظ… ظ‚ط¨ظˆظ„ ط·ظ„ط¨ ط§ظ„ط§ظ†ط¶ظ…ط§ظ… ظˆط±ط¨ط· ط§ظ„ظ…ط³طھط®ط¯ظ… ط¨ط§ظ„ط´ط±ظƒط©.")
     else:
@@ -715,7 +751,7 @@ def company_join_review(request, request_id, decision):
 #  Branches
 # ============================
 def branch_list(request):
-    branches = Branch.objects.select_related('company').all()
+    branches = _user_branches(request.user).select_related('company')
     return render(request, 'core/branch_list.html', {"branches": branches, "title": "ط§ظ„ظپط±ظˆط¹"})
 
 @login_required(login_url='login')
@@ -723,11 +759,13 @@ def branch_list(request):
 def branch_add(request):
     if request.method == 'POST':
         form = BranchForm(request.POST) # _("Add Branch")
+        form.fields['company'].queryset = _user_companies(request.user)
         if form.is_valid():
             form.save()
             return redirect('branch_list')
     else:
         form = BranchForm()
+        form.fields['company'].queryset = _user_companies(request.user)
 
     return render(request, 'core/branch_form.html', {
         "form": form, "title": "ط¥ط¶ط§ظپط© ظپط±ط¹"
@@ -736,15 +774,17 @@ def branch_add(request):
 @login_required(login_url='login')
 
 def branch_edit(request, id):
-    branch = get_object_or_404(Branch, id=id)
+    branch = get_object_or_404(_user_branches(request.user), id=id)
 
     if request.method == 'POST':
         form = BranchForm(request.POST, instance=branch)
+        form.fields['company'].queryset = _user_companies(request.user)
         if form.is_valid():
             form.save()
             return redirect('branch_list') # _("Edit Branch")
     else:
         form = BranchForm(instance=branch)
+        form.fields['company'].queryset = _user_companies(request.user)
 
     return render(request, 'core/branch_form.html', {
         "form": form,
@@ -753,7 +793,7 @@ def branch_edit(request, id):
 
 
 def branch_delete(request, id):
-    branch = get_object_or_404(Branch, id=id)
+    branch = get_object_or_404(_user_branches(request.user), id=id)
     branch.delete()
     return redirect('branch_list')
 
@@ -766,15 +806,21 @@ def select_company_branch(request): # _("Select Company and Branch")
     companies = _user_companies(request.user)
     if not companies.exists():
         return redirect('company_access')
-    branches = Branch.objects.filter(company__in=companies)
+    branches = user_accessible_branches(request.user).filter(company__in=companies)
 
     if request.method == "POST":
         company_id = request.POST.get("company_id")
         branch_id = request.POST.get("branch_id")
+        next_url = request.POST.get("next") or request.META.get("HTTP_REFERER") or "dashboard"
+        if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+            next_url = "dashboard"
 
-        company = get_object_or_404(Company, id=company_id)
+        company = get_object_or_404(companies, id=company_id)
         # ط§ظ„طھط£ظƒط¯ ظ…ظ† ط£ظ† ط§ظ„ظپط±ط¹ ظٹطھط¨ط¹ ظ„ظ„ط´ط±ظƒط© ط§ظ„ظ…ط®طھط§ط±ط©
-        branch = get_object_or_404(Branch, id=branch_id, company=company)
+        branch = get_object_or_404(branches, id=branch_id, company=company)
+        if not user_can_access_branch(request.user, branch):
+            messages.error(request, "لا تملك صلاحية الوصول إلى هذا الفرع.")
+            return redirect("select_company_branch")
 
         request.session['company_id'] = company.id
         request.session['company_name'] = company.name
@@ -782,7 +828,7 @@ def select_company_branch(request): # _("Select Company and Branch")
         request.session['branch_id'] = branch.id
         request.session['branch_name'] = branch.name
 
-        return redirect('dashboard')
+        return redirect(next_url)
 
     return render(request, 'core/select_company_branch.html', {
         "companies": companies.order_by('name'),
@@ -792,6 +838,7 @@ def select_company_branch(request): # _("Select Company and Branch")
 
 
 @login_required(login_url='login')
+@role_required('add_journalentry')
 # ============================
 #  Copy Journal Entry
 # ============================
@@ -817,6 +864,7 @@ def journal_copy(request, pk):
 
 
 @login_required(login_url='login')
+@role_required('view_journalentry')
 # ============================
 #  Journal PDF
 # ============================
@@ -825,6 +873,7 @@ def journal_pdf(request, pk):
     return render(request, "core/journal_pdf.html", {"entry": entry, "title": "ط·ط¨ط§ط¹ط© ط§ظ„ظ‚ظٹط¯"})
 
 @login_required(login_url='login')
+@role_required('add_account')
 def account_add(request):
     if request.method == "POST":
         form = AccountForm(request.POST)

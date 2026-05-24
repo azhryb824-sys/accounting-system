@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from core.models import Branch, Company
 from invoicing.models import Customer, Invoice, InvoiceItem, Item, PurchaseInvoice, PurchaseItem, Supplier, Tax
-from invoicing.ai_services import handle_ai_management_command
+from invoicing.ai_services import analyze_and_route_user_request, answer_financial_question, handle_ai_management_command
 from invoicing.purchase_views import post_purchase_invoice
 from invoicing.views import post_sales_invoice
 
@@ -59,6 +59,65 @@ class InvoiceAccountingTests(TestCase):
 
         self.assertIsNone(second.get("pending"))
         self.assertTrue(Item.objects.filter(branch=self.branch, name="قلم").exists())
+
+    def test_ai_management_command_can_create_employee_and_advance(self):
+        employee_result = handle_ai_management_command(self.branch.id, "أضف موظف باسم أحمد براتب 5000")
+        self.assertIsNone(employee_result.get("pending"))
+        self.assertTrue(employee_result["ok"])
+        self.assertTrue(self.company.employees.filter(name__icontains="أحمد").exists())
+
+        advance_result = handle_ai_management_command(self.branch.id, "أضف سلفة للموظف أحمد بمبلغ 700")
+
+        self.assertIsNone(advance_result.get("pending"))
+        self.assertTrue(self.company.employee_advances.filter(amount=Decimal("700")).exists())
+
+    def test_ai_can_answer_precise_sales_invoice_details(self):
+        customer = Customer.objects.create(name="Customer")
+        invoice = Invoice.objects.create(
+            branch=self.branch,
+            invoice_number="S-DETAIL-1",
+            invoice_type="standard",
+            customer=customer,
+            total_amount=Decimal("100.00"),
+            total_vat=Decimal("15.00"),
+            total_with_vat=Decimal("115.00"),
+            payment_method="نقدي",
+        )
+        InvoiceItem.objects.create(
+            branch=self.branch,
+            invoice=invoice,
+            item=self.item,
+            description="Item",
+            quantity=Decimal("2.00"),
+            unit_price=Decimal("50.00"),
+            tax=self.tax,
+            line_total=Decimal("100.00"),
+            line_vat=Decimal("15.00"),
+            line_total_with_vat=Decimal("115.00"),
+        )
+
+        result = answer_financial_question(self.branch.id, "ما تفاصيل فاتورة بيع S-DETAIL-1؟")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "accounting_data")
+        self.assertIn("S-DETAIL-1", result["answer"])
+        self.assertIn("115.00", result["answer"])
+
+    def test_ai_pos_checkout_requires_confirmation_then_posts_accounting(self):
+        draft = analyze_and_route_user_request(self.branch.id, "بيع 2 Item كاشير", user=self.user)
+
+        self.assertTrue(draft["ok"])
+        self.assertIsNotNone(draft.get("pending"))
+        self.assertEqual(Invoice.objects.count(), 0)
+
+        confirmed = analyze_and_route_user_request(self.branch.id, "تأكيد", pending=draft["pending"], user=self.user)
+
+        self.assertTrue(confirmed["ok"])
+        invoice = Invoice.objects.get(invoice_number__startswith="AI-POS-")
+        self.assertTrue(invoice.is_posted)
+        self.assertIsNotNone(invoice.journal_entry_id)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.quantity, Decimal("8.00"))
 
     def test_sales_invoice_posts_once_and_reduces_inventory_once(self):
         customer = Customer.objects.create(name="Customer")

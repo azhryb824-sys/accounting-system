@@ -64,6 +64,7 @@ def post_sales_invoice(invoice):
 
 
 @login_required(login_url='login')
+@role_required('change_invoice')
 def post_invoice(request, pk):
     invoice = get_object_or_404(Invoice, pk=pk)
     if invoice.is_posted:
@@ -85,6 +86,7 @@ def post_invoice(request, pk):
 
 
 @login_required(login_url='login')
+@role_required('view_invoice')
 def invoice_list(request):
     branch_id = request.session.get('branch_id')
     invoices = Invoice.objects.filter(branch_id=branch_id).order_by('-issue_date')
@@ -92,6 +94,7 @@ def invoice_list(request):
 
 
 @login_required(login_url='login')
+@role_required('view_invoice')
 def invoice_detail(request, id):
     invoice = get_object_or_404(Invoice, id=id)
     items = InvoiceItem.objects.filter(invoice=invoice)
@@ -107,6 +110,7 @@ def invoice_detail(request, id):
 
 
 @login_required(login_url='login')
+@role_required('add_invoice')
 def invoice_create(request):
     branch_id = request.session.get('branch_id')
     if request.method == 'POST':
@@ -169,6 +173,7 @@ def invoice_create(request):
 
 
 @login_required(login_url='login')
+@role_required('add_invoice')
 def pos_terminal(request):
     branch = _selected_branch(request)
     if not branch:
@@ -184,12 +189,14 @@ def pos_terminal(request):
 
 
 @login_required(login_url='login')
+@role_required('view_customer')
 def customer_list(request):
     customers = Customer.objects.all()
     return render(request, 'invoicing/customer_list.html', {"customers": customers, "title": _("Customers List")})
 
 
 @login_required(login_url='login')
+@role_required('view_purchaseinvoice')
 def purchase_list(request):
     from .models import PurchaseInvoice
 
@@ -199,6 +206,7 @@ def purchase_list(request):
 
 
 @login_required(login_url='login')
+@role_required('add_purchaseinvoice')
 def purchase_add(request):
     return render(request, 'invoicing/purchase_form.html', {"title": _("Add Purchase Invoice")})
 
@@ -212,12 +220,14 @@ def inventory_list(request):
 
 
 @login_required(login_url='login')
+@role_required('view_tax')
 def tax_list(request):
     taxes = Tax.objects.all()
     return render(request, 'invoicing/tax_list.html', {"taxes": taxes, "title": _("Tax Settings")})
 
 
 @login_required(login_url='login')
+@role_required('view_invoice')
 def zatca_dashboard(request):
     branch_id = request.session.get('branch_id')
     invoices = Invoice.objects.filter(branch_id=branch_id).order_by('-issue_date')[:50]
@@ -234,6 +244,7 @@ def zatca_dashboard(request):
 
 
 @login_required(login_url='login')
+@role_required('add_invoice')
 def product_lookup(request):
     branch = _selected_branch(request)
     if not branch:
@@ -264,6 +275,7 @@ def product_lookup(request):
 
 
 @login_required(login_url='login')
+@role_required('add_invoice')
 def pos_checkout(request):
     if request.method != "POST":
         return JsonResponse({"ok": False, "message": _("POST is required.")}, status=405)

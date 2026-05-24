@@ -1,13 +1,20 @@
 {% extends 'core/base.html' %}
+{% load permission_tags %}
 
 {% block title %}فواتير الشراء{% endblock %}
 
 {% block content %}
 <div class="container mt-4">
+    {% can_access request 'view_journalentry' as can_view_journalentry %}
+    {% can_access request 'change_purchaseinvoice' as can_change_purchase %}
+    {% can_access request 'delete_purchaseinvoice' as can_delete_purchase %}
 
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2>فواتير الشراء</h2>
+        {% can_access request 'add_purchaseinvoice' as can_add_purchase %}
+        {% if can_add_purchase %}
         <a href="{% url 'purchase_add' %}" class="btn btn-primary">إضافة فاتورة شراء</a>
+        {% endif %}
     </div>
 
     <table class="table table-bordered table-striped">
@@ -31,12 +38,16 @@
                 <td>{{ p.issue_date }}</td>
                 <td>{{ p.total_with_vat }}</td>
                 <td>
-                    {% if p.journal_entry %}
+                    {% if can_view_journalentry and p.journal_entry %}
                     <a href="{% url 'journal_edit' p.journal_entry.id %}" class="btn btn-sm btn-info">القيد</a>
                     {% endif %}
+                    {% if can_change_purchase %}
                     <a href="{% url 'purchase_edit' p.id %}" class="btn btn-sm btn-warning">تعديل</a>
+                    {% endif %}
+                    {% if can_delete_purchase %}
                     <a href="{% url 'purchase_delete' p.id %}" class="btn btn-sm btn-danger"
                        onclick="return confirm('هل أنت متأكد من الحذف؟')">حذف</a>
+                    {% endif %}
                 </td>
             </tr>
             {% empty %}

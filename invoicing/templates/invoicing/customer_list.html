@@ -1,4 +1,5 @@
 {% extends 'core/base.html' %}
+{% load permission_tags %}
 
 {% block title %}العملاء{% endblock %}
 
@@ -7,7 +8,10 @@
 
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2>العملاء</h2>
+        {% can_access request 'add_customer' as can_add_customer %}
+        {% if can_add_customer %}
         <a href="{% url 'customer_add' %}" class="btn btn-primary">إضافة عميل</a>
+        {% endif %}
     </div>
 
     <table class="table table-bordered table-striped">
@@ -31,10 +35,15 @@
                 <td>{{ customer.address }}</td>
                 <td>{{ customer.country }}</td>
                 <td>
-                    <a href="{% url 'customer_detail' customer.id %}" class="btn btn-sm btn-info">عرض</a>
-                    <a href="{% url 'customer_edit' customer.id %}" class="btn btn-sm btn-warning">تعديل</a>
+                    {% can_access request 'view_customer' as can_view_customer %}
+                    {% can_access request 'change_customer' as can_change_customer %}
+                    {% can_access request 'delete_customer' as can_delete_customer %}
+                    {% if can_view_customer %}<a href="{% url 'customer_detail' customer.id %}" class="btn btn-sm btn-info">عرض</a>{% endif %}
+                    {% if can_change_customer %}<a href="{% url 'customer_edit' customer.id %}" class="btn btn-sm btn-warning">تعديل</a>{% endif %}
+                    {% if can_delete_customer %}
                     <a href="{% url 'customer_delete' customer.id %}" class="btn btn-sm btn-danger"
                        onclick="return confirm('هل أنت متأكد من الحذف؟')">حذف</a>
+                    {% endif %}
                 </td>
             </tr>
             {% empty %}

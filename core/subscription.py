@@ -62,7 +62,8 @@ class CompanySubscriptionRequiredMiddleware:
             and not request.user.is_superuser
             and url_name not in SUBSCRIPTION_EXEMPT_URL_NAMES
         ):
-            from .models import CompanyMembership
+            from .access import user_can_access_branch
+            from .models import Branch, CompanyMembership
 
             user_company_ids = set(CompanyMembership.objects.filter(user=request.user, is_active=True).values_list("company_id", flat=True))
             owned_company_ids = set(request.user.owned_companies.values_list("id", flat=True))
@@ -86,4 +87,11 @@ class CompanySubscriptionRequiredMiddleware:
                 if company and not company.has_active_subscription():
                     messages.warning(request, "لا يمكن استخدام ميزات الشركة قبل وجود اشتراك سارٍ.")
                     return redirect("company_add")
+            branch_id = request.session.get("branch_id")
+            branch = Branch.objects.filter(id=branch_id, company_id=company_id).select_related("company").first() if branch_id and company_id else None
+            if not branch or not user_can_access_branch(request.user, branch):
+                request.session.pop("branch_id", None)
+                request.session.pop("branch_name", None)
+                messages.warning(request, "اختر فرعا مصرحا لحسابك قبل متابعة العمل.")
+                return redirect("select_company_branch")
         return self.get_response(request)

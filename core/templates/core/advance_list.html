@@ -6,6 +6,7 @@
 
 {% block content %}
 {% can_access request 'add_employeeadvance' as can_add_advance %}
+{% can_access request 'view_journalentry' as can_view_journalentry %}
 <div class="container-fluid">
     <div class="d-flex justify-content-between mb-3">
         <a class="btn btn-outline-light" href="{% url 'advance_report' %}">كشف السلف</a>
@@ -16,7 +17,7 @@
             <thead><tr><th>الموظف</th><th>التاريخ</th><th>المبلغ</th><th>المسدد</th><th>المتبقي</th><th>الحالة</th><th>القيد</th></tr></thead>
             <tbody>
             {% for advance in advances %}
-            <tr><td>{{ advance.employee.name }}</td><td>{{ advance.date|date:"Y-m-d" }}</td><td>{{ advance.amount }}</td><td>{{ advance.paid_amount }}</td><td>{{ advance.remaining_amount }}</td><td>{{ advance.get_status_display }}</td><td>{% if advance.journal_entry %}<a class="btn btn-sm btn-outline-info" href="{% url 'journal_edit' advance.journal_entry.id %}">عرض القيد</a>{% else %}<span class="text-warning">غير مرحل</span>{% endif %}</td></tr>
+            <tr><td>{{ advance.employee.name }}</td><td>{{ advance.date|date:"Y-m-d" }}</td><td>{{ advance.amount }}</td><td>{{ advance.paid_amount }}</td><td>{{ advance.remaining_amount }}</td><td>{{ advance.get_status_display }}</td><td>{% if can_view_journalentry and advance.journal_entry %}<a class="btn btn-sm btn-outline-info" href="{% url 'journal_edit' advance.journal_entry.id %}">عرض القيد</a>{% elif not advance.journal_entry %}<span class="text-warning">غير مرحل</span>{% else %}-{% endif %}</td></tr>
             {% empty %}<tr><td colspan="7" class="text-center py-5 text-muted">لا توجد سلف.</td></tr>{% endfor %}
             </tbody>
         </table>

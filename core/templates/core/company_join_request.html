@@ -18,6 +18,12 @@
             {{ form.requested_role }}
             {{ form.requested_role.errors }}
         </div>
+        <div class="col-md-3">
+            <label class="form-label" for="{{ form.requested_branch.id_for_label }}">{{ form.requested_branch.label }}</label>
+            {{ form.requested_branch }}
+            {{ form.requested_branch.errors }}
+            <div class="form-text text-muted-soft">{{ form.requested_branch.help_text }}</div>
+        </div>
         <div class="col-md-3 d-flex align-items-end">
             <button class="btn btn-outline-light w-100" type="submit" name="lookup"><i class="fa-solid fa-magnifying-glass"></i> بحث</button>
         </div>

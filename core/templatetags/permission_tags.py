@@ -10,18 +10,20 @@ def can_access(request, permission_codename):
         return False
     if user.is_superuser:
         return True
-    if user.has_perm(f"invoicing.{permission_codename}") or user.has_perm(f"core.{permission_codename}"):
-        return True
 
     profile = getattr(user, "profile", None)
     company_id = request.session.get("company_id")
-    if not profile or not company_id:
+    company = None
+    if company_id:
+        from core.models import Company
+        company = Company.objects.filter(id=company_id).select_related("active_plan").first()
+
+    from accounts.views import user_has_business_permission
+    if user_has_business_permission(user, permission_codename, company):
+        return True
+    if not profile or not company:
         return False
-
-    from core.models import Company
-
-    company = Company.objects.filter(id=company_id).select_related("active_plan").first()
-    if not company or not company.has_active_subscription():
+    if not company.has_active_subscription():
         return False
 
     role_has_permission = (

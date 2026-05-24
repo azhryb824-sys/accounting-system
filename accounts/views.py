@@ -46,6 +46,34 @@ def has_admin_permission(user, permission):
 def admin_permission_required(permission):
     return user_passes_test(lambda user: has_admin_permission(user, permission))
 
+def user_has_business_permission(user, permission_codename, company=None):
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    if (
+        user.has_perm(f"invoicing.{permission_codename}")
+        or user.has_perm(f"core.{permission_codename}")
+        or user.has_perm(f"accounts.{permission_codename}")
+    ):
+        return True
+
+    profile = getattr(user, "profile", None)
+    if not profile:
+        return False
+    role_has_permission = (
+        profile.role
+        and profile.role.permissions.filter(codename=permission_codename).exists()
+    )
+    plan_has_permission = (
+        company
+        and company.has_active_subscription()
+        and company.active_plan
+        and company.active_plan.permissions.filter(codename=permission_codename).exists()
+    )
+    return bool(role_has_permission or plan_has_permission)
+
+
 def role_required(permission_codename):
     """
     تحقق مما إذا كان دور المستخدم يحتوي على صلاحية معينة (بناءً على الكود الخاص بها)
@@ -53,23 +81,13 @@ def role_required(permission_codename):
     def decorator(view_func):
         @wraps(view_func)
         def _wrapped_view(request, *args, **kwargs):
-            if request.user.is_superuser:
-                return view_func(request, *args, **kwargs)
-            
-            profile = getattr(request.user, 'profile', None)
             branch_company = None
             company_id = request.session.get("company_id")
             if company_id:
                 from core.models import Company
                 branch_company = Company.objects.filter(id=company_id).first()
-            if profile and profile.role and branch_company and branch_company.has_active_subscription():
-                role_has_permission = profile.role.permissions.filter(codename=permission_codename).exists()
-                plan_has_permission = (
-                    branch_company.active_plan
-                    and branch_company.active_plan.permissions.filter(codename=permission_codename).exists()
-                )
-                if role_has_permission or plan_has_permission:
-                    return view_func(request, *args, **kwargs)
+            if user_has_business_permission(request.user, permission_codename, branch_company):
+                return view_func(request, *args, **kwargs)
             
             raise PermissionDenied
         return _wrapped_view

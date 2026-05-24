@@ -7,6 +7,7 @@
 {% block content %}
 {% can_access request 'add_salaryrecord' as can_add_salary %}
 {% can_access request 'change_salaryrecord' as can_change_salary %}
+{% can_access request 'view_journalentry' as can_view_journalentry %}
 <div class="container-fluid">
     <div class="d-flex justify-content-between mb-3">
         <a class="btn btn-outline-light" href="{% url 'payroll_report' %}">كشف الرواتب</a>
@@ -19,7 +20,7 @@
             {% for salary in salaries %}
             <tr>
                 <td>{{ salary.employee.name }}</td><td>{{ salary.period_label }}</td><td>{{ salary.basic_salary }}</td><td>{{ salary.allowances }}</td><td>{{ salary.deductions }}</td><td>{{ salary.advances_deduction }}</td><td>{{ salary.net_salary }}</td><td>{{ salary.get_status_display }}</td>
-                <td>{% if salary.accrual_entry %}<a class="btn btn-sm btn-outline-info" href="{% url 'journal_edit' salary.accrual_entry.id %}">استحقاق</a>{% endif %} {% if salary.payment_entry %}<a class="btn btn-sm btn-outline-success" href="{% url 'journal_edit' salary.payment_entry.id %}">دفع</a>{% endif %}</td>
+                <td>{% if can_view_journalentry and salary.accrual_entry %}<a class="btn btn-sm btn-outline-info" href="{% url 'journal_edit' salary.accrual_entry.id %}">استحقاق</a>{% endif %} {% if can_view_journalentry and salary.payment_entry %}<a class="btn btn-sm btn-outline-success" href="{% url 'journal_edit' salary.payment_entry.id %}">دفع</a>{% endif %}</td>
                 <td>
                     {% if can_change_salary and not salary.accrual_entry %}<form class="d-inline" method="post" action="{% url 'salary_approve' salary.id %}">{% csrf_token %}<button class="btn btn-sm btn-warning">اعتماد</button></form>{% endif %}
                     {% if can_change_salary and salary.accrual_entry and not salary.payment_entry %}<form class="d-inline" method="post" action="{% url 'salary_pay' salary.id %}">{% csrf_token %}<button class="btn btn-sm btn-success">دفع</button></form>{% endif %}

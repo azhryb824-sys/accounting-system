@@ -1,4 +1,5 @@
 {% extends 'core/base.html' %}
+{% load permission_tags %}
 
 {% block title %}الضرائب{% endblock %}
 
@@ -7,7 +8,10 @@
 
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2>الضرائب</h2>
+        {% can_access request 'add_tax' as can_add_tax %}
+        {% if can_add_tax %}
         <a href="{% url 'tax_create' %}" class="btn btn-primary">إضافة ضريبة</a>
+        {% endif %}
     </div>
 
     <table class="table table-bordered table-striped">
@@ -27,9 +31,15 @@
                 <td>{{ tax.name }}</td>
                 <td>{{ tax.rate }}%</td>
                 <td>
+                    {% can_access request 'change_tax' as can_change_tax %}
+                    {% can_access request 'delete_tax' as can_delete_tax %}
+                    {% if can_change_tax %}
                     <a href="{% url 'tax_edit' tax.id %}" class="btn btn-sm btn-warning">تعديل</a>
+                    {% endif %}
+                    {% if can_delete_tax %}
                     <a href="{% url 'tax_delete' tax.id %}" class="btn btn-sm btn-danger"
                        onclick="return confirm('هل أنت متأكد من الحذف؟')">حذف</a>
+                    {% endif %}
                 </td>
             </tr>
             {% empty %}

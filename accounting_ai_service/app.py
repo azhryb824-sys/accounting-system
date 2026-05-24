@@ -16,7 +16,7 @@ app = FastAPI(
 
 class QuestionRequest(BaseModel):
     question: str = Field(..., min_length=1, description="السؤال المطلوب إجابته.")
-    max_new_tokens: int = Field(240, ge=20, le=900, description="الحد الأعلى لطول الإجابة.")
+    max_new_tokens: int = Field(420, ge=20, le=1800, description="الحد الأعلى لطول الإجابة.")
     image_base64: str | None = Field(None, description="صورة أو ملف فاتورة مشفر Base64.")
     media_type: str | None = Field(None, description="نوع الملف المرفق مثل image/jpeg أو application/pdf.")
 

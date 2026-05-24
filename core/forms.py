@@ -47,7 +47,7 @@ class CompanyForm(forms.ModelForm):
 class CompanySubscriptionRequestForm(CompanyForm):
     requested_role = forms.ModelChoiceField(
         label='دورك داخل الشركة',
-        queryset=Role.objects.all(),
+        queryset=Role.objects.filter(requires_subscription=True),
         required=False,
         widget=forms.Select(attrs={'class': 'form-select'}),
         help_text='اتركه فارغًا ليتم تعيينك كمالك الشركة.'
@@ -83,15 +83,35 @@ class CompanyJoinRequestForm(forms.Form):
     )
     requested_role = forms.ModelChoiceField(
         label='الدور المطلوب داخل الشركة',
-        queryset=Role.objects.all(),
+        queryset=Role.objects.filter(requires_subscription=True),
         required=False,
         widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    requested_branch = forms.ModelChoiceField(
+        label='الفرع المطلوب',
+        queryset=Branch.objects.none(),
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        help_text='يجب تحديد الفرع إذا كان الدور يسمح بفرع واحد فقط.'
     )
     note = forms.CharField(
         label='ملاحظة',
         required=False,
         widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'اختياري'})
     )
+
+    def __init__(self, *args, company=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if company is not None:
+            self.fields['requested_branch'].queryset = Branch.objects.filter(company=company, is_active=True)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        role = cleaned_data.get('requested_role')
+        branch = cleaned_data.get('requested_branch')
+        if role and role.branch_access == 'single' and not branch:
+            self.add_error('requested_branch', 'يجب اختيار الفرع لأن هذا الدور مقيد بفرع واحد فقط.')
+        return cleaned_data
 
 
 class BranchForm(forms.ModelForm):

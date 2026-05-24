@@ -1,4 +1,5 @@
 {% extends 'core/base.html' %}
+{% load permission_tags %}
 
 {% block title %}قائمة الفواتير{% endblock %}
 
@@ -7,7 +8,10 @@
 
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2>قائمة الفواتير</h2>
+        {% can_access request 'add_invoice' as can_add_invoice %}
+        {% if can_add_invoice %}
         <a href="{% url 'invoice_create' %}" class="btn btn-primary">إنشاء فاتورة جديدة</a>
+        {% endif %}
     </div>
 
     <table class="table table-striped table-bordered">

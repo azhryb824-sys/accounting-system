@@ -27,6 +27,12 @@
                         <button class="btn btn-outline-light" type="button" id="voice-stop" disabled>
                             <i class="fa-solid fa-microphone-slash"></i> إيقاف
                         </button>
+                        <button class="btn btn-outline-light" type="button" id="camera-open">
+                            <i class="fa-solid fa-camera"></i> الكاميرا
+                        </button>
+                        <button class="btn btn-outline-light" type="button" id="camera-capture" disabled>
+                            <i class="fa-solid fa-circle-dot"></i> قراءة الصورة
+                        </button>
                         <button class="btn btn-outline-light" type="button" id="assistant-run">
                             <i class="fa-solid fa-bolt"></i> تحليل وتنفيذ
                         </button>
@@ -34,7 +40,30 @@
                             <i class="fa-solid fa-volume-high"></i> قراءة الرد
                         </button>
                     </div>
+                    <div class="row g-2 mt-3">
+                        <div class="col-md-4">
+                            <label class="form-label" for="assistant-dialect-select">لغة/لهجة الصوت</label>
+                            <select id="assistant-dialect-select" class="form-select">
+                                <option value="ar-SA">عربي سعودي</option>
+                                <option value="ar-SD">عربي سوداني</option>
+                                <option value="ur-PK">أوردو</option>
+                                <option value="ar">عربي عام</option>
+                            </select>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label" for="assistant-voice-select">صوت الذكاء الاصطناعي</label>
+                            <select id="assistant-voice-select" class="form-select"></select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" for="assistant-voice-rate">سرعة الصوت</label>
+                            <input id="assistant-voice-rate" class="form-range" type="range" min="0.75" max="1.2" step="0.05" value="0.9">
+                        </div>
+                    </div>
                     <div class="small text-muted-soft mt-2" id="voice-status">الصوت يعمل من المتصفح مباشرة إذا كان مدعوما.</div>
+                    <div class="glass-soft p-2 mt-3 d-none" id="camera-panel">
+                        <video id="camera-preview" class="w-100 rounded" autoplay playsinline muted style="max-height: 320px; object-fit: cover; background:#020617;"></video>
+                        <canvas id="camera-canvas" class="d-none"></canvas>
+                    </div>
                 </form>
 
                 <div class="glass-soft p-3 mt-4 d-none" id="live-answer-card">
@@ -74,10 +103,13 @@
             <div class="glass-card p-4 h-100">
                 <h5 class="mb-3">أوامر صوتية جاهزة</h5>
                 <div class="d-grid gap-2 mb-4">
+                    <button class="btn btn-outline-info text-start quick-command" type="button" data-command="حلل الوضع المالي باحتراف واعطني الأولويات">حلل الوضع المالي باحتراف واعطني الأولويات</button>
+                    <button class="btn btn-outline-info text-start quick-command" type="button" data-command="ما أهم شيء أراجعه اليوم في النظام؟">ما أهم شيء أراجعه اليوم في النظام؟</button>
                     <button class="btn btn-outline-light text-start quick-command" type="button" data-command="افتح تقرير العمليات غير المرحلة">افتح تقرير العمليات غير المرحلة</button>
                     <button class="btn btn-outline-light text-start quick-command" type="button" data-command="اذهب إلى رواتب الموظفين">اذهب إلى رواتب الموظفين</button>
                     <button class="btn btn-outline-light text-start quick-command" type="button" data-command="افتح إضافة فاتورة مصورة">افتح إضافة فاتورة مصورة</button>
                     <button class="btn btn-outline-light text-start quick-command" type="button" data-command="حلل المبيعات والمشتريات والمخزون">حلل المبيعات والمشتريات والمخزون</button>
+                    <button class="btn btn-outline-light text-start quick-command" type="button" data-command="اشرح لي الفرق بين المدين والدائن بمثال">اشرح لي الفرق بين المدين والدائن بمثال</button>
                 </div>
 
                 <h5 class="mb-3">قراءة فورية</h5>
@@ -101,8 +133,16 @@
     const questionInput = document.getElementById('ai-question');
     const startButton = document.getElementById('voice-start');
     const stopButton = document.getElementById('voice-stop');
+    const cameraOpenButton = document.getElementById('camera-open');
+    const cameraCaptureButton = document.getElementById('camera-capture');
+    const cameraPanel = document.getElementById('camera-panel');
+    const cameraPreview = document.getElementById('camera-preview');
+    const cameraCanvas = document.getElementById('camera-canvas');
     const runButton = document.getElementById('assistant-run');
     const readButton = document.getElementById('voice-read');
+    const dialectSelect = document.getElementById('assistant-dialect-select');
+    const voiceSelect = document.getElementById('assistant-voice-select');
+    const voiceRate = document.getElementById('assistant-voice-rate');
     const statusBox = document.getElementById('voice-status');
     const answerCard = document.getElementById('live-answer-card');
     const answerBox = document.getElementById('live-answer');
@@ -111,14 +151,24 @@
     const commandUrl = "{% url 'ai_assistant_command' %}";
     const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const recognitionLanguages = ['ar-SA', 'ar', 'ar-SD', 'ur-PK', 'bn-BD', 'ar-EG'];
+    const fallbackRecognitionLanguages = ['ar-SA', 'ar-SD', 'ur-PK', 'ar', 'ar-EG'];
     let recognition = null;
     let recognitionLanguageIndex = 0;
     let arabicVoice = null;
     let lastSpokenText = '';
+    let cameraStream = null;
 
     function setStatus(text) {
         statusBox.textContent = text;
+    }
+
+    function selectedDialect() {
+        return dialectSelect.value || 'ar-SA';
+    }
+
+    function dialectFallbacks() {
+        const selected = selectedDialect();
+        return [selected, ...fallbackRecognitionLanguages.filter((lang) => lang !== selected)];
     }
 
     function normalizeArabicSpeechText(text) {
@@ -135,15 +185,53 @@
             .trim();
     }
 
+    function normalizeDialectForSpeech(text) {
+        let clean = normalizeArabicSpeechText(text);
+        if (selectedDialect() === 'ar-SA') {
+            clean = clean
+                .replace(/\bابي\b/g, 'أبي')
+                .replace(/\bابغى\b/g, 'أبغى')
+                .replace(/\bوش\b/g, 'إيش')
+                .replace(/\bتمم\b/g, 'تمّم');
+        } else if (selectedDialect() === 'ar-SD') {
+            clean = clean
+                .replace(/\bداير\b/g, 'داير')
+                .replace(/\bعايز\b/g, 'عايز')
+                .replace(/\bوريني\b/g, 'ورّيني');
+        }
+        return clean;
+    }
+
     function loadArabicVoice() {
         if (!('speechSynthesis' in window)) return null;
         const voices = window.speechSynthesis.getVoices();
+        const previousValue = voiceSelect.value;
+        voiceSelect.innerHTML = '';
+        voices
+            .filter((voice) => /^(ar|ur|bn)/i.test(voice.lang || '') || /arabic|urdu|bangla|bengali|hoda|naayf|maged/i.test(voice.name || ''))
+            .forEach((voice, index) => {
+                const option = document.createElement('option');
+                option.value = `${voice.name}::${voice.lang}`;
+                option.textContent = `${voice.name} (${voice.lang})`;
+                voiceSelect.appendChild(option);
+            });
+        if (!voiceSelect.options.length) {
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = 'صوت المتصفح الافتراضي';
+            voiceSelect.appendChild(option);
+        }
+        if (previousValue && [...voiceSelect.options].some((option) => option.value === previousValue)) {
+            voiceSelect.value = previousValue;
+        }
         const preferredNames = ['Hoda', 'Naayf', 'Maged', 'Microsoft Naayf', 'Microsoft Hoda', 'Google العربية'];
         arabicVoice =
+            voices.find((voice) => `${voice.name}::${voice.lang}` === voiceSelect.value) ||
             voices.find((voice) => preferredNames.some((name) => voice.name.includes(name))) ||
             voices.find((voice) => (voice.lang || '').toLowerCase() === 'ar-sa') ||
             voices.find((voice) => (voice.lang || '').toLowerCase().startsWith('ar')) ||
             null;
+        if (arabicVoice) voiceSelect.value = `${arabicVoice.name}::${arabicVoice.lang}`;
         return arabicVoice;
     }
 
@@ -152,17 +240,18 @@
             setStatus('المتصفح لا يدعم قراءة الصوت.');
             return;
         }
-        const cleanText = normalizeArabicSpeechText(text).slice(0, 900);
+        const cleanText = normalizeDialectForSpeech(text).slice(0, 900);
         if (!cleanText) return;
         lastSpokenText = cleanText;
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(cleanText);
-        const selectedVoice = arabicVoice || loadArabicVoice();
-        const hasUrdu = /[\u0600-\u06FF]/.test(cleanText) && /[پچژگٹڈڑںے]/.test(cleanText);
+        const voices = window.speechSynthesis.getVoices();
+        const selectedVoice = voices.find((voice) => `${voice.name}::${voice.lang}` === voiceSelect.value) || arabicVoice || loadArabicVoice();
+        const hasUrdu = selectedDialect() === 'ur-PK' || (/[\u0600-\u06FF]/.test(cleanText) && /[پچژگٹڈڑںے]/.test(cleanText));
         const hasBangla = /[\u0980-\u09FF]/.test(cleanText);
         if (selectedVoice && !hasUrdu && !hasBangla) {
             utterance.voice = selectedVoice;
-            utterance.lang = selectedVoice.lang || 'ar-SA';
+            utterance.lang = selectedVoice.lang || selectedDialect();
             setStatus(`سيتم قراءة الرد بصوت عربي: ${selectedVoice.name}`);
         } else if (hasUrdu) {
             utterance.lang = 'ur-PK';
@@ -171,10 +260,10 @@
             utterance.lang = 'bn-BD';
             setStatus('سيتم قراءة الرد باللغة البنغالية إذا كان المتصفح يدعمها.');
         } else {
-            utterance.lang = 'ar-SA';
+            utterance.lang = selectedDialect();
             setStatus('لم أجد صوتا عربيا مثبتا في المتصفح. سأستخدم الصوت الافتراضي.');
         }
-        utterance.rate = 0.9;
+        utterance.rate = Number(voiceRate.value || 0.9);
         utterance.pitch = 1;
         utterance.volume = 1;
         utterance.onerror = () => setStatus('تعذرت قراءة الصوت العربي من المتصفح.');
@@ -185,14 +274,14 @@
         return (answerBox.textContent || classicAnswerBox?.textContent || '').trim();
     }
 
-    async function runAssistant(command, autoNavigate = false) {
+    async function runAssistant(command, autoNavigate = false, imagePayload = null) {
         const value = (command || questionInput.value || '').trim();
-        if (!value) {
+        if (!value && !imagePayload) {
             setStatus('اكتب أو قل طلبك أولا.');
             return;
         }
 
-        questionInput.value = value;
+        if (value) questionInput.value = value;
         setStatus('جاري تحليل الطلب...');
         answerCard.classList.remove('d-none');
         answerBox.textContent = 'لحظة...';
@@ -205,15 +294,24 @@
                     'Content-Type': 'application/json',
                     'X-CSRFToken': csrfToken,
                 },
-                body: JSON.stringify({ command: value }),
+                body: JSON.stringify({
+                    command: value,
+                    image_base64: imagePayload ? imagePayload.image_base64 : '',
+                    media_type: imagePayload ? imagePayload.media_type : '',
+                }),
             });
             const data = await response.json();
             if (!response.ok || !data.ok) {
                 throw new Error(data.message || 'تعذر تنفيذ الطلب.');
             }
 
+            if (data.camera_command) {
+                questionInput.value = data.camera_command;
+                setStatus(`تمت قراءة الصورة كطلب: ${data.camera_command}`);
+            } else {
+                setStatus('تم التحليل.');
+            }
             answerBox.textContent = data.answer || 'تم تحليل الطلب.';
-            setStatus('تم التحليل.');
             speak(data.answer || '');
 
             if (data.action && data.action.url) {
@@ -235,20 +333,70 @@
                 link.textContent = item.title;
                 actionsBox.appendChild(link);
             });
+            (data.followups || []).forEach((text) => {
+                const button = document.createElement('button');
+                button.className = 'btn btn-outline-info';
+                button.type = 'button';
+                button.textContent = text;
+                button.addEventListener('click', () => runAssistant(text, false));
+                actionsBox.appendChild(button);
+            });
         } catch (error) {
             answerBox.textContent = error.message;
             setStatus('تعذر إكمال الطلب.');
         }
     }
 
+    async function openCamera() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            setStatus('المتصفح لا يدعم الكاميرا. استخدم الصوت أو الكتابة.');
+            return;
+        }
+        try {
+            cameraStream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { ideal: 'environment' } },
+                audio: false,
+            });
+            cameraPreview.srcObject = cameraStream;
+            cameraPanel.classList.remove('d-none');
+            cameraCaptureButton.disabled = false;
+            setStatus('وجه الكاميرا نحو البيانات ثم اضغط قراءة الصورة.');
+        } catch (error) {
+            setStatus('تعذر فتح الكاميرا. تأكد من إذن الكاميرا في المتصفح.');
+        }
+    }
+
+    function captureCameraImage() {
+        if (!cameraStream || !cameraPreview.videoWidth) {
+            setStatus('افتح الكاميرا أولا وانتظر ظهور الصورة.');
+            return;
+        }
+        const maxWidth = 1280;
+        const scale = Math.min(1, maxWidth / cameraPreview.videoWidth);
+        cameraCanvas.width = Math.round(cameraPreview.videoWidth * scale);
+        cameraCanvas.height = Math.round(cameraPreview.videoHeight * scale);
+        cameraCanvas.getContext('2d').drawImage(cameraPreview, 0, 0, cameraCanvas.width, cameraCanvas.height);
+        const imageBase64 = (cameraCanvas.toDataURL('image/jpeg', 0.82).split(',')[1] || '');
+        runAssistant('', false, { image_base64: imageBase64, media_type: 'image/jpeg' });
+    }
+
     if ('speechSynthesis' in window) {
         loadArabicVoice();
         window.speechSynthesis.onvoiceschanged = loadArabicVoice;
+        voiceSelect.addEventListener('change', () => {
+            arabicVoice = window.speechSynthesis.getVoices().find((voice) => `${voice.name}::${voice.lang}` === voiceSelect.value) || null;
+            setStatus(arabicVoice ? `تم اختيار صوت: ${arabicVoice.name}` : 'تم اختيار صوت المتصفح الافتراضي.');
+        });
+        dialectSelect.addEventListener('change', () => {
+            recognitionLanguageIndex = 0;
+            if (recognition) recognition.lang = dialectFallbacks()[0];
+            setStatus(`تم اختيار لغة/لهجة الصوت: ${dialectSelect.options[dialectSelect.selectedIndex].textContent}.`);
+        });
     }
 
     if (SpeechRecognition) {
         recognition = new SpeechRecognition();
-        recognition.lang = recognitionLanguages[recognitionLanguageIndex];
+        recognition.lang = dialectFallbacks()[recognitionLanguageIndex];
         recognition.interimResults = true;
         recognition.continuous = false;
         recognition.maxAlternatives = 3;
@@ -263,9 +411,10 @@
             stopButton.disabled = true;
         };
         recognition.onerror = (event) => {
-            if ((event.error === 'language-not-supported' || event.error === 'no-speech') && recognitionLanguageIndex < recognitionLanguages.length - 1) {
+            const languages = dialectFallbacks();
+            if ((event.error === 'language-not-supported' || event.error === 'no-speech') && recognitionLanguageIndex < languages.length - 1) {
                 recognitionLanguageIndex += 1;
-                recognition.lang = recognitionLanguages[recognitionLanguageIndex];
+                recognition.lang = languages[recognitionLanguageIndex];
                 setStatus(`سأحاول التعرف الصوتي باللغة ${recognition.lang}.`);
                 window.setTimeout(() => recognition.start(), 250);
                 return;
@@ -285,7 +434,7 @@
 
         startButton.addEventListener('click', () => {
             recognitionLanguageIndex = 0;
-            recognition.lang = recognitionLanguages[recognitionLanguageIndex];
+            recognition.lang = dialectFallbacks()[recognitionLanguageIndex];
             recognition.start();
         });
         stopButton.addEventListener('click', () => recognition.stop());
@@ -296,6 +445,8 @@
     }
 
     readButton.addEventListener('click', () => speak(currentAnswerText() || lastSpokenText));
+    cameraOpenButton.addEventListener('click', openCamera);
+    cameraCaptureButton.addEventListener('click', captureCameraImage);
     runButton.addEventListener('click', () => runAssistant('', false));
     document.querySelectorAll('.quick-command').forEach((button) => {
         button.addEventListener('click', () => runAssistant(button.dataset.command, false));

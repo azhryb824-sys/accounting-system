@@ -9,7 +9,7 @@ from django.views.decorators.http import require_POST
 
 from .models import PurchaseInvoice, PurchaseItem, Supplier, Item, StockMovement
 from .forms import PurchaseInvoiceForm, ItemForm, AIInvoiceUploadForm
-from .ai_services import ai_configuration_status, analyze_and_route_user_request, answer_financial_question, extract_invoice_from_image, generate_financial_insights, match_invoice_items
+from .ai_services import ai_configuration_status, analyze_and_route_user_request, answer_financial_question, command_from_camera_image, extract_invoice_from_image, generate_financial_insights, match_invoice_items
 from django.utils.translation import gettext_lazy as _
 from accounts.views import role_required
 from core.models import Branch
@@ -41,6 +41,7 @@ def post_purchase_invoice(invoice):
 #  قائمة فواتير المشتريات حسب الفرع
 # ============================
 @login_required(login_url='login')
+@role_required('view_purchaseinvoice')
 def purchase_list(request):
     branch_id = request.session.get('branch_id')
     purchases = PurchaseInvoice.objects.filter(branch_id=branch_id).order_by('-issue_date')
@@ -54,11 +55,24 @@ def purchase_list(request):
 #  إضافة فاتورة مشتريات
 # ============================
 @login_required(login_url='login')
+@role_required('add_purchaseinvoice')
 def purchase_add(request):
     branch_id = request.session.get('branch_id')
 
     if request.method == 'POST':
-        form = PurchaseInvoiceForm(request.POST)
+        post_data = request.POST.copy()
+        items = post_data.getlist("item_id")
+        quantities = post_data.getlist("quantity")
+        prices = post_data.getlist("price")
+        subtotal = Decimal("0")
+        for quantity, price in zip(quantities, prices):
+            subtotal += (Decimal(quantity or "0") * Decimal(price or "0"))
+        vat_amount = (subtotal * Decimal("0.15")).quantize(Decimal("0.01"))
+        total_with_vat = subtotal + vat_amount
+        post_data["total_before_vat"] = str(subtotal.quantize(Decimal("0.01")))
+        post_data["vat_amount"] = str(vat_amount)
+        post_data["total_with_vat"] = str(total_with_vat.quantize(Decimal("0.01")))
+        form = PurchaseInvoiceForm(post_data)
 
         if form.is_valid():
             invoice = form.save(commit=False)
@@ -67,17 +81,15 @@ def purchase_add(request):
             assert_month_open(branch.company, invoice.issue_date)
             invoice.save()
 
-            items = request.POST.getlist("item_id")
-            quantities = request.POST.getlist("quantity")
-            prices = request.POST.getlist("price")
-
             for i in range(len(items)):
+                if not items[i] or Decimal(quantities[i] or "0") <= 0:
+                    continue
                 purchase_item = PurchaseItem.objects.create(
                     invoice=invoice,
                     branch_id=branch_id,
                     item_id=items[i],
-                    quantity=quantities[i],
-                    price=prices[i]
+                    quantity=Decimal(quantities[i]),
+                    price=Decimal(prices[i] or "0")
                 )
 
                 # تحديث كمية المخزون الفعلي للصنف
@@ -111,6 +123,7 @@ def purchase_add(request):
 #  تعديل فاتورة مشتريات
 # ============================
 @login_required(login_url='login')
+@role_required('change_purchaseinvoice')
 def purchase_edit(request, id):
     purchase = get_object_or_404(PurchaseInvoice, id=id)
 
@@ -137,6 +150,7 @@ def purchase_edit(request, id):
 #  حذف فاتورة مشتريات
 # ============================
 @login_required(login_url='login')
+@role_required('delete_purchaseinvoice')
 def purchase_delete(request, id):
     purchase = get_object_or_404(PurchaseInvoice, id=id)
     assert_month_open(purchase.branch.company, purchase.issue_date)
@@ -254,7 +268,7 @@ def ai_insights(request):
         return redirect("select_company_branch")
     low_stock = Item.objects.filter(branch_id=branch_id, quantity__lte=F("min_quantity"), is_active=True).count()
     purchases = PurchaseInvoice.objects.filter(branch_id=branch_id).order_by("-issue_date")[:5]
-    insights = generate_financial_insights(branch_id)
+    insights = generate_financial_insights(branch_id, user=request.user)
     return render(request, 'invoicing/ai_insights.html', {
         "title": "نصائح وتوقعات الذكاء الاصطناعي",
         "tips": insights.get("tips", []),
@@ -273,11 +287,11 @@ def ai_assistant(request):
         return redirect("select_company_branch")
     answer = None
     question = ""
-    insights = generate_financial_insights(branch_id)
+    insights = generate_financial_insights(branch_id, user=request.user)
     if request.method == "POST":
         question = (request.POST.get("question") or "").strip()
         if question:
-            answer = answer_financial_question(branch_id, question)
+            answer = answer_financial_question(branch_id, question, user=request.user)
         else:
             messages.warning(request, "اكتب سؤالك أولاً.")
     return render(request, "invoicing/ai_assistant.html", {
@@ -303,11 +317,25 @@ def ai_assistant_command(request):
         payload = request.POST
 
     command = (payload.get("command") or payload.get("question") or "").strip()
+    image_base64 = (payload.get("image_base64") or "").strip()
+    media_type = (payload.get("media_type") or "image/jpeg").strip()
+    if image_base64 and not command:
+        camera_result = command_from_camera_image(image_base64, media_type=media_type)
+        if not camera_result.get("ok"):
+            return JsonResponse({
+                "ok": False,
+                "message": camera_result.get("message") or "لم أستطع قراءة الصورة.",
+                "raw": camera_result.get("raw", ""),
+            }, status=400, json_dumps_params={"ensure_ascii": False})
+        command = camera_result.get("command", "").strip()
     if not command:
         return JsonResponse({"ok": False, "message": "اكتب أو قل طلبك أولا."}, status=400)
 
+    request.user._ai_company_id = request.session.get("company_id")
     pending = request.session.get("ai_pending_command")
     result = analyze_and_route_user_request(branch_id, command, pending=pending, user=request.user)
+    if image_base64:
+        result["camera_command"] = command
     if result.get("pending"):
         request.session["ai_pending_command"] = result["pending"]
     else:

@@ -1,4 +1,5 @@
 {% extends 'core/base.html' %}
+{% load permission_tags %}
 
 {% block page_title %}فاتورة رقم {{ invoice.invoice_number }}{% endblock %}
 {% block page_subtitle %}تفاصيل الفاتورة وحالة جاهزيتها لمتطلبات هيئة الزكاة والضريبة والجمارك{% endblock %}
@@ -19,10 +20,14 @@
             {% endif %}
         </div>
         <div class="d-flex gap-2">
+            {% can_access request 'view_journalentry' as can_view_journalentry %}
+            {% can_access request 'change_invoice' as can_change_invoice %}
             {% if invoice.journal_entry %}
+                {% if can_view_journalentry %}
                 <a href="{% url 'journal_edit' invoice.journal_entry.id %}" class="btn btn-outline-info">عرض القيد</a>
+                {% endif %}
             {% endif %}
-            {% if not invoice.is_posted %}
+            {% if can_change_invoice and not invoice.is_posted %}
                 <a href="{% url 'post_invoice' invoice.id %}" class="btn btn-success">
                     <i class="fa-solid fa-check"></i> ترحيل الفاتورة
                 </a>
