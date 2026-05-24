@@ -1,8 +1,10 @@
 from decimal import Decimal
+from pathlib import Path
 
 from django.test import TestCase
 from django.utils import timezone
 
+from core.forms import CompanySubscriptionRequestForm
 from core.models import Branch, Company, Employee, EmployeeAdvance, SalaryRecord
 from core.services.payroll import approve_salary, pay_salary
 
@@ -74,3 +76,16 @@ class PayrollAccountingTests(TestCase):
 
         self.assertEqual(advance.paid_amount, Decimal("300.00"))
         self.assertEqual(advance.status, "settled")
+
+
+class CompanyFormMobileTests(TestCase):
+    def test_company_attachment_input_is_mobile_friendly(self):
+        form = CompanySubscriptionRequestForm()
+        widget = form.fields["transfer_notice"].widget
+        template = Path("core/templates/core/company_form.html").read_text(encoding="utf-8")
+
+        self.assertIn("mobile-file-input", widget.attrs["class"])
+        self.assertEqual(widget.attrs["accept"], "image/*,.pdf")
+        self.assertIn("data-file-picker", template)
+        self.assertIn("إرفاق إيصال التحويل", template)
+        self.assertIn("input.click()", template)

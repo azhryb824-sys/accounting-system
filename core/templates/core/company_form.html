@@ -5,6 +5,51 @@
 {% block page_subtitle %}إدارة بيانات الشركة{% endblock %}
 
 {% block content %}
+<style>
+    .mobile-file-picker {
+        display: grid;
+        gap: 8px;
+    }
+    .mobile-file-picker .mobile-file-input {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        opacity: 0.01;
+        overflow: hidden;
+    }
+    .mobile-file-button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 48px;
+        border: 1px dashed rgba(255,255,255,0.35);
+        border-radius: 10px;
+        background: rgba(56,189,248,0.14);
+        color: #fff;
+        cursor: pointer;
+        touch-action: manipulation;
+        user-select: none;
+    }
+    .mobile-file-name {
+        color: rgba(255,255,255,0.72);
+        font-size: 13px;
+        overflow-wrap: anywhere;
+    }
+    @media (hover: hover) and (pointer: fine) {
+        .mobile-file-picker .mobile-file-input {
+            position: static;
+            width: auto;
+            height: auto;
+            opacity: 1;
+            overflow: visible;
+        }
+        .mobile-file-button,
+        .mobile-file-name {
+            display: none;
+        }
+    }
+</style>
 <div class="glass-card p-4">
     <form method="post" enctype="multipart/form-data">
         {% csrf_token %}
@@ -12,7 +57,18 @@
             {% for field in form %}
             <div class="col-md-6 mb-3">
                 <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-                {{ field }}
+                {% if field.name == "transfer_notice" %}
+                    <div class="mobile-file-picker" data-file-picker>
+                        {{ field }}
+                        <button class="mobile-file-button" type="button">
+                            <i class="fa-solid fa-paperclip"></i>
+                            <span>إرفاق إيصال التحويل</span>
+                        </button>
+                        <div class="mobile-file-name" data-file-name>لم يتم اختيار ملف</div>
+                    </div>
+                {% else %}
+                    {{ field }}
+                {% endif %}
                 {% for error in field.errors %}
                     <div class="text-danger small mt-1">{{ error }}</div>
                 {% endfor %}
@@ -25,4 +81,26 @@
         </div>
     </form>
 </div>
+<script>
+(() => {
+    document.querySelectorAll('[data-file-picker]').forEach((picker) => {
+        const input = picker.querySelector('input[type="file"]');
+        const button = picker.querySelector('.mobile-file-button');
+        const fileName = picker.querySelector('[data-file-name]');
+        if (!input || !button || !fileName) return;
+
+        const updateName = () => {
+            const file = input.files && input.files[0];
+            fileName.textContent = file ? file.name : 'لم يتم اختيار ملف';
+        };
+
+        button.addEventListener('click', () => {
+            if (document.activeElement) document.activeElement.blur();
+            input.click();
+        });
+        input.addEventListener('change', updateName);
+        updateName();
+    });
+})();
+</script>
 {% endblock %}

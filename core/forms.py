@@ -71,7 +71,10 @@ class CompanySubscriptionRequestForm(CompanyForm):
     transfer_notice = forms.FileField(
         label='إيصال التحويل',
         required=True,
-        widget=forms.FileInput(attrs={'class': 'form-control'})
+        widget=forms.FileInput(attrs={
+            'class': 'form-control mobile-file-input',
+            'accept': 'image/*,.pdf',
+        })
     )
 
 
