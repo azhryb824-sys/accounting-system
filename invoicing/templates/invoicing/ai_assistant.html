@@ -262,6 +262,58 @@
         return clean;
     }
 
+    function applyAssistantDialect(text) {
+        let clean = (text || '').trim();
+        if (!clean || selectedDialect() === 'ar' || selectedDialect() === 'ur-PK') return clean;
+        const protectedTerms = [
+            'ضريبة القيمة المضافة', 'الإجمالي', 'الفاتورة', 'عرض السعر', 'المخزون',
+            'القيد المحاسبي', 'الربح', 'الخسارة', 'العميل', 'المورد'
+        ];
+        const placeholders = {};
+        protectedTerms.forEach((term, index) => {
+            const key = `__TERM_${index}__`;
+            placeholders[key] = term;
+            clean = clean.replaceAll(term, key);
+        });
+        if (selectedDialect() === 'ar-SA') {
+            clean = clean
+                .replace(/\bأبشر، خلينا نخليها واضحة[.،]?\b/g, 'أبشر، خلّنا نوضحها لك.')
+                .replace(/\bتم حفظ\b/g, 'تم حفظ')
+                .replace(/\bيمكنك\b/g, 'تقدر')
+                .replace(/\bإذا أردت\b/g, 'إذا تبي')
+                .replace(/\bإذا رغبت\b/g, 'إذا تبي')
+                .replace(/\bلا أستطيع\b/g, 'ما أقدر')
+                .replace(/\bأحتاج\b/g, 'أحتاج')
+                .replace(/\bاكتب\b/g, 'اكتب')
+                .replace(/\bاختر\b/g, 'اختر')
+                .replace(/\bقل أو اكتب\b/g, 'قل أو اكتب')
+                .replace(/\bسأفتح\b/g, 'بفتح')
+                .replace(/\bسأساعدك\b/g, 'بساعدك')
+                .replace(/\bالمطلوب\b/g, 'اللي تبيه');
+            if (!/أبشر|تمام|تم|ما أقدر/.test(clean.slice(0, 40))) {
+                clean = `تمام، ${clean}`;
+            }
+        } else if (selectedDialect() === 'ar-SD') {
+            clean = clean
+                .replace(/\bأبشر، خلينا نخليها واضحة[.،]?\b/g, 'حاضر، خلينا نوضحها ليك.')
+                .replace(/\bيمكنك\b/g, 'بتقدر')
+                .replace(/\bإذا أردت\b/g, 'لو داير')
+                .replace(/\bإذا رغبت\b/g, 'لو داير')
+                .replace(/\bلا أستطيع\b/g, 'ما بقدر')
+                .replace(/\bأحتاج\b/g, 'محتاج')
+                .replace(/\bسأفتح\b/g, 'بفتح ليك')
+                .replace(/\bسأساعدك\b/g, 'بساعدك')
+                .replace(/\bالمطلوب\b/g, 'الدايرو');
+            if (!/حاضر|تمام|تم|ما بقدر/.test(clean.slice(0, 40))) {
+                clean = `حاضر، ${clean}`;
+            }
+        }
+        Object.entries(placeholders).forEach(([key, value]) => {
+            clean = clean.replaceAll(key, value);
+        });
+        return clean;
+    }
+
     function improveSpeechText(text) {
         return (text || '')
             .replace(/[()]/g, ' ')
@@ -444,8 +496,9 @@
             } else {
                 setStatus('تم التحليل.');
             }
-            answerBox.textContent = data.answer || 'تم تحليل الطلب.';
-            speak(data.answer || '');
+            const dialectAnswer = applyAssistantDialect(data.answer || 'تم تحليل الطلب.');
+            answerBox.textContent = dialectAnswer;
+            speak(dialectAnswer);
             assistantIsProcessing = false;
 
             if (data.action && data.action.url) {
