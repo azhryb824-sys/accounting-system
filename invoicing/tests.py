@@ -155,6 +155,15 @@ class InvoiceAccountingTests(TestCase):
         self.assertIn("OpenAlex", result["answer"])
         self.assertIn("CC0", result["answer"])
 
+    def test_zatca_regulation_questions_use_official_index(self):
+        result = answer_financial_question(self.branch.id, "زودني بجميع لوائح هيئة الزكاة والضريبة والجمارك")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "zatca_regulations")
+        self.assertIn("zatca.gov.sa", result["answer"])
+        self.assertIn("الفوترة الإلكترونية", result["answer"])
+        self.assertIn("ضريبة القيمة المضافة", result["answer"])
+
     @patch("invoicing.purchase_views.analyze_and_route_user_request")
     @patch("invoicing.purchase_views.command_from_camera_image")
     def test_ai_assistant_command_merges_screen_analysis_with_user_question(self, camera_reader, analyzer):

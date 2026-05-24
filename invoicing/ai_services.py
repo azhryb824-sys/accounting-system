@@ -1198,6 +1198,89 @@ FREE_WEB_GENERAL_SOURCES = {
     }
 }
 
+ZATCA_OFFICIAL_REGULATIONS = [
+    {
+        "title": "اللائحة التنفيذية لنظام ضريبة القيمة المضافة",
+        "url": "https://zatca.gov.sa/ar/RulesRegulations/Taxes/Pages/VATImplementingRegulations.aspx",
+        "keywords": ("ضريبة القيمة المضافة", "القيمة المضافة", "vat", "ضريبة", "مدخلات", "مخرجات"),
+        "note": "تشمل قواعد تنفيذ ضريبة القيمة المضافة ومتطلبات الامتثال الضريبي للمنشآت.",
+    },
+    {
+        "title": "نظام ضريبة القيمة المضافة",
+        "url": "https://zatca.gov.sa/ar/RulesRegulations/Taxes/Pages/VATLaw.aspx",
+        "keywords": ("نظام ضريبة القيمة المضافة", "vat law", "نظام vat"),
+        "note": "الإطار النظامي لضريبة القيمة المضافة في المملكة وفق الاتفاقية الموحدة لدول مجلس التعاون.",
+    },
+    {
+        "title": "لائحة الفوترة الإلكترونية",
+        "url": "https://zatca.gov.sa/ar/E-Invoicing/Introduction/LawsAndRegulations",
+        "keywords": ("الفوترة الإلكترونية", "فاتورة إلكترونية", "زاتكا", "fatoorah", "e-invoicing", "qr"),
+        "note": "اللائحة والضوابط والمتطلبات الفنية والقواعد الإجرائية للفوترة الإلكترونية.",
+    },
+    {
+        "title": "دليل الفوترة الإلكترونية الفني التفصيلي",
+        "url": "https://www.zatca.gov.sa/ar/E-Invoicing/Introduction/Guidelines/Documents/E-invoicing%20Detailed%20Technical%20Guidelines.pdf",
+        "keywords": ("xml", "ubl", "sdk", "clearance", "reporting", "مواصفات فنية", "دليل فني"),
+        "note": "مرجع فني للتكامل، التحقق، نماذج الإرسال، QR، وملفات XML للفواتير والإشعارات.",
+    },
+    {
+        "title": "اللائحة التنفيذية لجباية الزكاة",
+        "url": "https://zatca.gov.sa/ar/RulesRegulations/Zakat/Pages/default.aspx",
+        "keywords": ("زكاة", "الزكاة", "جباية الزكاة", "وعاء زكوي"),
+        "note": "مرجع قواعد جباية الزكاة ومتطلبات المكلفين الخاضعين للزكاة.",
+    },
+    {
+        "title": "اللائحة التنفيذية للضريبة الانتقائية",
+        "url": "https://www.zatca.gov.sa/ar/RulesRegulations/Taxes/Pages/ExciseTaxImplementingRegulations.aspx",
+        "keywords": ("ضريبة انتقائية", "الانتقائية", "excise", "تبغ", "مشروبات محلاة"),
+        "note": "قواعد السلع الانتقائية، احتساب الضريبة، الإقرار، والطوابع الضريبية.",
+    },
+    {
+        "title": "اللائحة التنفيذية لنظام ضريبة التصرفات العقارية",
+        "url": "https://zatca.gov.sa/ar/RulesRegulations/Taxes/Pages/New_RETT.aspx",
+        "keywords": ("التصرفات العقارية", "ضريبة التصرفات", "real estate transaction tax", "rett", "عقار"),
+        "note": "قواعد ضريبة التصرفات العقارية والاستثناءات والإجراءات المرتبطة بها.",
+    },
+    {
+        "title": "صفحة الأنظمة واللوائح في هيئة الزكاة والضريبة والجمارك",
+        "url": "https://zatca.gov.sa/ar/RulesRegulations/Pages/default.aspx",
+        "keywords": ("لوائح الهيئة", "أنظمة الهيئة", "كل اللوائح", "جميع اللوائح", "zatca regulations"),
+        "note": "الفهرس الرسمي الأشمل للأنظمة واللوائح والأدلة المنشورة من الهيئة.",
+    },
+]
+
+
+def zatca_regulations_answer(question):
+    normalized = (question or "").strip().lower()
+    if not normalized:
+        return ""
+    zatca_terms = (
+        "زاتكا", "هيئة الزكاة", "الضريبة والجمارك", "zatca", "الزكاة", "زكاة",
+        "ضريبة القيمة", "vat", "الفوترة الإلكترونية", "فاتورة إلكترونية",
+        "ضريبة انتقائية", "التصرفات العقارية", "لوائح الهيئة", "اللوائح",
+    )
+    if not any(term in normalized for term in zatca_terms):
+        return ""
+    wants_full_index = any(term in normalized for term in ("جميع", "كل", "كافة", "الفهرس", "all"))
+    matches = [] if wants_full_index else [
+        item for item in ZATCA_OFFICIAL_REGULATIONS
+        if any(keyword.lower() in normalized for keyword in item["keywords"])
+    ]
+    if not matches:
+        matches = ZATCA_OFFICIAL_REGULATIONS[:]
+    else:
+        index_page = ZATCA_OFFICIAL_REGULATIONS[-1]
+        if index_page not in matches:
+            matches.append(index_page)
+    lines = [
+        "تم ربط إجابة الذكاء الاصطناعي بالمراجع الرسمية لهيئة الزكاة والضريبة والجمارك. عند أي سؤال ضريبي أو زكوي يجب الاعتماد على أحدث نص منشور في هذه الروابط، لأن اللوائح قد تتغير:",
+    ]
+    for item in matches[:8]:
+        lines.append(f"- {item['title']}: {item['note']} {item['url']}")
+    lines.append("تنبيه مهم: لا تعتبر هذه الخلاصة استشارة ضريبية نهائية؛ عند اتخاذ قرار التزام أو إقرار ضريبي راجع النص الرسمي الأحدث أو مستشارا ضريبيا مرخصا.")
+    return "\n".join(lines)
+
+
 GENERAL_WEB_TRIGGERS = (
     "ابحث",
     "من هو",
@@ -1740,6 +1823,14 @@ _model_answer_financial_question = answer_financial_question
 
 
 def answer_financial_question(branch_id, question, user=None):
+    zatca_answer = zatca_regulations_answer(question)
+    if zatca_answer:
+        return {
+            "ok": True,
+            "source": "zatca_regulations",
+            "answer": _polish_answer(zatca_answer, question),
+            "context": {},
+        }
     local_direct_answer = local_greeting_or_concept_answer(question)
     usage_answer = local_system_usage_answer(question)
     if not local_direct_answer and not usage_answer:
