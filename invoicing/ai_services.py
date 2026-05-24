@@ -1356,11 +1356,25 @@ def _polish_answer(answer, question="", primary=None):
     text = (answer or "").strip()
     if not text:
         text = "أبشر، أحتاج تفاصيل أكثر حتى أساعدك بدقة. اكتب المطلوب أو استخدم الصوت، وسأسألك عن أي معلومة ناقصة قبل التنفيذ."
-    if not any(greeting in text[:80] for greeting in ("أهلا", "مرحبا", "أبشر", "تمام", "وعليكم")):
+    needs_friendly_intro = (
+        len(text) < 120
+        and not any(greeting in text[:80] for greeting in ("أهلا", "مرحبا", "أبشر", "تمام", "وعليكم", "تم ", "لا أستطيع"))
+        and not text.startswith(("-", "•"))
+    )
+    if needs_friendly_intro:
         text = "أبشر، خلينا نخليها واضحة.\n\n" + text
-    if "الخطوة التالية" not in text and "صلاحية" not in text:
+    needs_followup_block = (
+        len(text) < 700
+        and "الخطوة التالية" not in text
+        and "صلاحية" not in text
+        and "تأكيد" not in text
+        and "إلغاء" not in text
+        and primary is not None
+    )
+    if needs_followup_block:
         followups = _quality_followups(question, primary)
-        text += "\n\nالخطوة التالية المقترحة:\n" + "\n".join(f"- {item}" for item in followups[:2])
+        if followups:
+            text += "\n\nالخطوة التالية المقترحة:\n" + "\n".join(f"- {item}" for item in followups[:2])
     return text.strip()
 
 
@@ -2047,7 +2061,7 @@ def _build_quote_draft(branch_id, text, user=None):
         f"الإجمالي قبل الضريبة: {_money(subtotal)}",
         f"الضريبة: {_money(vat_total)}",
         f"الإجمالي شامل الضريبة: {_money(total)}",
-        "للحفظ وإنشاء PDF قل أو اكتب: تأكيد. ولإلغاء المسودة قل: إلغاء.",
+        "للمتابعة قل أو اكتب: تأكيد. وللتراجع قل: إلغاء.",
     ]
     return {
         "ok": True,
@@ -2310,8 +2324,8 @@ def answer_financial_question(branch_id, question, user=None):
         result["answer"] = _polish_answer(local_direct_answer, question)
         result["source"] = "local"
         return result
-    if local_direct_answer and local_direct_answer not in answer_text:
-        answer_text = f"{local_direct_answer}\n\n{answer_text}".strip()
+    if local_direct_answer and not answer_text:
+        answer_text = local_direct_answer
     if usage_answer and (
         result.get("source") == "local"
         or "قراءة النموذج للبيانات الحالية" in answer_text
@@ -2321,8 +2335,8 @@ def answer_financial_question(branch_id, question, user=None):
         result["answer"] = _polish_answer(usage_answer, question)
         result["source"] = "local"
         return result
-    if usage_answer and usage_answer not in answer_text:
-        answer_text = f"{usage_answer}\n\n{answer_text}".strip()
+    if usage_answer and not answer_text:
+        answer_text = usage_answer
     result["answer"] = _polish_answer(answer_text, question)
     return result
 

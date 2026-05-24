@@ -224,6 +224,15 @@ class InvoiceAccountingTests(TestCase):
         self.assertEqual(result["source"], "free_web")
         self.assertIn("Photosynthesis", result["answer"])
         self.assertIn("Wikipedia", result["answer"])
+        self.assertNotIn("الخطوة التالية المقترحة", result["answer"])
+
+    def test_ai_quote_draft_has_single_confirmation_instruction(self):
+        result = analyze_and_route_user_request(self.branch.id, "أنشئ عرض سعر للعميل أحمد 2 Item", user=self.user)
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "ai_quote")
+        self.assertEqual(result["answer"].count("تأكيد"), 1)
+        self.assertEqual(result["answer"].count("إلغاء"), 1)
 
     def test_ai_uses_auto_updated_local_knowledge_entries(self):
         source = AIKnowledgeSource.objects.create(
