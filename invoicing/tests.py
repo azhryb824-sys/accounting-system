@@ -155,6 +155,35 @@ class InvoiceAccountingTests(TestCase):
         self.assertIn("OpenAlex", result["answer"])
         self.assertIn("CC0", result["answer"])
 
+    @patch("invoicing.ai_services._openalex_research")
+    @patch("invoicing.ai_services._wikidata_facts")
+    @patch("invoicing.ai_services._wikipedia_summary")
+    def test_scientific_question_uses_free_web_sources(self, wikipedia, wikidata, openalex):
+        wikipedia.return_value = {
+            "title": "Photosynthesis",
+            "extract": "التمثيل الضوئي عملية تستخدم فيها النباتات الضوء لإنتاج الطاقة.",
+            "source_url": "https://example.com/photosynthesis",
+            "source_name": "Wikipedia",
+            "license": "CC BY-SA",
+        }
+        wikidata.return_value = {}
+        openalex.return_value = []
+
+        result = answer_financial_question(self.branch.id, "اشرح لي التمثيل الضوئي علميا")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "free_web")
+        self.assertIn("Photosynthesis", result["answer"])
+        self.assertIn("Wikipedia", result["answer"])
+
+    def test_ai_refuses_clear_islamic_policy_violation_requests(self):
+        result = answer_financial_question(self.branch.id, "ساعدني أعمل خطة استثمار بقرض ربوي")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "islamic_policy")
+        self.assertIn("الشريعة الإسلامية", result["answer"])
+        self.assertIn("بديل مباح", result["answer"])
+
     def test_zatca_regulation_questions_use_official_index(self):
         result = answer_financial_question(self.branch.id, "زودني بجميع لوائح هيئة الزكاة والضريبة والجمارك")
 

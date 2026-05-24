@@ -30,6 +30,8 @@ PROFESSIONAL_ASSISTANT_RULES = """
 - اشرح المفاهيم المحاسبية بلغة سهلة مع مثال صغير عند الحاجة.
 - قدم خطوات عملية تالية من داخل النظام.
 - اجعل الإجابة مرتبة ومباشرة ومفيدة.
+- أجب عن الأسئلة العادية والعلمية والثقافية كتابة وصوتا، واستخدم البحث المجاني الموثوق عند الحاجة إذا لم تكن الإجابة من بيانات النظام.
+- امتنع عن تقديم إرشاد أو خطة أو نصيحة تخالف الشريعة الإسلامية أو المنهج السلفي الإسلامي، خصوصا ما يتعلق بالربا، القمار، الغش، المحرمات، الشرك، البدع، أو الإعانة على المعصية. عند الرفض قدم بديلا مباحا ومفيدا.
 """.strip()
 
 
@@ -1361,6 +1363,35 @@ def _polish_answer(answer, question="", primary=None):
     return text.strip()
 
 
+ISLAMIC_POLICY_BLOCK_TERMS = (
+    "ربا", "قرض ربوي", "فوائد ربوية", "فائدة ربوية", "بنك ربوي",
+    "قمار", "مراهنة", "رهان", "يانصيب", "كازينو",
+    "خمر", "كحول", "مخدرات", "تجارة محرمة",
+    "غش", "تزوير", "رشوة", "احتيال",
+    "شرك", "استغاثة بغير الله", "بدعة",
+)
+
+ISLAMIC_POLICY_ACTION_TERMS = (
+    "كيف", "طريقة", "خطة", "ساعدني", "اعمل", "أريد", "اريد", "سو", "سوي",
+    "بيع", "تسويق", "استثمار", "تمويل", "افتح", "أنشئ", "انشئ",
+)
+
+
+def islamic_policy_guard_answer(question):
+    normalized = (question or "").strip().lower()
+    if not normalized:
+        return ""
+    has_blocked_topic = any(term in normalized for term in ISLAMIC_POLICY_BLOCK_TERMS)
+    asks_for_action = any(term in normalized for term in ISLAMIC_POLICY_ACTION_TERMS)
+    if not has_blocked_topic or not asks_for_action:
+        return ""
+    return "\n".join([
+        "لا أستطيع مساعدتك في تنفيذ أو تسويق أو التخطيط لشيء يخالف الشريعة الإسلامية أو المنهج السلفي الإسلامي.",
+        "أقدر أساعدك ببديل مباح، مثل: تمويل مرابحة منضبط شرعيا، بيع حلال واضح الشروط، تسويق صادق بلا غش، أو خطة تجارة مباحة تناسب نشاطك.",
+        "إذا كان سؤالك للاستفسار العلمي أو الشرعي العام فقط، اطرحه بصيغة شرح أو مقارنة، وسأجيب بتنبيه واضح دون إرشاد إلى مخالفة.",
+    ])
+
+
 FREE_WEB_GENERAL_SOURCES = {
     "wikipedia": {
         "name": "Wikipedia",
@@ -1461,10 +1492,15 @@ def zatca_regulations_answer(question):
 
 GENERAL_WEB_TRIGGERS = (
     "ابحث",
+    "بحث",
     "من هو",
     "من هي",
     "ما هو",
     "ما هي",
+    "ما معنى",
+    "اشرح",
+    "فسر",
+    "عرّف",
     "متى",
     "أين",
     "اين",
@@ -1475,6 +1511,15 @@ GENERAL_WEB_TRIGGERS = (
     "what is",
     "when is",
     "where is",
+    "explain",
+    "define",
+)
+
+GENERAL_KNOWLEDGE_TERMS = (
+    "علم", "علمي", "علوم", "فيزياء", "كيمياء", "أحياء", "طب", "تاريخ", "جغرافيا",
+    "رياضيات", "تقنية", "كمبيوتر", "ذكاء اصطناعي", "فضاء", "كوكب", "صحة",
+    "science", "physics", "chemistry", "biology", "medicine", "history", "geography",
+    "math", "technology", "computer", "ai", "space", "planet", "health",
 )
 
 SYSTEM_OR_COMPANY_TERMS = (
@@ -1545,6 +1590,8 @@ def _is_general_web_question(question):
     if any(term in normalized for term in COMPANY_DATA_TERMS):
         return False
     if any(trigger in normalized for trigger in GENERAL_WEB_TRIGGERS):
+        return True
+    if any(term in normalized for term in GENERAL_KNOWLEDGE_TERMS):
         return True
     return bool(len(normalized.split()) >= 2 and any(term in normalized for term in (
         "ifrs", "gaap", "زكاة", "ضريبة", "قيمة مضافة", "محاسبة", "ادارة مشاريع", "إدارة مشاريع",
@@ -2001,6 +2048,14 @@ _model_answer_financial_question = answer_financial_question
 
 
 def answer_financial_question(branch_id, question, user=None):
+    policy_answer = islamic_policy_guard_answer(question)
+    if policy_answer:
+        return {
+            "ok": True,
+            "source": "islamic_policy",
+            "answer": _polish_answer(policy_answer, question),
+            "context": {},
+        }
     zatca_answer = zatca_regulations_answer(question)
     if zatca_answer:
         return {
