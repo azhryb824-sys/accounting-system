@@ -1,9 +1,11 @@
 import json
+from io import StringIO
 from pathlib import Path
 from decimal import Decimal
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 from django.test import TestCase
 from django.utils import timezone
 
@@ -256,6 +258,38 @@ class InvoiceAccountingTests(TestCase):
         self.assertEqual(result["source"], "local_knowledge")
         self.assertIn("Inventory turnover", result["answer"])
         self.assertIn("https://example.com/inventory-turnover", result["answer"])
+
+    @patch("invoicing.management.commands.update_ai_knowledge.requests.get")
+    def test_update_ai_knowledge_loads_multiple_public_sources(self, requests_get):
+        class FakeResponse:
+            def __init__(self, payload):
+                self.payload = payload
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return self.payload
+
+        def fake_get(url, **kwargs):
+            if "wikipedia" in url:
+                return FakeResponse({"query": {"search": [{"title": "Accounting", "snippet": "Accounting summary."}]}})
+            if "wikidata" in url:
+                return FakeResponse({"search": [{"label": "Accounting", "description": "structured finance concept", "id": "Q4116214"}]})
+            if "openalex" in url:
+                return FakeResponse({"results": [{"title": "Accounting systems research", "publication_year": 2024, "cited_by_count": 10, "id": "https://openalex.org/W1"}]})
+            return FakeResponse({})
+
+        requests_get.side_effect = fake_get
+        out = StringIO()
+
+        call_command("update_ai_knowledge", topic=["retail analytics"], limit=1, stdout=out)
+
+        self.assertTrue(AIKnowledgeSource.objects.filter(name="Wikipedia summaries").exists())
+        self.assertTrue(AIKnowledgeSource.objects.filter(name="Wikidata public facts").exists())
+        self.assertTrue(AIKnowledgeSource.objects.filter(name="OpenAlex research index").exists())
+        self.assertTrue(AIKnowledgeEntry.objects.filter(title="Accounting systems research").exists())
+        self.assertIn("AI knowledge updated", out.getvalue())
 
     def test_ai_interaction_learning_stores_summary_only(self):
         record = record_ai_interaction_learning(

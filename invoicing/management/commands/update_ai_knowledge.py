@@ -1,4 +1,5 @@
 import re
+from urllib.parse import quote
 
 import requests
 from django.core.management.base import BaseCommand
@@ -9,11 +10,30 @@ from invoicing.models import AIKnowledgeSource
 
 
 DEFAULT_TOPICS = (
-    "accounting",
-    "cash flow",
-    "inventory management",
-    "project management",
-    "small business Saudi Arabia",
+    "financial accounting", "management accounting", "cost accounting", "auditing",
+    "IFRS", "cash flow", "working capital", "accounts receivable", "accounts payable",
+    "inventory management", "inventory turnover", "point of sale", "cashier system",
+    "electronic invoicing Saudi Arabia", "VAT Saudi Arabia", "ZATCA e-invoicing",
+    "small business Saudi Arabia", "retail management", "pricing strategy",
+    "gross margin", "profit margin", "break even analysis", "financial statements",
+    "balance sheet", "income statement", "trial balance", "general ledger",
+    "project management", "risk management", "business plan", "market research",
+    "customer relationship management", "supply chain management", "procurement",
+    "human resources management", "payroll", "investment analysis", "business analytics",
+    "artificial intelligence", "machine learning", "data analysis", "cybersecurity",
+    "cloud computing", "software as a service", "e-commerce", "digital marketing",
+    "economics", "finance", "statistics", "operations management", "entrepreneurship",
+)
+
+WIKIDATA_TOPICS = (
+    "accounting", "financial statement", "cash flow", "inventory", "tax",
+    "business", "project management", "artificial intelligence", "economics",
+)
+
+OPENALEX_TOPICS = (
+    "accounting information systems", "financial accounting", "inventory management",
+    "small business performance", "Saudi Arabia VAT", "electronic invoicing",
+    "cash flow forecasting", "retail analytics", "business intelligence",
 )
 
 
@@ -27,6 +47,7 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--topic", action="append", dest="topics", help="Extra public knowledge topic to fetch.")
+        parser.add_argument("--limit", type=int, default=1, help="Maximum rows per public source/topic.")
 
     def handle(self, *args, **options):
         created_or_updated = 0
@@ -52,7 +73,8 @@ class Command(BaseCommand):
             )
             created_or_updated += 1
 
-        topics = list(DEFAULT_TOPICS) + list(options.get("topics") or [])
+        limit = max(1, min(int(options.get("limit") or 1), 5))
+        topics = list(dict.fromkeys(list(DEFAULT_TOPICS) + list(options.get("topics") or [])))
         wiki_source, _ = AIKnowledgeSource.objects.update_or_create(
             url="https://www.wikipedia.org/",
             defaults={
@@ -67,23 +89,90 @@ class Command(BaseCommand):
             try:
                 response = requests.get(
                     "https://en.wikipedia.org/w/api.php",
-                    params={"action": "query", "list": "search", "srsearch": topic, "format": "json", "srlimit": 1},
+                    params={"action": "query", "list": "search", "srsearch": topic, "format": "json", "srlimit": limit},
                     headers={"User-Agent": "AccountingSystemAI/1.0 knowledge updater"},
                     timeout=7,
                 )
                 response.raise_for_status()
                 rows = response.json().get("query", {}).get("search", [])
-                if not rows:
-                    continue
-                row = rows[0]
-                title = row.get("title") or topic
-                summary = _clean_text(re.sub("<[^>]+>", " ", row.get("snippet") or ""))
-                page_url = f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}"
-                upsert_ai_knowledge_entry(wiki_source, title, summary, page_url, topic=topic)
-                created_or_updated += 1
+                for row in rows[:limit]:
+                    title = row.get("title") or topic
+                    summary = _clean_text(re.sub("<[^>]+>", " ", row.get("snippet") or ""))
+                    page_url = f"https://en.wikipedia.org/wiki/{quote(title.replace(' ', '_'))}"
+                    upsert_ai_knowledge_entry(wiki_source, title, summary, page_url, topic=topic)
+                    created_or_updated += 1
             except Exception as exc:
                 wiki_source.last_error = str(exc)[:1000]
                 wiki_source.last_checked_at = now
                 wiki_source.save(update_fields=["last_error", "last_checked_at"])
+
+        wikidata_source, _ = AIKnowledgeSource.objects.update_or_create(
+            url="https://www.wikidata.org/",
+            defaults={
+                "name": "Wikidata public facts",
+                "license_note": "CC0 public-domain structured data.",
+                "is_active": True,
+                "last_checked_at": now,
+                "last_error": "",
+            },
+        )
+        for topic in list(dict.fromkeys(list(WIKIDATA_TOPICS) + list(options.get("topics") or []))):
+            try:
+                response = requests.get(
+                    "https://www.wikidata.org/w/api.php",
+                    params={
+                        "action": "wbsearchentities",
+                        "search": topic,
+                        "language": "en",
+                        "format": "json",
+                        "limit": limit,
+                    },
+                    headers={"User-Agent": "AccountingSystemAI/1.0 knowledge updater"},
+                    timeout=7,
+                )
+                response.raise_for_status()
+                for row in response.json().get("search", [])[:limit]:
+                    title = row.get("label") or topic
+                    description = row.get("description") or "Structured public knowledge entry."
+                    entity_id = row.get("id") or ""
+                    page_url = f"https://www.wikidata.org/wiki/{entity_id}" if entity_id else "https://www.wikidata.org/"
+                    upsert_ai_knowledge_entry(wikidata_source, title, _clean_text(description), page_url, topic=topic)
+                    created_or_updated += 1
+            except Exception as exc:
+                wikidata_source.last_error = str(exc)[:1000]
+                wikidata_source.last_checked_at = now
+                wikidata_source.save(update_fields=["last_error", "last_checked_at"])
+
+        openalex_source, _ = AIKnowledgeSource.objects.update_or_create(
+            url="https://openalex.org/",
+            defaults={
+                "name": "OpenAlex research index",
+                "license_note": "CC0 open research metadata.",
+                "is_active": True,
+                "last_checked_at": now,
+                "last_error": "",
+            },
+        )
+        for topic in list(dict.fromkeys(list(OPENALEX_TOPICS) + list(options.get("topics") or []))):
+            try:
+                response = requests.get(
+                    "https://api.openalex.org/works",
+                    params={"search": topic, "per-page": limit, "sort": "cited_by_count:desc"},
+                    headers={"User-Agent": "AccountingSystemAI/1.0 knowledge updater"},
+                    timeout=7,
+                )
+                response.raise_for_status()
+                for row in response.json().get("results", [])[:limit]:
+                    title = row.get("title") or topic
+                    year = row.get("publication_year") or "unknown year"
+                    cited = row.get("cited_by_count") or 0
+                    source_url = row.get("doi") or row.get("id") or "https://openalex.org/"
+                    summary = f"Research metadata published in {year}; cited by {cited} works in OpenAlex."
+                    upsert_ai_knowledge_entry(openalex_source, title, summary, source_url, topic=topic)
+                    created_or_updated += 1
+            except Exception as exc:
+                openalex_source.last_error = str(exc)[:1000]
+                openalex_source.last_checked_at = now
+                openalex_source.save(update_fields=["last_error", "last_checked_at"])
 
         self.stdout.write(self.style.SUCCESS(f"AI knowledge updated: {created_or_updated} entries processed."))
