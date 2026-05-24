@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -444,6 +445,13 @@ class InvoiceAccountingTests(TestCase):
         self.assertIn("ما الخطأ الظاهر؟", sent_command)
         self.assertIn("تحليل الشاشة/الصورة", sent_command)
         self.assertIn("تظهر فاتورة بيع", sent_command)
+
+    def test_ai_assistant_template_has_valid_voice_patterns(self):
+        template = Path("invoicing/templates/invoicing/ai_assistant.html").read_text(encoding="utf-8")
+
+        self.assertNotIn("/arabic|???????/i", template)
+        self.assertIn("arabic|عربي|العربية", template)
+        self.assertIn("mediaUnavailableMessage", template)
 
     def test_sales_invoice_posts_once_and_reduces_inventory_once(self):
         customer = Customer.objects.create(name="Customer")

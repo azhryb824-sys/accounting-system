@@ -200,6 +200,13 @@
         statusBox.textContent = text;
     }
 
+    function mediaUnavailableMessage(kind) {
+        if (!window.isSecureContext) {
+            return `${kind} يحتاج HTTPS أو localhost حتى يسمح المتصفح بالميكروفون والكاميرا ومشاركة الشاشة. افتح الموقع عبر https أو شغله محليا على localhost.`;
+        }
+        return `تعذر تشغيل ${kind}. تأكد من إعطاء الإذن من المتصفح وأن الجهاز متصل.`;
+    }
+
     function selectedDialect() {
         return dialectSelect.value || 'ar-SA';
     }
@@ -371,7 +378,7 @@
             voices.find((voice) => (voice.lang || '').toLowerCase() === dialect && professionalMalePattern.test(voice.name || '')) ||
             voices.find((voice) => professionalMalePattern.test(voice.name || '') && /^ar/i.test(voice.lang || '')) ||
             voices.find((voice) => (voice.lang || '').toLowerCase() === dialect) ||
-            voices.find((voice) => /arabic|???????/i.test(voice.name || '') && /^ar/i.test(voice.lang || '')) ||
+            voices.find((voice) => /arabic|عربي|العربية/i.test(voice.name || '') && /^ar/i.test(voice.lang || '')) ||
             voices.find((voice) => (voice.lang || '').toLowerCase().startsWith('ar')) ||
             selected ||
             null
@@ -401,7 +408,7 @@
             .forEach((voice, index) => {
                 const option = document.createElement('option');
                 option.value = `${voice.name}::${voice.lang}`;
-                const maleHint = /naayf|maged|tarik|tariq|omar|hassan|khalid|zayd/i.test(voice.name || '') ? ' - ?????' : '';
+                const maleHint = /naayf|maged|tarik|tariq|omar|hassan|khalid|zayd/i.test(voice.name || '') ? ' - رجالي' : '';
                 option.textContent = `${voice.name} (${voice.lang})${maleHint}`;
                 voiceSelect.appendChild(option);
             });
@@ -626,7 +633,7 @@
             cameraCaptureButton.disabled = false;
             setStatus('وجه الكاميرا نحو البيانات ثم اضغط قراءة الصورة.');
         } catch (error) {
-            setStatus('تعذر فتح الكاميرا. تأكد من إذن الكاميرا في المتصفح.');
+            setStatus(mediaUnavailableMessage('الكاميرا'));
         }
     }
 
@@ -664,7 +671,7 @@
             screenPreview.onloadedmetadata = () => refreshScreenContext();
             setStatus('تمت مشاركة الشاشة. اسأل صوتيا أو كتابيا ثم اضغط تحليل الشاشة.');
         } catch (error) {
-            setStatus('لم يتم بدء مشاركة الشاشة. تأكد من إعطاء الإذن من المتصفح.');
+            setStatus(mediaUnavailableMessage('مشاركة الشاشة'));
         }
     }
 
@@ -762,7 +769,7 @@
                 window.setTimeout(() => recognition.start(), 250);
                 return;
             }
-            setStatus('تعذر التقاط الصوت. تأكد من إذن الميكروفون وتحدث بوضوح.');
+            setStatus(mediaUnavailableMessage('الميكروفون'));
         };
         recognition.onresult = (event) => {
             let transcript = '';
