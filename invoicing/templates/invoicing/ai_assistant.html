@@ -71,7 +71,7 @@
                         </div>
                         <div class="col-md-3">
                             <label class="form-label" for="assistant-voice-rate">سرعة الصوت</label>
-                            <input id="assistant-voice-rate" class="form-range" type="range" min="0.75" max="1.2" step="0.05" value="0.9">
+                            <input id="assistant-voice-rate" class="form-range" type="range" min="0.7" max="1.05" step="0.05" value="0.82">
                         </div>
                     </div>
                     <div class="small text-muted-soft mt-2" id="voice-status">الصوت يعمل من المتصفح مباشرة إذا كان مدعوما.</div>
@@ -262,6 +262,62 @@
         return clean;
     }
 
+    function improveSpeechText(text) {
+        return (text || '')
+            .replace(/[()]/g, ' ')
+            .replace(/[-–—]{2,}/g, ' ')
+            .replace(/https?:\/\/\S+/g, 'رابط')
+            .replace(/\b\d{4,}\b/g, (match) => match.split('').join(' '))
+            .replace(/[•â€¢*_`#>|[\]{}]/g, ' ')
+            .replace(/\bSAR\b/gi, 'ريال')
+            .replace(/\bVAT\b/gi, 'ضريبة القيمة المضافة')
+            .replace(/\bPDF\b/gi, 'ملف بي دي إف')
+            .replace(/\bOCR\b/gi, 'قراءة النص من الصورة')
+            .replace(/\bAI\b/gi, 'الذكاء الاصطناعي')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function splitSpeechChunks(text) {
+        const sentences = (text || '')
+            .replace(/([.؟?!؛:])\s+/g, '$1|')
+            .split('|')
+            .map((part) => part.trim())
+            .filter(Boolean);
+        const chunks = [];
+        sentences.forEach((sentence) => {
+            if (sentence.length <= 180) {
+                chunks.push(sentence);
+                return;
+            }
+            const words = sentence.split(/\s+/);
+            let current = '';
+            words.forEach((word) => {
+                if ((current + ' ' + word).trim().length > 160) {
+                    if (current) chunks.push(current.trim());
+                    current = word;
+                } else {
+                    current = `${current} ${word}`.trim();
+                }
+            });
+            if (current) chunks.push(current.trim());
+        });
+        return chunks.slice(0, 8);
+    }
+
+    function preferredVoiceForDialect(voices) {
+        const selected = voices.find((voice) => `${voice.name}::${voice.lang}` === voiceSelect.value);
+        if (selected && /^ar/i.test(selected.lang || '')) return selected;
+        const dialect = selectedDialect().toLowerCase();
+        return (
+            voices.find((voice) => (voice.lang || '').toLowerCase() === dialect) ||
+            voices.find((voice) => /microsoft naayf|microsoft hoda|naayf|hoda|maged|arabic|العربية/i.test(voice.name || '') && /^ar/i.test(voice.lang || '')) ||
+            voices.find((voice) => (voice.lang || '').toLowerCase().startsWith('ar')) ||
+            selected ||
+            null
+        );
+    }
+
     function loadArabicVoice() {
         if (!('speechSynthesis' in window)) return null;
         const voices = window.speechSynthesis.getVoices();
@@ -301,14 +357,14 @@
             resumeLiveConversation();
             return;
         }
-        const cleanText = normalizeDialectForSpeech(text).slice(0, 900);
+        const cleanText = improveSpeechText(normalizeDialectForSpeech(text)).slice(0, 650);
         if (!cleanText) return;
         lastSpokenText = cleanText;
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(cleanText);
         assistantIsSpeaking = true;
         const voices = window.speechSynthesis.getVoices();
-        const selectedVoice = voices.find((voice) => `${voice.name}::${voice.lang}` === voiceSelect.value) || arabicVoice || loadArabicVoice();
+        const selectedVoice = preferredVoiceForDialect(voices) || arabicVoice || loadArabicVoice();
         const hasUrdu = selectedDialect() === 'ur-PK' || (/[\u0600-\u06FF]/.test(cleanText) && /[پچژگٹڈڑںے]/.test(cleanText));
         const hasBangla = /[\u0980-\u09FF]/.test(cleanText);
         if (selectedVoice && !hasUrdu && !hasBangla) {
@@ -325,7 +381,7 @@
             utterance.lang = selectedDialect();
             setStatus('لم أجد صوتا عربيا مثبتا في المتصفح. سأستخدم الصوت الافتراضي.');
         }
-        utterance.rate = Number(voiceRate.value || 0.9);
+        utterance.rate = Math.min(0.95, Number(voiceRate.value || 0.82));
         utterance.pitch = 1;
         utterance.volume = 1;
         utterance.onend = () => {
