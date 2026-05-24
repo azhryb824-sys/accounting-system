@@ -10,6 +10,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+import requests
+
 try:
     from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 except ImportError:
@@ -27,6 +29,9 @@ except ImportError:
 MODEL_NAME = "نموذج عبدالرحمن المحاسبي"
 MODEL_OWNER = "عبدالرحمن"
 MODEL_PATH = Path(os.environ.get("ACCOUNTING_AI_MODEL_PATH") or Path(__file__).resolve().parent / "models" / "my_model")
+AI_BACKEND = os.environ.get("ACCOUNTING_AI_BACKEND", "auto").strip().lower()
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434").strip().rstrip("/")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:7b-instruct").strip()
 
 
 def _load_transformers_runtime():
@@ -646,6 +651,20 @@ class PrivateAccountingModel:
         question = question.strip()
         return f"{SYSTEM_PROMPT}\n\nسؤال: {question}\nالإجابة:"
 
+    def build_chat_prompt(self, question: str) -> str:
+        question = question.strip()
+        return (
+            f"{SYSTEM_PROMPT}\n\n"
+            "تعليمات الجودة:\n"
+            "- أجب كخبير مالي ومحاسبي عملي، لا كروبوت عام.\n"
+            "- اربط الإجابة بالأرقام والسياق الموجود في السؤال عندما تتوفر.\n"
+            "- إذا كان السؤال عن النظام أو الشركة فاعتمد على البيانات المرسلة من Django ولا تخترع أرقاما.\n"
+            "- اجعل الرد منظما: خلاصة، تحليل، توصية عملية، وما يحتاجه المستخدم للخطوة التالية.\n"
+            "- في الصوت العربي استخدم جملا قصيرة وواضحة وسهلة النطق.\n"
+            "- لا تقدم فتوى أو حكم شرعي؛ وجّه المستخدم لأهل العلم عند السؤال الشرعي.\n\n"
+            f"سؤال المستخدم والسياق:\n{question}\n\nالإجابة الاحترافية:"
+        )
+
     def answer(self, question: str, max_new_tokens: int = 240) -> str:
         if not question or not question.strip():
             raise ValueError("السؤال لا يمكن أن يكون فارغا.")
@@ -657,6 +676,10 @@ class PrivateAccountingModel:
         private_answer = self._answer_from_private_knowledge(question)
         if private_answer:
             return private_answer
+
+        ollama_answer = self._answer_from_ollama(question, max_new_tokens=max_new_tokens)
+        if ollama_answer:
+            return ollama_answer
 
         if self.model is None or self.tokenizer is None:
             return (
@@ -684,6 +707,31 @@ class PrivateAccountingModel:
         if not self._is_usable_arabic_answer(answer):
             return "هذا السؤال يحتاج تدريبا إضافيا داخل النموذج الخاص. أضف مثالا مشابها في بيانات التدريب ثم شغل train.py لتحسين الإجابة."
         return answer
+
+    def _answer_from_ollama(self, question: str, max_new_tokens: int = 420) -> str | None:
+        if AI_BACKEND not in {"auto", "ollama"} or not OLLAMA_MODEL:
+            return None
+        payload = {
+            "model": OLLAMA_MODEL,
+            "prompt": self.build_chat_prompt(question),
+            "stream": False,
+            "options": {
+                "num_predict": min(int(max_new_tokens or 420), 1800),
+                "temperature": 0.2,
+                "top_p": 0.9,
+                "repeat_penalty": 1.08,
+            },
+        }
+        try:
+            response = requests.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload, timeout=120)
+            response.raise_for_status()
+            data = response.json()
+        except Exception:
+            return None
+        answer = (data.get("response") or "").strip()
+        if not answer or not self._is_usable_arabic_answer(answer):
+            return None
+        return self._clean_answer(answer, "")
 
     @staticmethod
     def _answer_from_private_knowledge(question: str) -> str | None:
@@ -754,6 +802,20 @@ def get_model() -> PrivateAccountingModel:
 
 def ask(question: str, max_new_tokens: int = 240) -> str:
     return get_model().answer(question, max_new_tokens=max_new_tokens)
+
+
+def runtime_status() -> dict[str, Any]:
+    model = get_model()
+    return {
+        "model": MODEL_NAME,
+        "backend": AI_BACKEND,
+        "ollama_model": OLLAMA_MODEL,
+        "ollama_url": OLLAMA_BASE_URL,
+        "transformers_model_path": str(model.model_path),
+        "transformers_loaded": bool(model.model is not None and model.tokenizer is not None),
+        "recommended_backend": "ollama",
+        "recommended_model": "qwen2.5:7b-instruct or qwen2.5:14b-instruct when RAM/GPU is enough",
+    }
 
 
 if __name__ == "__main__":

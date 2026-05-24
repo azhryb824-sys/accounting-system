@@ -4,7 +4,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from inference import MODEL_NAME, MODEL_OWNER, ask, extract_invoice_data
+from inference import MODEL_NAME, MODEL_OWNER, ask, extract_invoice_data, runtime_status
 
 
 app = FastAPI(
@@ -30,17 +30,20 @@ class AnswerResponse(BaseModel):
 
 @app.get("/")
 def home() -> dict[str, str]:
+    status = runtime_status()
     return {
         "message": f"{MODEL_NAME} يعمل الآن كنموذج خاص.",
         "owner": MODEL_OWNER,
+        "backend": str(status.get("backend", "")),
+        "ollama_model": str(status.get("ollama_model", "")),
         "ask_endpoint": "/ask",
         "docs": "/docs",
     }
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ready", "model": MODEL_NAME}
+def health() -> dict[str, Any]:
+    return {"status": "ready", **runtime_status()}
 
 
 @app.post("/ask", response_model=AnswerResponse)

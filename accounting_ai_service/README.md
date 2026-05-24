@@ -17,6 +17,34 @@ http://127.0.0.1:8010/ask
 
 or to the URL configured in `PRIVATE_ACCOUNTING_AI_URL`.
 
+## Strong recommended setup
+
+For a noticeably stronger assistant, run this service with Ollama and a modern open instruction model. This keeps the system free of paid API keys and allows commercial use when you choose a permissive model license.
+
+Recommended models:
+
+- Best balance: `qwen2.5:7b-instruct`
+- Stronger when hardware allows: `qwen2.5:14b-instruct`
+- Lighter/faster: `qwen2.5:3b-instruct`
+
+PowerShell example:
+
+```powershell
+ollama pull qwen2.5:7b-instruct
+$env:ACCOUNTING_AI_BACKEND="ollama"
+$env:OLLAMA_MODEL="qwen2.5:7b-instruct"
+$env:OLLAMA_BASE_URL="http://127.0.0.1:11434"
+.\venv\Scripts\python.exe -m uvicorn app:app --host 127.0.0.1 --port 8010
+```
+
+Then check:
+
+```text
+http://127.0.0.1:8010/health
+```
+
+The Django app will still use its own accounting-data layer for exact invoices, inventory, reports, permissions, and approval flows. The open model improves conversation depth, Arabic wording, reasoning, and general knowledge; the Django layer protects financial accuracy.
+
 Model weights and virtual environments are not committed here. Keep trained model files under the local service directory, for example:
 
 ```text
@@ -30,6 +58,15 @@ $env:ACCOUNTING_AI_MODEL_PATH="D:\accounting-ai\models\qwen2.5-7b-instruct"
 ```
 
 For a ChatGPT-like local experience without paid APIs, use a commercially usable open model that your server can run. Good practical choices are Qwen2.5 Instruct or Mistral Instruct families. The stronger the model and hardware, the better the conversation quality; the Django app still protects weak answers with accounting-data fallbacks.
+
+## Arabic voice quality
+
+Browser voices depend on the user's device and operating system. For the best Arabic male voice without paid services:
+
+- Install high-quality Arabic voices on Windows or the browser device when available.
+- Use a modern browser with Arabic `speechSynthesis` support.
+- Keep responses short and sentence-based for clearer pronunciation.
+- For future server-side TTS, prefer commercially usable open TTS models such as Apache/MIT licensed Arabic TTS projects, but verify each voice/model license before deployment.
 
 ## Photographed invoice OCR
 
