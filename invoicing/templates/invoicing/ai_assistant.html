@@ -33,11 +33,26 @@
                         <button class="btn btn-outline-light" type="button" id="camera-capture" disabled>
                             <i class="fa-solid fa-circle-dot"></i> قراءة الصورة
                         </button>
+                        <button class="btn btn-outline-light" type="button" id="screen-share-start">
+                            <i class="fa-solid fa-display"></i> مشاركة الشاشة
+                        </button>
+                        <button class="btn btn-outline-light" type="button" id="screen-capture" disabled>
+                            <i class="fa-solid fa-crop-simple"></i> تحليل الشاشة
+                        </button>
+                        <button class="btn btn-outline-danger" type="button" id="screen-share-stop" disabled>
+                            <i class="fa-solid fa-display"></i> إيقاف الشاشة
+                        </button>
                         <button class="btn btn-outline-light" type="button" id="assistant-run">
                             <i class="fa-solid fa-bolt"></i> تحليل وتنفيذ
                         </button>
                         <button class="btn btn-outline-light" type="button" id="voice-read">
                             <i class="fa-solid fa-volume-high"></i> قراءة الرد
+                        </button>
+                        <button class="btn btn-success" type="button" id="live-conversation-start">
+                            <i class="fa-solid fa-headset"></i> محادثة مباشرة
+                        </button>
+                        <button class="btn btn-outline-danger" type="button" id="live-conversation-stop" disabled>
+                            <i class="fa-solid fa-circle-stop"></i> إنهاء المحادثة
                         </button>
                     </div>
                     <div class="row g-2 mt-3">
@@ -63,6 +78,10 @@
                     <div class="glass-soft p-2 mt-3 d-none" id="camera-panel">
                         <video id="camera-preview" class="w-100 rounded" autoplay playsinline muted style="max-height: 320px; object-fit: cover; background:#020617;"></video>
                         <canvas id="camera-canvas" class="d-none"></canvas>
+                    </div>
+                    <div class="glass-soft p-2 mt-3 d-none" id="screen-panel">
+                        <video id="screen-preview" class="w-100 rounded" autoplay playsinline muted style="max-height: 320px; object-fit: contain; background:#020617;"></video>
+                        <canvas id="screen-canvas" class="d-none"></canvas>
                     </div>
                 </form>
 
@@ -138,8 +157,16 @@
     const cameraPanel = document.getElementById('camera-panel');
     const cameraPreview = document.getElementById('camera-preview');
     const cameraCanvas = document.getElementById('camera-canvas');
+    const screenShareStart = document.getElementById('screen-share-start');
+    const screenShareStop = document.getElementById('screen-share-stop');
+    const screenCaptureButton = document.getElementById('screen-capture');
+    const screenPanel = document.getElementById('screen-panel');
+    const screenPreview = document.getElementById('screen-preview');
+    const screenCanvas = document.getElementById('screen-canvas');
     const runButton = document.getElementById('assistant-run');
     const readButton = document.getElementById('voice-read');
+    const liveConversationStart = document.getElementById('live-conversation-start');
+    const liveConversationStop = document.getElementById('live-conversation-stop');
     const dialectSelect = document.getElementById('assistant-dialect-select');
     const voiceSelect = document.getElementById('assistant-voice-select');
     const voiceRate = document.getElementById('assistant-voice-rate');
@@ -157,6 +184,12 @@
     let arabicVoice = null;
     let lastSpokenText = '';
     let cameraStream = null;
+    let screenStream = null;
+    let latestScreenPayload = null;
+    let screenContextTimer = null;
+    let liveConversationMode = false;
+    let assistantIsProcessing = false;
+    let assistantIsSpeaking = false;
 
     function setStatus(text) {
         statusBox.textContent = text;
@@ -169,6 +202,33 @@
     function dialectFallbacks() {
         const selected = selectedDialect();
         return [selected, ...fallbackRecognitionLanguages.filter((lang) => lang !== selected)];
+    }
+
+    function startListening() {
+        if (!recognition || assistantIsProcessing || assistantIsSpeaking) return;
+        try {
+            recognitionLanguageIndex = 0;
+            recognition.lang = dialectFallbacks()[recognitionLanguageIndex];
+            recognition.start();
+        } catch (error) {
+            setStatus('التعرف الصوتي يعمل بالفعل أو غير جاهز الآن.');
+        }
+    }
+
+    function stopLiveConversation() {
+        liveConversationMode = false;
+        liveConversationStart.disabled = false;
+        liveConversationStop.disabled = true;
+        if (recognition) {
+            try { recognition.stop(); } catch (error) {}
+        }
+        if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+        setStatus('تم إنهاء المحادثة المباشرة.');
+    }
+
+    function resumeLiveConversation() {
+        if (!liveConversationMode) return;
+        window.setTimeout(() => startListening(), 500);
     }
 
     function normalizeArabicSpeechText(text) {
@@ -238,6 +298,7 @@
     function speak(text) {
         if (!('speechSynthesis' in window) || !text) {
             setStatus('المتصفح لا يدعم قراءة الصوت.');
+            resumeLiveConversation();
             return;
         }
         const cleanText = normalizeDialectForSpeech(text).slice(0, 900);
@@ -245,6 +306,7 @@
         lastSpokenText = cleanText;
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(cleanText);
+        assistantIsSpeaking = true;
         const voices = window.speechSynthesis.getVoices();
         const selectedVoice = voices.find((voice) => `${voice.name}::${voice.lang}` === voiceSelect.value) || arabicVoice || loadArabicVoice();
         const hasUrdu = selectedDialect() === 'ur-PK' || (/[\u0600-\u06FF]/.test(cleanText) && /[پچژگٹڈڑںے]/.test(cleanText));
@@ -266,7 +328,16 @@
         utterance.rate = Number(voiceRate.value || 0.9);
         utterance.pitch = 1;
         utterance.volume = 1;
-        utterance.onerror = () => setStatus('تعذرت قراءة الصوت العربي من المتصفح.');
+        utterance.onend = () => {
+            assistantIsSpeaking = false;
+            if (liveConversationMode) setStatus('أستمع لك... قل طلبك التالي أو قل إلغاء/تأكيد عند وجود مسودة.');
+            resumeLiveConversation();
+        };
+        utterance.onerror = () => {
+            assistantIsSpeaking = false;
+            setStatus('تعذرت قراءة الصوت العربي من المتصفح.');
+            resumeLiveConversation();
+        };
         window.speechSynthesis.speak(utterance);
     }
 
@@ -276,12 +347,18 @@
 
     async function runAssistant(command, autoNavigate = false, imagePayload = null) {
         const value = (command || questionInput.value || '').trim();
-        if (!value && !imagePayload) {
+        const liveScreenPayload = imagePayload || (screenStream ? (buildScreenPayload() || latestScreenPayload) : null);
+        if (!value && !liveScreenPayload) {
+            if (screenStream) {
+                captureScreenImage();
+                return;
+            }
             setStatus('اكتب أو قل طلبك أولا.');
             return;
         }
 
         if (value) questionInput.value = value;
+        assistantIsProcessing = true;
         setStatus('جاري تحليل الطلب...');
         answerCard.classList.remove('d-none');
         answerBox.textContent = 'لحظة...';
@@ -296,8 +373,8 @@
                 },
                 body: JSON.stringify({
                     command: value,
-                    image_base64: imagePayload ? imagePayload.image_base64 : '',
-                    media_type: imagePayload ? imagePayload.media_type : '',
+                    image_base64: liveScreenPayload ? liveScreenPayload.image_base64 : '',
+                    media_type: liveScreenPayload ? liveScreenPayload.media_type : '',
                 }),
             });
             const data = await response.json();
@@ -306,13 +383,14 @@
             }
 
             if (data.camera_command) {
-                questionInput.value = data.camera_command;
+                if (!value) questionInput.value = data.camera_command;
                 setStatus(`تمت قراءة الصورة كطلب: ${data.camera_command}`);
             } else {
                 setStatus('تم التحليل.');
             }
             answerBox.textContent = data.answer || 'تم تحليل الطلب.';
             speak(data.answer || '');
+            assistantIsProcessing = false;
 
             if (data.action && data.action.url) {
                 const openButton = document.createElement('a');
@@ -343,7 +421,9 @@
             });
         } catch (error) {
             answerBox.textContent = error.message;
+            assistantIsProcessing = false;
             setStatus('تعذر إكمال الطلب.');
+            resumeLiveConversation();
         }
     }
 
@@ -380,6 +460,81 @@
         runAssistant('', false, { image_base64: imageBase64, media_type: 'image/jpeg' });
     }
 
+    async function startScreenShare() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+            setStatus('المتصفح لا يدعم مشاركة الشاشة. استخدم الكاميرا أو اكتب السؤال.');
+            return;
+        }
+        try {
+            screenStream = await navigator.mediaDevices.getDisplayMedia({
+                video: true,
+                audio: false,
+            });
+            screenPreview.srcObject = screenStream;
+            screenPanel.classList.remove('d-none');
+            screenCaptureButton.disabled = false;
+            screenShareStop.disabled = false;
+            screenShareStart.disabled = true;
+            screenStream.getVideoTracks()[0].addEventListener('ended', stopScreenShare);
+            screenContextTimer = window.setInterval(refreshScreenContext, 3500);
+            screenPreview.onloadedmetadata = () => refreshScreenContext();
+            setStatus('تمت مشاركة الشاشة. اسأل صوتيا أو كتابيا ثم اضغط تحليل الشاشة.');
+        } catch (error) {
+            setStatus('لم يتم بدء مشاركة الشاشة. تأكد من إعطاء الإذن من المتصفح.');
+        }
+    }
+
+    function stopScreenShare() {
+        if (screenStream) {
+            screenStream.getTracks().forEach((track) => track.stop());
+            screenStream = null;
+        }
+        if (screenContextTimer) {
+            window.clearInterval(screenContextTimer);
+            screenContextTimer = null;
+        }
+        latestScreenPayload = null;
+        screenPreview.srcObject = null;
+        screenPreview.onloadedmetadata = null;
+        screenPanel.classList.add('d-none');
+        screenCaptureButton.disabled = true;
+        screenShareStop.disabled = true;
+        screenShareStart.disabled = false;
+        setStatus('تم إيقاف مشاركة الشاشة.');
+    }
+
+    function buildScreenPayload() {
+        if (!screenStream || !screenPreview.videoWidth) {
+            return null;
+        }
+        const maxWidth = 1400;
+        const scale = Math.min(1, maxWidth / screenPreview.videoWidth);
+        screenCanvas.width = Math.round(screenPreview.videoWidth * scale);
+        screenCanvas.height = Math.round(screenPreview.videoHeight * scale);
+        screenCanvas.getContext('2d').drawImage(screenPreview, 0, 0, screenCanvas.width, screenCanvas.height);
+        const imageBase64 = (screenCanvas.toDataURL('image/jpeg', 0.86).split(',')[1] || '');
+        if (!imageBase64) return null;
+        return {
+            image_base64: imageBase64,
+            media_type: 'image/jpeg',
+        };
+    }
+
+    function refreshScreenContext() {
+        const payload = buildScreenPayload();
+        if (payload) latestScreenPayload = payload;
+        return payload;
+    }
+
+    function captureScreenImage() {
+        const payload = refreshScreenContext();
+        if (!payload) {
+            setStatus('ابدأ مشاركة الشاشة أولا وانتظر ظهور المعاينة.');
+            return;
+        }
+        runAssistant(questionInput.value || 'حلل البيانات المعروضة على الشاشة وأجب بدقة', false, payload);
+    }
+
     if ('speechSynthesis' in window) {
         loadArabicVoice();
         window.speechSynthesis.onvoiceschanged = loadArabicVoice;
@@ -407,8 +562,12 @@
             setStatus(`أستمع الآن باللغة ${recognition.lang}...`);
         };
         recognition.onend = () => {
-            startButton.disabled = false;
-            stopButton.disabled = true;
+            startButton.disabled = liveConversationMode;
+            stopButton.disabled = false;
+            if (!liveConversationMode) {
+                startButton.disabled = false;
+                stopButton.disabled = true;
+            }
         };
         recognition.onerror = (event) => {
             const languages = dialectFallbacks();
@@ -428,25 +587,38 @@
             }
             questionInput.value = transcript.trim();
             if (event.results[event.results.length - 1].isFinal) {
-                runAssistant(questionInput.value, false);
+                const screenPayload = screenStream ? (refreshScreenContext() || latestScreenPayload) : null;
+                runAssistant(questionInput.value, false, screenPayload);
             }
         };
 
         startButton.addEventListener('click', () => {
-            recognitionLanguageIndex = 0;
-            recognition.lang = dialectFallbacks()[recognitionLanguageIndex];
-            recognition.start();
+            liveConversationMode = false;
+            startListening();
         });
         stopButton.addEventListener('click', () => recognition.stop());
+        liveConversationStart.addEventListener('click', () => {
+            liveConversationMode = true;
+            liveConversationStart.disabled = true;
+            liveConversationStop.disabled = false;
+            setStatus('بدأت المحادثة المباشرة. تكلم الآن، وسأرد صوتيا ثم أعود للاستماع.');
+            startListening();
+        });
+        liveConversationStop.addEventListener('click', stopLiveConversation);
     } else {
         startButton.disabled = true;
         stopButton.disabled = true;
+        liveConversationStart.disabled = true;
+        liveConversationStop.disabled = true;
         setStatus('المتصفح الحالي لا يدعم التعرف الصوتي. يمكنك استخدام الكتابة.');
     }
 
     readButton.addEventListener('click', () => speak(currentAnswerText() || lastSpokenText));
     cameraOpenButton.addEventListener('click', openCamera);
     cameraCaptureButton.addEventListener('click', captureCameraImage);
+    screenShareStart.addEventListener('click', startScreenShare);
+    screenShareStop.addEventListener('click', stopScreenShare);
+    screenCaptureButton.addEventListener('click', captureScreenImage);
     runButton.addEventListener('click', () => runAssistant('', false));
     document.querySelectorAll('.quick-command').forEach((button) => {
         button.addEventListener('click', () => runAssistant(button.dataset.command, false));

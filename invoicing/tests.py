@@ -1,4 +1,6 @@
+import json
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -118,6 +120,76 @@ class InvoiceAccountingTests(TestCase):
         self.assertIsNotNone(invoice.journal_entry_id)
         self.item.refresh_from_db()
         self.assertEqual(self.item.quantity, Decimal("8.00"))
+
+    @patch("invoicing.ai_services._openalex_research")
+    @patch("invoicing.ai_services._wikidata_facts")
+    @patch("invoicing.ai_services._wikipedia_summary")
+    def test_general_question_uses_free_trusted_web_sources(self, wikipedia, wikidata, openalex):
+        wikipedia.return_value = {
+            "title": "IFRS",
+            "extract": "معايير التقارير المالية الدولية هي معايير محاسبية دولية.",
+            "source_url": "https://example.com/ifrs",
+            "source_name": "Wikipedia",
+            "license": "CC BY-SA",
+        }
+        wikidata.return_value = {
+            "title": "IFRS",
+            "extract": "مجموعة معايير لإعداد التقارير المالية.",
+            "source_url": "https://example.com/wikidata-ifrs",
+            "source_name": "Wikidata",
+            "license": "CC0",
+        }
+        openalex.return_value = [{
+            "title": "IFRS adoption research",
+            "extract": "بحث داعم مفهرس في OpenAlex.",
+            "source_url": "https://example.com/openalex-ifrs",
+            "source_name": "OpenAlex",
+            "license": "CC0",
+        }]
+
+        result = answer_financial_question(self.branch.id, "ما هو IFRS؟")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "free_web")
+        self.assertIn("Wikipedia", result["answer"])
+        self.assertIn("OpenAlex", result["answer"])
+        self.assertIn("CC0", result["answer"])
+
+    @patch("invoicing.purchase_views.analyze_and_route_user_request")
+    @patch("invoicing.purchase_views.command_from_camera_image")
+    def test_ai_assistant_command_merges_screen_analysis_with_user_question(self, camera_reader, analyzer):
+        self.client.force_login(self.user)
+        session = self.client.session
+        session["branch_id"] = self.branch.id
+        session["company_id"] = self.company.id
+        session.save()
+        camera_reader.return_value = {"ok": True, "command": "تظهر فاتورة بيع بإجمالي 115 ريال"}
+        analyzer.return_value = {
+            "ok": True,
+            "answer": "تحليل الشاشة",
+            "source": "test",
+            "pending": None,
+            "action": {"type": "answer", "title": "", "url": "", "auto_open": False},
+            "suggestions": [],
+            "followups": [],
+            "context": {},
+        }
+
+        response = self.client.post(
+            "/invoicing/purchases/ai/assistant/command/",
+            data=json.dumps({
+                "command": "ما الخطأ الظاهر؟",
+                "image_base64": "abc",
+                "media_type": "image/jpeg",
+            }),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        sent_command = analyzer.call_args.args[1]
+        self.assertIn("ما الخطأ الظاهر؟", sent_command)
+        self.assertIn("تحليل الشاشة/الصورة", sent_command)
+        self.assertIn("تظهر فاتورة بيع", sent_command)
 
     def test_sales_invoice_posts_once_and_reduces_inventory_once(self):
         customer = Customer.objects.create(name="Customer")

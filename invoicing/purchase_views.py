@@ -319,15 +319,17 @@ def ai_assistant_command(request):
     command = (payload.get("command") or payload.get("question") or "").strip()
     image_base64 = (payload.get("image_base64") or "").strip()
     media_type = (payload.get("media_type") or "image/jpeg").strip()
-    if image_base64 and not command:
-        camera_result = command_from_camera_image(image_base64, media_type=media_type)
+    visual_command = ""
+    if image_base64:
+        camera_result = command_from_camera_image(image_base64, media_type=media_type, user_question=command)
         if not camera_result.get("ok"):
             return JsonResponse({
                 "ok": False,
                 "message": camera_result.get("message") or "لم أستطع قراءة الصورة.",
                 "raw": camera_result.get("raw", ""),
             }, status=400, json_dumps_params={"ensure_ascii": False})
-        command = camera_result.get("command", "").strip()
+        visual_command = camera_result.get("command", "").strip()
+        command = f"{command}\n\nتحليل الشاشة/الصورة:\n{visual_command}".strip() if command else visual_command
     if not command:
         return JsonResponse({"ok": False, "message": "اكتب أو قل طلبك أولا."}, status=400)
 
@@ -335,7 +337,7 @@ def ai_assistant_command(request):
     pending = request.session.get("ai_pending_command")
     result = analyze_and_route_user_request(branch_id, command, pending=pending, user=request.user)
     if image_base64:
-        result["camera_command"] = command
+        result["camera_command"] = visual_command or command
     if result.get("pending"):
         request.session["ai_pending_command"] = result["pending"]
     else:

@@ -570,13 +570,18 @@ def handle_ai_management_command(branch_id, text, pending=None, user=None):
     return {"ok": True, "source": "ai_actions", "answer": answer, "pending": None}
 
 
-def command_from_camera_image(image_base64, media_type="image/jpeg"):
-    prompt = (
-        "اقرأ الصورة وحولها إلى أمر قصير قابل للتنفيذ داخل النظام المحاسبي، لكن لا تطلب الحفظ النهائي. "
-        "إذا كانت الصورة فاتورة أو إيصال كاشير أو قائمة منتجات، استخرج أسماء المنتجات والكميات والأسعار الواضحة بصيغة: بيع 2 قلم بسعر 5 و1 دفتر بسعر 10. "
-        "إذا كانت بطاقة أو ورقة لإضافة عميل أو مورد أو صنف، استخرج النوع والاسم والأرقام الواضحة فقط. "
-        "أعد جملة عربية واحدة فقط مثل: بيع 2 قلم و1 دفتر، أو أضف عميل باسم أحمد، أو أضف صنف باسم قلم بتكلفة 2 وسعر البيع 5 وكمية 10. "
-        "إذا لم تتضح البيانات قل: لم أستطع قراءة بيانات كافية من الصورة."
+def command_from_camera_image(image_base64, media_type="image/jpeg", user_question=""):
+    prompt = _professional_prompt(
+        "visual_screen_or_camera_analysis",
+        user_question or "اقرأ الصورة وحولها إلى أمر قصير قابل للتنفيذ داخل النظام المحاسبي.",
+        {},
+        (
+            "حلل الصورة أو الشاشة بدقة. إذا كان المستخدم يسأل سؤالا عن البيانات المعروضة، أجب اعتمادا على ما يظهر في الصورة فقط واذكر أي نقص. "
+            "إذا كانت الصورة فاتورة أو إيصال كاشير أو قائمة منتجات، استخرج أسماء المنتجات والكميات والأسعار الواضحة بصيغة قابلة للتنفيذ مثل: بيع 2 قلم بسعر 5 و1 دفتر بسعر 10. "
+            "إذا كانت بطاقة أو ورقة لإضافة عميل أو مورد أو صنف، استخرج النوع والاسم والأرقام الواضحة فقط. "
+            "إذا كان الطلب يتضمن إضافة أو حفظ، لا تقل إنه تم الحفظ؛ أعد مسودة أمر تنتظر موافقة المستخدم. "
+            "إذا لم تتضح البيانات قل: لم أستطع قراءة بيانات كافية من الصورة."
+        ),
     )
     result = _private_ai_request(
         prompt,
@@ -1058,6 +1063,58 @@ LOCAL_PROFESSIONAL_KNOWLEDGE = [
 ]
 
 
+LOCAL_BUSINESS_ENCYCLOPEDIA = [
+    (
+        ("كاشير", "pos", "نقطة بيع", "نقاط البيع", "بيع نقدي"),
+        "الكاشير الجيد يربط كل عملية بيع بالمخزون والضريبة وطريقة الدفع فورا. راقب إغلاق الوردية، الفروقات بين النقد الفعلي والنظام، المرتجعات، الخصومات اليدوية، والمبيعات الملغاة لأنها أكثر مواضع الخطأ أو التلاعب.",
+    ),
+    (
+        ("تسعير", "السعر", "هامش", "خصم", "عروض"),
+        "التسعير يبدأ من التكلفة الكاملة ثم هامش الربح المستهدف ثم مقارنة السوق. لا تجعل الخصم يأكل الهامش: احسب الهامش بعد الخصم والضريبة والعمولات والشحن، وحدد حد خصم يحتاج موافقة مدير.",
+    ),
+    (
+        ("تدفق نقدي", "سيولة", "cash flow"),
+        "إدارة السيولة أهم من الربح المحاسبي اليومي. قارن التحصيل المتوقع من العملاء مع المدفوعات للموردين والرواتب والضريبة خلال 30 و60 و90 يوما، وضع إنذارا مبكرا عندما تنخفض التغطية النقدية عن مصروفات شهر.",
+    ),
+    (
+        ("استثمار", "عائد الاستثمار", "roi", "مخاطرة"),
+        "قرار الاستثمار التجاري يحتاج حساب العائد المتوقع، مدة استرداد رأس المال، أثره على السيولة، وسيناريو متحفظ عند انخفاض المبيعات أو ارتفاع التكلفة. لا تعتمد على الربح المتوقع وحده بدون اختبار مخاطر السوق.",
+    ),
+    (
+        ("مشروع", "إدارة مشاريع", "project management", "خطة مشروع"),
+        "إدارة المشروع ماليا تعني ربط الميزانية بالمهام والمراحل. تابع الانحراف بين التكلفة المخططة والفعلية، نسبة الإنجاز، الالتزامات غير المفوترة، والمخاطر التي قد تؤخر التحصيل أو تزيد المصروف.",
+    ),
+    (
+        ("السوق السعودي", "السعودية", "تجارة سعودية", "منشأة سعودية"),
+        "في السوق السعودي انتبه لضريبة القيمة المضافة، الفوترة الإلكترونية، مواسم الطلب، تكاليف العمالة والإيجار، وسلوك الدفع بين القطاعات. النصيحة المالية يجب أن تراعي النشاط والمدينة والموسمية وحجم المنشأة.",
+    ),
+    (
+        ("مؤشرات", "kpi", "مؤشر أداء", "لوحة مؤشرات"),
+        "أهم مؤشرات الإدارة: نمو المبيعات، مجمل الربح، صافي الربح، دوران المخزون، متوسط أيام التحصيل، متوسط أيام السداد، نسبة المرتجعات، فرق الكاشير، وحصة أعلى العملاء والمنتجات من الإيراد.",
+    ),
+    (
+        ("مخزون", "جرد", "دوران المخزون", "حد الطلب"),
+        "المخزون يربط رأس المال بالمبيعات. صنف المنتجات إلى سريعة وبطيئة الحركة، حدد حد إعادة الطلب، راقب الأصناف الراكدة والقريبة من النفاد، ولا ترفع الشراء لمجرد ارتفاع المبيعات إذا كان الهامش أو السيولة ضعيفا.",
+    ),
+    (
+        ("رقابة", "صلاحيات", "اعتماد", "موافقة"),
+        "الرقابة العملية تعني أن الإضافة أو التعديل المؤثر محاسبيا يحتاج صلاحية وموافقة واضحة. الأفضل أن ينشئ الذكاء الاصطناعي مسودة، يشرح أثرها المحاسبي، ثم لا يحفظها إلا بعد تأكيد المستخدم المخول.",
+    ),
+    (
+        ("ضريبة", "vat", "فاتورة إلكترونية", "زاتكا"),
+        "لضريبة القيمة المضافة والفوترة الإلكترونية تأكد من بيانات العميل أو المورد، الرقم الضريبي عند الحاجة، تاريخ الفاتورة، بنود الضريبة، الإجمالي، وحالة الربط أو الإرسال. أي خطأ في الضريبة يؤثر على الإقرار والتقارير.",
+    ),
+    (
+        ("تحليل مالي", "نصيحة مالية", "الوضع المالي"),
+        "النصيحة المالية الدقيقة تبدأ من قراءة المبيعات والمشتريات والمخزون والنقد والديون والرواتب والعمليات غير المرحلة. بعد ذلك قارن بالفترة السابقة وحدد السبب المحتمل، ثم اقترح إجراء قابل للتنفيذ.",
+    ),
+    (
+        ("تجارة", "بزنس", "business", "نمو"),
+        "نمو التجارة لا يعني زيادة البيع فقط. راقب جودة الربح، قدرة المخزون على الدوران، تكلفة اكتساب العميل، الالتزام الضريبي، التحصيل، وخدمة العملاء. النمو الصحي يزيد الإيراد والسيولة معا بدون تضخم الديون.",
+    ),
+]
+
+
 def local_greeting_or_concept_answer(question):
     normalized = (question or "").strip().lower()
     for words, answer in LOCAL_GENERAL_CHAT:
@@ -1078,6 +1135,7 @@ def local_greeting_or_concept_answer(question):
         return "\n".join(f"- {answer}" for answer in dict.fromkeys(multilingual_matches))
     matches = [answer for words, answer in LOCAL_ACCOUNTING_CONCEPTS if any(word.lower() in normalized for word in words)]
     matches.extend(answer for words, answer in LOCAL_PROFESSIONAL_KNOWLEDGE if any(word.lower() in normalized for word in words))
+    matches.extend(answer for words, answer in LOCAL_BUSINESS_ENCYCLOPEDIA if any(word.lower() in normalized for word in words))
     if not matches:
         return ""
     return "\n".join(f"- {answer}" for answer in dict.fromkeys(matches))
@@ -1129,6 +1187,14 @@ FREE_WEB_GENERAL_SOURCES = {
     "wikipedia": {
         "name": "Wikipedia",
         "license": "CC BY-SA؛ متاح للاستخدام التجاري مع النسبة والالتزام بشروط الترخيص.",
+    },
+    "wikidata": {
+        "name": "Wikidata",
+        "license": "CC0؛ بيانات مفتوحة قابلة لإعادة الاستخدام التجاري.",
+    },
+    "openalex": {
+        "name": "OpenAlex",
+        "license": "CC0؛ بيانات بحثية وفهرسية مفتوحة قابلة لإعادة الاستخدام التجاري.",
     }
 }
 
@@ -1182,6 +1248,30 @@ SYSTEM_OR_COMPANY_TERMS = (
     "journal",
 )
 
+COMPANY_DATA_TERMS = (
+    "شركتي",
+    "الشركة",
+    "فرعي",
+    "الفرع",
+    "فواتيري",
+    "فاتورتي",
+    "عملائي",
+    "موردي",
+    "مخزوني",
+    "منتجاتي",
+    "رواتبي",
+    "موظفيني",
+    "تقاريري",
+    "عندي",
+    "لدينا",
+    "في النظام",
+    "في الفرع",
+    "my company",
+    "my invoices",
+    "my inventory",
+    "our sales",
+)
+
 
 def _free_web_answers_enabled():
     return bool(getattr(settings, "ENABLE_FREE_WEB_ANSWERS", True))
@@ -1191,9 +1281,16 @@ def _is_general_web_question(question):
     normalized = (question or "").strip().lower()
     if not normalized:
         return False
-    if any(term in normalized for term in SYSTEM_OR_COMPANY_TERMS):
+    if any(term in normalized for term in COMPANY_DATA_TERMS):
         return False
-    return any(trigger in normalized for trigger in GENERAL_WEB_TRIGGERS)
+    if any(trigger in normalized for trigger in GENERAL_WEB_TRIGGERS):
+        return True
+    return bool(len(normalized.split()) >= 2 and any(term in normalized for term in (
+        "ifrs", "gaap", "زكاة", "ضريبة", "قيمة مضافة", "محاسبة", "ادارة مشاريع", "إدارة مشاريع",
+        "تجارة", "تسويق", "مخزون", "سلاسل الامداد", "سلاسل الإمداد", "cash flow", "inventory",
+        "accounting", "project management", "marketing", "supply chain",
+        "كاشير", "نقطة بيع", "نقاط البيع", "استثمار", "تسعير", "تدفق نقدي", "تحليل مالي", "السوق السعودي", "بزنس", "business",
+    )))
 
 
 def _wikipedia_language(question):
@@ -1269,18 +1366,115 @@ def _wikipedia_summary(question):
     }
 
 
-def free_web_general_answer(question):
-    summary = _wikipedia_summary(question)
-    if not summary:
+def _wikidata_facts(question):
+    if not _free_web_answers_enabled() or not _is_general_web_question(question):
+        return {}
+    query = _clean_general_web_query(question)
+    lang = _wikipedia_language(question)
+    try:
+        response = requests.get(
+            "https://www.wikidata.org/w/api.php",
+            params={
+                "action": "wbsearchentities",
+                "search": query,
+                "language": lang if lang in ("ar", "en", "ur") else "en",
+                "uselang": lang if lang in ("ar", "en", "ur") else "en",
+                "format": "json",
+                "limit": 1,
+            },
+            headers={"User-Agent": "AccountingSystemAI/1.0 (free-commercial-source: Wikidata CC0)"},
+            timeout=6,
+        )
+        response.raise_for_status()
+        rows = response.json().get("search", [])
+    except (requests.RequestException, ValueError, TypeError):
+        return {}
+    if not rows:
+        return {}
+    row = rows[0]
+    return {
+        "title": row.get("label") or query,
+        "extract": row.get("description") or "",
+        "source_url": row.get("concepturi") or row.get("url") or "",
+        "source_name": FREE_WEB_GENERAL_SOURCES["wikidata"]["name"],
+        "license": FREE_WEB_GENERAL_SOURCES["wikidata"]["license"],
+    }
+
+
+def _openalex_research(question):
+    if not _free_web_answers_enabled() or not _is_general_web_question(question):
+        return []
+    query = _clean_general_web_query(question)
+    try:
+        response = requests.get(
+            "https://api.openalex.org/works",
+            params={
+                "search": query,
+                "per-page": 3,
+                "sort": "cited_by_count:desc",
+                "select": "id,display_name,publication_year,cited_by_count,primary_location,open_access",
+            },
+            headers={"User-Agent": "AccountingSystemAI/1.0 (free-commercial-source: OpenAlex CC0)"},
+            timeout=7,
+        )
+        response.raise_for_status()
+        rows = response.json().get("results", [])
+    except (requests.RequestException, ValueError, TypeError):
+        return []
+    results = []
+    for row in rows:
+        title = (row.get("display_name") or "").strip()
+        if not title:
+            continue
+        location = row.get("primary_location") or {}
+        source = location.get("landing_page_url") or row.get("id") or ""
+        results.append({
+            "title": title,
+            "extract": f"بحث/مرجع منشور سنة {row.get('publication_year') or 'غير محددة'}، وعدد الاستشهادات في OpenAlex: {row.get('cited_by_count') or 0}.",
+            "source_url": source,
+            "source_name": FREE_WEB_GENERAL_SOURCES["openalex"]["name"],
+            "license": FREE_WEB_GENERAL_SOURCES["openalex"]["license"],
+        })
+    return results
+
+
+def _synthesize_free_web_answer(question, sources):
+    if not sources:
         return ""
-    answer = (
-        f"وجدت لك إجابة عامة من مصدر مجاني موثوق:\n"
-        f"- الموضوع: {summary['title']}\n"
-        f"- الإجابة: {summary['extract']}\n"
-        f"- المصدر: {summary['source_name']} {summary['source_url']}\n"
-        f"- الترخيص: {summary['license']}"
-    )
-    return answer.strip()
+    lead = "بحثت في مصادر مفتوحة وموثوقة قدر الإمكان، وهذه خلاصة دقيقة بدون مفاتيح مدفوعة:"
+    answer_lines = [lead]
+    primary = sources[0]
+    if primary.get("extract"):
+        answer_lines.append(f"- الخلاصة: {primary['extract']}")
+    if len(sources) > 1:
+        answer_lines.append("- مصادر داعمة:")
+        for source in sources[1:4]:
+            title = source.get("title") or source.get("source_name")
+            extract = source.get("extract") or ""
+            answer_lines.append(f"  - {title}: {extract}")
+    answer_lines.append("- ملاحظة دقة: إذا كان السؤال يتغير مع الوقت مثل الأنظمة أو الأسعار أو الأخبار، راجع المصدر الرسمي الأحدث قبل اتخاذ قرار.")
+    answer_lines.append("- المصادر والتراخيص:")
+    for source in sources[:5]:
+        url = source.get("source_url") or ""
+        answer_lines.append(f"  - {source.get('source_name')}: {source.get('title')} {url} | {source.get('license')}")
+    return "\n".join(answer_lines).strip()
+
+
+def free_web_general_answer(question):
+    sources = []
+    for source in (_wikipedia_summary(question), _wikidata_facts(question)):
+        if source and source.get("extract"):
+            sources.append(source)
+    sources.extend(_openalex_research(question))
+    seen = set()
+    unique_sources = []
+    for source in sources:
+        key = (source.get("source_name"), source.get("title"), source.get("source_url"))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_sources.append(source)
+    return _synthesize_free_web_answer(question, unique_sources)
 
 
 def _weak_ai_answer(text):
