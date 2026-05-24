@@ -9,7 +9,7 @@ from django.views.decorators.http import require_POST
 
 from .models import PurchaseInvoice, PurchaseItem, Supplier, Item, StockMovement
 from .forms import PurchaseInvoiceForm, ItemForm, AIInvoiceUploadForm
-from .ai_services import ai_configuration_status, analyze_and_route_user_request, answer_financial_question, command_from_camera_image, extract_invoice_from_image, generate_financial_insights, match_invoice_items
+from .ai_services import ai_configuration_status, analyze_and_route_user_request, answer_financial_question, command_from_camera_image, extract_invoice_from_image, generate_financial_insights, match_invoice_items, record_ai_interaction_learning
 from django.utils.translation import gettext_lazy as _
 from accounts.views import role_required
 from core.models import Branch
@@ -336,6 +336,7 @@ def ai_assistant_command(request):
     request.user._ai_company_id = request.session.get("company_id")
     pending = request.session.get("ai_pending_command")
     result = analyze_and_route_user_request(branch_id, command, pending=pending, user=request.user)
+    record_ai_interaction_learning(branch_id, request.user, command, result)
     if image_base64:
         result["camera_command"] = visual_command or command
     if result.get("pending"):

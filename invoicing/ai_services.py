@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import json
 import os
 import re
@@ -13,7 +14,7 @@ from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
 from core.models import Branch, Employee, EmployeeAdvance, JournalEntry, JournalEntryLine, SalaryRecord
-from .models import Customer, Invoice, InvoiceItem, Item, PurchaseInvoice, PurchaseItem, Supplier, Tax
+from .models import AIInteractionLearning, AIKnowledgeEntry, AIKnowledgeSource, Customer, Invoice, InvoiceItem, Item, PurchaseInvoice, PurchaseItem, Supplier, Tax
 from .zatca import prepare_zatca_payload
 
 
@@ -1589,6 +1590,78 @@ def _free_web_answers_enabled():
     return bool(getattr(settings, "ENABLE_FREE_WEB_ANSWERS", True))
 
 
+def _ai_auto_knowledge_enabled():
+    return bool(getattr(settings, "ENABLE_AI_AUTO_KNOWLEDGE", True))
+
+
+def _summarize_interaction_text(text, limit=240):
+    clean = re.sub(r"\s+", " ", (text or "")).strip()
+    clean = re.sub(r"\b[\w\.-]+@[\w\.-]+\.\w+\b", "[email]", clean)
+    clean = re.sub(r"\b(?:\+?\d[\d\s\-]{7,}\d)\b", "[number]", clean)
+    return clean[:limit]
+
+
+def record_ai_interaction_learning(branch_id, user, question, result, feedback=""):
+    if not getattr(settings, "ENABLE_AI_INTERACTION_LEARNING", True):
+        return None
+    try:
+        return AIInteractionLearning.objects.create(
+            branch_id=branch_id,
+            user=user if getattr(user, "is_authenticated", False) else None,
+            question_summary=_summarize_interaction_text(question),
+            answer_source=(result or {}).get("source", ""),
+            user_feedback=feedback[:20] if feedback else "",
+            improvement_note="auto-captured summary for admin review",
+        )
+    except Exception:
+        return None
+
+
+def search_local_knowledge_entries(question, limit=4):
+    if not _ai_auto_knowledge_enabled():
+        return []
+    normalized = (question or "").strip().lower()
+    if not normalized:
+        return []
+    words = [word for word in re.split(r"[^\w\u0600-\u06FF]+", normalized) if len(word) >= 3]
+    entries = AIKnowledgeEntry.objects.filter(is_approved=True).select_related("source")[:80]
+    scored = []
+    for entry in entries:
+        haystack = f"{entry.title} {entry.topic} {entry.summary}".lower()
+        score = sum(1 for word in words if word in haystack)
+        if score:
+            scored.append((score, entry))
+    return [entry for score, entry in sorted(scored, key=lambda row: row[0], reverse=True)[:limit]]
+
+
+def local_knowledge_answer(question):
+    entries = search_local_knowledge_entries(question)
+    if not entries:
+        return ""
+    lines = ["استفدت من قاعدة المعرفة المحدثة تلقائيا داخل النظام:"]
+    for entry in entries:
+        lines.append(f"- {entry.title}: {entry.summary} المصدر: {entry.source_url}")
+    lines.append("تنبيه: هذه المعرفة مساعدة، وعند القرارات النظامية أو المالية راجع المصدر الرسمي الأحدث.")
+    return "\n".join(lines)
+
+
+def upsert_ai_knowledge_entry(source, title, summary, source_url, topic=""):
+    content = f"{source_url}|{title}|{summary}"
+    content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    entry, _ = AIKnowledgeEntry.objects.update_or_create(
+        content_hash=content_hash,
+        defaults={
+            "source": source,
+            "title": title[:300],
+            "summary": summary[:2000],
+            "source_url": source_url[:700],
+            "topic": topic[:120],
+            "is_approved": True,
+        },
+    )
+    return entry
+
+
 def _is_general_web_question(question):
     normalized = (question or "").strip().lower()
     if not normalized:
@@ -2072,6 +2145,14 @@ def answer_financial_question(branch_id, question, user=None):
         }
     local_direct_answer = local_greeting_or_concept_answer(question)
     usage_answer = local_system_usage_answer(question)
+    knowledge_answer = local_knowledge_answer(question)
+    if knowledge_answer and not local_direct_answer and not usage_answer:
+        return {
+            "ok": True,
+            "source": "local_knowledge",
+            "answer": _polish_answer(knowledge_answer, question),
+            "context": {},
+        }
     if not local_direct_answer and not usage_answer:
         web_answer = free_web_general_answer(question)
         if web_answer:

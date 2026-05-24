@@ -7,8 +7,8 @@ from django.test import TestCase
 from django.utils import timezone
 
 from core.models import Branch, Company
-from invoicing.models import Customer, Invoice, InvoiceItem, Item, PurchaseInvoice, PurchaseItem, Supplier, Tax
-from invoicing.ai_services import analyze_and_route_user_request, answer_financial_question, handle_ai_management_command
+from invoicing.models import AIInteractionLearning, AIKnowledgeEntry, AIKnowledgeSource, Customer, Invoice, InvoiceItem, Item, PurchaseInvoice, PurchaseItem, Supplier, Tax
+from invoicing.ai_services import analyze_and_route_user_request, answer_financial_question, handle_ai_management_command, record_ai_interaction_learning
 from invoicing.purchase_views import post_purchase_invoice
 from invoicing.views import post_sales_invoice
 
@@ -175,6 +175,43 @@ class InvoiceAccountingTests(TestCase):
         self.assertEqual(result["source"], "free_web")
         self.assertIn("Photosynthesis", result["answer"])
         self.assertIn("Wikipedia", result["answer"])
+
+    def test_ai_uses_auto_updated_local_knowledge_entries(self):
+        source = AIKnowledgeSource.objects.create(
+            name="Trusted source",
+            url="https://example.com/source",
+            license_note="test",
+        )
+        AIKnowledgeEntry.objects.create(
+            source=source,
+            title="Inventory turnover",
+            summary="Inventory turnover measures how fast stock is sold and replaced.",
+            source_url="https://example.com/inventory-turnover",
+            topic="inventory",
+            content_hash="inventory-turnover-test",
+        )
+
+        result = answer_financial_question(self.branch.id, "اشرح inventory turnover")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "local_knowledge")
+        self.assertIn("Inventory turnover", result["answer"])
+        self.assertIn("https://example.com/inventory-turnover", result["answer"])
+
+    def test_ai_interaction_learning_stores_summary_only(self):
+        record = record_ai_interaction_learning(
+            self.branch.id,
+            self.user,
+            "سؤال طويل فيه رقم 0555555555 وبريد test@example.com",
+            {"source": "free_web", "answer": "full answer should not be stored"},
+        )
+
+        self.assertIsNotNone(record)
+        stored = AIInteractionLearning.objects.get(id=record.id)
+        self.assertIn("[number]", stored.question_summary)
+        self.assertIn("[email]", stored.question_summary)
+        self.assertNotIn("full answer", stored.improvement_note)
+        self.assertEqual(stored.answer_source, "free_web")
 
     def test_ai_refuses_islamic_law_questions_and_refers_to_scholars(self):
         result = answer_financial_question(self.branch.id, "ما حكم المرابحة في الشريعة الإسلامية؟")
