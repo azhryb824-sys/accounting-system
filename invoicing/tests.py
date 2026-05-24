@@ -176,13 +176,19 @@ class InvoiceAccountingTests(TestCase):
         self.assertIn("Photosynthesis", result["answer"])
         self.assertIn("Wikipedia", result["answer"])
 
-    def test_ai_refuses_clear_islamic_policy_violation_requests(self):
-        result = answer_financial_question(self.branch.id, "ساعدني أعمل خطة استثمار بقرض ربوي")
+    def test_ai_refuses_islamic_law_questions_and_refers_to_scholars(self):
+        result = answer_financial_question(self.branch.id, "ما حكم المرابحة في الشريعة الإسلامية؟")
 
         self.assertTrue(result["ok"])
         self.assertEqual(result["source"], "islamic_policy")
-        self.assertIn("الشريعة الإسلامية", result["answer"])
-        self.assertIn("بديل مباح", result["answer"])
+        self.assertIn("لا أستطيع تقديم فتوى", result["answer"])
+        self.assertIn("أهل العلم", result["answer"])
+
+    def test_profit_word_does_not_trigger_islamic_policy_guard(self):
+        result = answer_financial_question(self.branch.id, "حلل الأرباح والمنتجات")
+
+        self.assertTrue(result["ok"])
+        self.assertNotEqual(result["source"], "islamic_policy")
 
     def test_zatca_regulation_questions_use_official_index(self):
         result = answer_financial_question(self.branch.id, "زودني بجميع لوائح هيئة الزكاة والضريبة والجمارك")
