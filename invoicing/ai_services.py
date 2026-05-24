@@ -782,8 +782,10 @@ def strong_local_financial_answer(context, question="", restricted_message=""):
     if restricted_message:
         lines.append(restricted_message)
     lines.extend([
-        f"قرأت البيانات المتاحة للفرع خلال الفترة {context.get('period')}.",
-        "الملخص:",
+        "تحليل احترافي مبني على بيانات النظام:",
+        f"قرأت البيانات المتاحة للفرع خلال الفترة {context.get('period')} وربطت المبيعات والمشتريات والمخزون والعمليات غير المرحلة حسب صلاحيات المستخدم.",
+        "",
+        "الملخص التنفيذي:",
         f"- المبيعات: {_format_money(context.get('sales_total')) if context.get('sales_total') is not None else 'غير متاحة حسب الصلاحيات'}",
         f"- المشتريات: {_format_money(context.get('purchases_total')) if context.get('purchases_total') is not None else 'غير متاحة حسب الصلاحيات'}",
         f"- هامش الربح التقريبي: {context.get('gross_margin_percent') if context.get('gross_margin_percent') is not None else 'غير متاح'}%",
@@ -793,17 +795,33 @@ def strong_local_financial_answer(context, question="", restricted_message=""):
     if context.get("top_items"):
         top = context["top_items"][0]
         lines.append(f"- أعلى صنف مبيعا: {top.get('item__name')} بإجمالي {top.get('total')}.")
-    lines.append("الاستنتاج:")
+    lines.extend(["", "التشخيص:"])
     if context.get("gross_margin_percent") is not None and context["gross_margin_percent"] < 15:
         lines.append("- الربحية تحتاج مراجعة؛ ابدأ بالخصومات وتكلفة الأصناف الأعلى مبيعا.")
     elif context.get("sales_total") and context.get("sales_total") > 0:
         lines.append("- يوجد نشاط بيع مسجل؛ الأهم الآن متابعة المخزون والتحصيل والعمليات غير المرحلة.")
     else:
         lines.append("- لا توجد مبيعات كافية في الفترة الحالية، لذلك الأولوية لإدخال الفواتير أو مراجعة نشاط الفرع.")
+    if context.get("sales_change_percent") is not None:
+        lines.append(f"- تغير المبيعات عن الفترة السابقة: {context.get('sales_change_percent')}%.")
+    if context.get("purchases_change_percent") is not None:
+        lines.append(f"- تغير المشتريات عن الفترة السابقة: {context.get('purchases_change_percent')}%.")
+    lines.extend([
+        "",
+        "قرار عملي مقترح:",
+        "- لا توسع الشراء قبل التأكد من دوران الأصناف الأعلى ربحا ومطابقة المخزون الفعلي مع النظام.",
+        "- رحّل أي عمليات غير مرحلة قبل الاعتماد على التقرير لاتخاذ قرار مالي.",
+        "- إذا كانت المبيعات منخفضة، ابدأ بحملة قصيرة على أعلى الأصناف هامشا بدلا من تخفيض شامل للأسعار.",
+    ])
     if tips:
-        lines.append("أفضل خطوات عملية الآن:")
+        lines.extend(["", "تنبيهات من بياناتك الحالية:"])
         lines.extend(f"- {tip}" for tip in tips)
-    lines.append("لتحليل أدق اكتب طلبا محددا مثل: حلل مبيعات هذا الشهر، أو ما المنتجات ضعيفة الربح؟")
+    lines.extend([
+        "",
+        "ما أحتاجه منك لتحليل أدق:",
+        "- حدد الشركة والفرع والفترة أو اسم المنتج/العميل.",
+        "- مثال: حلل مبيعات هذا الشهر، أو ما المنتجات ضعيفة الربح؟ أو توقع أثر إضافة 500 حبة من منتج محدد.",
+    ])
     return "\n".join(lines)
 
 
@@ -1072,18 +1090,7 @@ def _answer_precise_accounting_question(branch_id, question, user=None):
 
     if any(word in normalized for word in ("تقرير", "ملخص", "الوضع المالي", "الأرقام", "تحليل", "dashboard", "report")):
         context = branch_ai_context(branch_id, user=user)
-        tips = local_financial_insights(context)[:5]
-        return "\n".join([
-            f"ملخص الفترة {context.get('period')}:",
-            f"- المبيعات: {_format_money(context.get('sales_total')) if context.get('sales_total') is not None else 'غير متاح حسب الصلاحية'}",
-            f"- المشتريات: {_format_money(context.get('purchases_total')) if context.get('purchases_total') is not None else 'غير متاح حسب الصلاحية'}",
-            f"- هامش الربح التقريبي: {context.get('gross_margin_percent') if context.get('gross_margin_percent') is not None else 'غير متاح'}%",
-            f"- قيمة المخزون: {_format_money(context.get('inventory_value')) if context.get('inventory_value') is not None else 'غير متاح حسب الصلاحية'}",
-            f"- عمليات غير مرحلة: مبيعات {context.get('unposted_sales_count') or 0}، مشتريات {context.get('unposted_purchases_count') or 0}",
-            "نصائح مبنية على الوضع الحالي:",
-            *[f"- {tip}" for tip in tips],
-            "من زاوية التخطيط وإدارة المشاريع: حوّل أعلى 3 مخاطر إلى مهام أسبوعية واضحة: تحصيل، توريد، ومراجعة قيود. ومن زاوية التجارة: راقب هامش الأصناف الأعلى مبيعًا قبل توسيع الشراء.",
-        ])
+        return strong_local_financial_answer(context, question)
 
     if any(word in normalized for word in ("منتج", "صنف", "مخزون", "كمية", "stock", "product")):
         if not _user_can_read_context(user, "view_item", branch_id):
