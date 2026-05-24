@@ -1668,6 +1668,67 @@ def _calculation_needs_more_numbers(question):
     return not re.search(r"\d", normalized)
 
 
+def _safe_decimal_text(value):
+    text = f"{_money(value)}"
+    return text.rstrip("0").rstrip(".") if "." in text else text
+
+
+def local_calculation_answer(question):
+    normalized = (question or "").strip().lower()
+    if not any(word in normalized for word in ("احسب", "حساب", "calculate", "كم يساوي")):
+        return ""
+    numbers = [Decimal(match.replace(",", ".")) for match in re.findall(r"\d+(?:[.,]\d+)?", normalized)]
+    if not numbers:
+        return ""
+    if any(term in normalized for term in ("ضريبة", "vat", "%", "نسبة", "percent")):
+        if "%" in normalized and len(numbers) > 1:
+            rate = numbers[0]
+            base = numbers[1]
+        else:
+            base = numbers[0]
+            rate = numbers[1] if len(numbers) > 1 else Decimal("15")
+        tax = base * rate / Decimal("100")
+        total = base + tax
+        return "\n".join([
+            f"قيمة الضريبة {rate}% على {_safe_decimal_text(base)} = {_safe_decimal_text(tax)}.",
+            f"الإجمالي شامل الضريبة = {_safe_decimal_text(total)}.",
+        ])
+    expression = normalized
+    replacements = {
+        "×": "*", "x": "*", "÷": "/", "زائد": "+", "ناقص": "-", "ضرب": "*", "في": "*", "على": "/",
+    }
+    for old, new in replacements.items():
+        expression = expression.replace(old, new)
+    expression = re.sub(r"[^0-9+\-*/(). ]", " ", expression)
+    expression = re.sub(r"\s+", "", expression)
+    if not re.search(r"[+\-*/]", expression):
+        return f"الرقم الذي أرسلته هو {_safe_decimal_text(numbers[0])}. إذا أردت عملية حسابية اكتبها مثل: احسب {numbers[0]} + 25."
+    if not re.fullmatch(r"[0-9+\-*/().]+", expression):
+        return ""
+    try:
+        result = eval(expression, {"__builtins__": {}}, {})
+    except Exception:
+        return "لم أستطع فهم العملية الحسابية. اكتبها بصيغة واضحة مثل: احسب 1500 + 375 أو احسب ضريبة 15% على 2000."
+    return f"الناتج = {_safe_decimal_text(Decimal(str(result)))}."
+
+
+def local_ambiguous_request_answer(question):
+    normalized = (question or "").strip().lower()
+    short_commands = {"حلل", "احسب", "افتح", "اعرض", "ساعدني", "تقرير", "بيع", "شراء"}
+    if normalized in short_commands:
+        if normalized in {"احسب"}:
+            return "أرسل الأرقام أو العملية الحسابية المطلوبة بوضوح. مثال: احسب 1500 + 375، أو احسب ضريبة 15% على 2000."
+        return "\n".join([
+            "اكتب المطلوب بتفصيل بسيط حتى أعطيك نتيجة دقيقة.",
+            "أمثلة:",
+            "- احسب ضريبة 15% على 2000",
+            "- حلل مبيعات هذا الشهر",
+            "- أنشئ عرض سعر للعميل أحمد 2 Item",
+            "- بيع 2 Item كاشير",
+        ])
+    return ""
+
+
 def _remove_performance_stage_directions(answer):
     text = (answer or "").strip()
     if not text:
@@ -1916,6 +1977,11 @@ def _weak_ai_answer(text):
         "I cannot",
         "I can't",
         "as an ai",
+        "ابتسامة",
+        "نبرة",
+        "كمساعد",
+        "لا أملك سياق",
+        "لا أملك معلومات كافية",
     )
     return any(marker.lower() in cleaned.lower() for marker in weak_markers)
 
@@ -2310,6 +2376,22 @@ def answer_financial_question(branch_id, question, user=None):
             "ok": True,
             "source": "islamic_policy",
             "answer": _polish_answer(policy_answer, question),
+            "context": {},
+        }
+    calculation_answer = local_calculation_answer(question)
+    if calculation_answer:
+        return {
+            "ok": True,
+            "source": "local_calculator",
+            "answer": _polish_answer(calculation_answer, question),
+            "context": {},
+        }
+    ambiguous_answer = local_ambiguous_request_answer(question)
+    if ambiguous_answer:
+        return {
+            "ok": True,
+            "source": "clarification",
+            "answer": _polish_answer(ambiguous_answer, question),
             "context": {},
         }
     zatca_answer = zatca_regulations_answer(question)

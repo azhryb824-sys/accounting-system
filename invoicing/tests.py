@@ -293,6 +293,28 @@ class InvoiceAccountingTests(TestCase):
         self.assertNotIn("ابتسامة", result["answer"])
         self.assertNotIn("المحاسب لا يخاف", result["answer"])
 
+    def test_ai_calculates_basic_math_locally(self):
+        result = answer_financial_question(self.branch.id, "احسب 1500 + 375")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "local_calculator")
+        self.assertIn("1875", result["answer"])
+
+    def test_ai_calculates_vat_locally(self):
+        result = answer_financial_question(self.branch.id, "احسب ضريبة 15% على 2000")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "local_calculator")
+        self.assertIn("300", result["answer"])
+        self.assertIn("2300", result["answer"])
+
+    def test_short_ambiguous_command_gets_clarification(self):
+        result = answer_financial_question(self.branch.id, "حلل")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "clarification")
+        self.assertIn("أمثلة", result["answer"])
+
     def test_zatca_regulation_questions_use_official_index(self):
         result = answer_financial_question(self.branch.id, "زودني بجميع لوائح هيئة الزكاة والضريبة والجمارك")
 
