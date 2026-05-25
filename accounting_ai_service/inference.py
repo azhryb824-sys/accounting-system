@@ -32,6 +32,9 @@ MODEL_PATH = Path(os.environ.get("ACCOUNTING_AI_MODEL_PATH") or Path(__file__).r
 AI_BACKEND = os.environ.get("ACCOUNTING_AI_BACKEND", "auto").strip().lower()
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434").strip().rstrip("/")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:7b-instruct").strip()
+OPENAI_COMPATIBLE_API_KEY = os.environ.get("OPENAI_COMPATIBLE_API_KEY", "").strip()
+OPENAI_COMPATIBLE_BASE_URL = os.environ.get("OPENAI_COMPATIBLE_BASE_URL", "https://api.openai.com/v1").strip().rstrip("/")
+OPENAI_COMPATIBLE_MODEL = os.environ.get("OPENAI_COMPATIBLE_MODEL", "gpt-4o-mini").strip()
 
 
 def _load_transformers_runtime():
@@ -677,6 +680,10 @@ class PrivateAccountingModel:
         if private_answer:
             return private_answer
 
+        hosted_answer = self._answer_from_openai_compatible(question, max_new_tokens=max_new_tokens)
+        if hosted_answer:
+            return hosted_answer
+
         ollama_answer = self._answer_from_ollama(question, max_new_tokens=max_new_tokens)
         if ollama_answer:
             return ollama_answer
@@ -729,6 +736,44 @@ class PrivateAccountingModel:
         except Exception:
             return None
         answer = (data.get("response") or "").strip()
+        if not answer or not self._is_usable_arabic_answer(answer):
+            return None
+        return self._clean_answer(answer, "")
+
+    def _answer_from_openai_compatible(self, question: str, max_new_tokens: int = 420) -> str | None:
+        if AI_BACKEND not in {"auto", "openai", "openai_compatible", "hosted"}:
+            return None
+        if not OPENAI_COMPATIBLE_API_KEY or not OPENAI_COMPATIBLE_MODEL:
+            return None
+        payload = {
+            "model": OPENAI_COMPATIBLE_MODEL,
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": self.build_chat_prompt(question)},
+            ],
+            "temperature": 0.2,
+            "top_p": 0.9,
+            "max_tokens": min(int(max_new_tokens or 420), 1800),
+        }
+        headers = {
+            "Authorization": f"Bearer {OPENAI_COMPATIBLE_API_KEY}",
+            "Content-Type": "application/json",
+        }
+        try:
+            response = requests.post(
+                f"{OPENAI_COMPATIBLE_BASE_URL}/chat/completions",
+                json=payload,
+                headers=headers,
+                timeout=120,
+            )
+            response.raise_for_status()
+            data = response.json()
+        except Exception:
+            return None
+        choices = data.get("choices") or []
+        if not choices:
+            return None
+        answer = ((choices[0].get("message") or {}).get("content") or "").strip()
         if not answer or not self._is_usable_arabic_answer(answer):
             return None
         return self._clean_answer(answer, "")
@@ -811,10 +856,13 @@ def runtime_status() -> dict[str, Any]:
         "backend": AI_BACKEND,
         "ollama_model": OLLAMA_MODEL,
         "ollama_url": OLLAMA_BASE_URL,
+        "openai_compatible_model": OPENAI_COMPATIBLE_MODEL,
+        "openai_compatible_base_url": OPENAI_COMPATIBLE_BASE_URL,
+        "openai_compatible_configured": bool(OPENAI_COMPATIBLE_API_KEY),
         "transformers_model_path": str(model.model_path),
         "transformers_loaded": bool(model.model is not None and model.tokenizer is not None),
-        "recommended_backend": "ollama",
-        "recommended_model": "qwen2.5:7b-instruct or qwen2.5:14b-instruct when RAM/GPU is enough",
+        "recommended_backend": "openai_compatible on Render, ollama on a server with RAM/GPU",
+        "recommended_model": "OpenRouter/Groq/Together model via OpenAI-compatible API, or qwen2.5:7b-instruct with Ollama when RAM/GPU is enough",
     }
 
 

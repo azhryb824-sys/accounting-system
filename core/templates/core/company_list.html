@@ -7,9 +7,21 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h5 class="text-light mb-0">قائمة الشركات</h5>
-    <a href="{% url 'company_add' %}" class="btn btn-primary px-4">
-        <i class="fa-solid fa-plus"></i> إضافة شركة
-    </a>
+    <div class="d-flex flex-wrap gap-2 justify-content-end">
+        {% if can_view_any_branches %}
+        <a href="{% url 'branch_list' %}" class="btn btn-outline-light px-4">
+            <i class="fa-solid fa-code-branch"></i> الفروع
+        </a>
+        {% endif %}
+        {% if can_add_any_branch %}
+        <a href="{% url 'branch_add' %}" class="btn btn-outline-info px-4">
+            <i class="fa-solid fa-plus"></i> إضافة فرع
+        </a>
+        {% endif %}
+        <a href="{% url 'company_add' %}" class="btn btn-primary px-4">
+            <i class="fa-solid fa-plus"></i> إضافة شركة
+        </a>
+    </div>
 </div>
 <div class="glass-card p-0">
     <div class="table-responsive">
@@ -22,11 +34,14 @@
                     <th>الرقم الضريبي</th>
                     <th>المالك</th>
                     <th>الدور</th>
+                    <th>الفروع</th>
                     <th>حالة الاشتراك</th>
+                    <th>الإجراءات</th>
                 </tr>
             </thead>
             <tbody>
-                {% for c in companies %}
+                {% for row in company_rows %}
+                {% with c=row.company %}
                 <tr>
                     <td>{{ c.name }}</td>
                     <td>{{ c.unified_number }}</td>
@@ -34,11 +49,33 @@
                     <td>{{ c.vat_number|default:"-" }}</td>
                     <td>{% if c.owner %}{{ c.owner.get_full_name|default:c.owner.username }}{% else %}-{% endif %}</td>
                     <td>{{ c.owner_role.name|default:"-" }}</td>
+                    <td>
+                        {% if row.can_view_branches %}
+                            <span class="badge bg-info text-dark">{{ row.branch_count }}</span>
+                        {% else %}
+                            <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
                     <td>{{ c.get_subscription_status_display }}</td>
+                    <td>
+                        <div class="d-flex flex-wrap gap-2">
+                            {% if row.can_view_branches %}
+                            <a href="{% url 'branch_list' %}?company={{ c.id }}" class="btn btn-sm btn-outline-light">
+                                <i class="fa-solid fa-code-branch"></i> الفروع
+                            </a>
+                            {% endif %}
+                            {% if row.can_add_branch %}
+                            <a href="{% url 'branch_add' %}?company={{ c.id }}" class="btn btn-sm btn-outline-info">
+                                <i class="fa-solid fa-plus"></i> إضافة فرع
+                            </a>
+                            {% endif %}
+                        </div>
+                    </td>
                 </tr>
+                {% endwith %}
                 {% empty %}
                 <tr>
-                    <td colspan="7" class="text-center text-muted py-4">لا توجد شركات</td>
+                    <td colspan="9" class="text-center text-muted py-4">لا توجد شركات</td>
                 </tr>
                 {% endfor %}
             </tbody>

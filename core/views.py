@@ -108,6 +108,18 @@ def _user_companies(user):
 def _user_branches(user):
     return user_accessible_branches(user)
 
+
+def _can_view_company_branches(user, company):
+    if user.is_superuser or company.owner_id == user.id:
+        return True
+    return _user_branches(user).filter(company=company).exists()
+
+
+def _can_add_branch_to_company(user, company):
+    if user.is_superuser or company.owner_id == user.id:
+        return True
+    return user_has_business_permission(user, 'add_branch', company)
+
 # ============================
 #  Reports Center
 # ============================
@@ -670,8 +682,25 @@ def company_add(request):
 
 @login_required(login_url='login')
 def company_list(request):
-    companies = _user_companies(request.user)
-    return render(request, 'core/company_list.html', {"companies": companies, "title": "ط§ظ„ط´ط±ظƒط§طھ"})
+    companies = list(_user_companies(request.user).select_related("owner", "owner_role"))
+    company_rows = []
+    for company in companies:
+        can_view_branches = _can_view_company_branches(request.user, company)
+        can_add_branch = _can_add_branch_to_company(request.user, company)
+        branch_count = _user_branches(request.user).filter(company=company).count() if can_view_branches else 0
+        company_rows.append({
+            "company": company,
+            "branch_count": branch_count,
+            "can_view_branches": can_view_branches,
+            "can_add_branch": can_add_branch,
+        })
+    return render(request, 'core/company_list.html', {
+        "companies": companies,
+        "company_rows": company_rows,
+        "can_view_any_branches": any(row["can_view_branches"] for row in company_rows),
+        "can_add_any_branch": any(row["can_add_branch"] for row in company_rows),
+        "title": "ط§ظ„ط´ط±ظƒط§طھ",
+    })
 
 
 
@@ -752,19 +781,42 @@ def company_join_review(request, request_id, decision):
 # ============================
 def branch_list(request):
     branches = _user_branches(request.user).select_related('company')
-    return render(request, 'core/branch_list.html', {"branches": branches, "title": "ط§ظ„ظپط±ظˆط¹"})
+    selected_company = None
+    company_id = request.GET.get("company")
+    if company_id:
+        selected_company = get_object_or_404(_user_companies(request.user), id=company_id)
+        branches = branches.filter(company=selected_company)
+    return render(request, 'core/branch_list.html', {
+        "branches": branches,
+        "selected_company": selected_company,
+        "can_add_branch": _can_add_branch_to_company(request.user, selected_company) if selected_company else _user_companies(request.user).exists(),
+        "title": "ط§ظ„ظپط±ظˆط¹",
+    })
 
 @login_required(login_url='login')
 
 def branch_add(request):
+    initial_company = None
+    company_id = request.GET.get("company")
+    if company_id:
+        initial_company = get_object_or_404(_user_companies(request.user), id=company_id)
+        if not _can_add_branch_to_company(request.user, initial_company):
+            messages.error(request, "لا تملك صلاحية إضافة فرع لهذه الشركة.")
+            return redirect("company_list")
     if request.method == 'POST':
         form = BranchForm(request.POST) # _("Add Branch")
         form.fields['company'].queryset = _user_companies(request.user)
         if form.is_valid():
+            company = form.cleaned_data["company"]
+            if not _can_add_branch_to_company(request.user, company):
+                form.add_error("company", "لا تملك صلاحية إضافة فرع لهذه الشركة.")
+                return render(request, 'core/branch_form.html', {
+                    "form": form, "title": "ط¥ط¶ط§ظپط© ظپط±ط¹"
+                })
             form.save()
             return redirect('branch_list')
     else:
-        form = BranchForm()
+        form = BranchForm(initial={"company": initial_company} if initial_company else None)
         form.fields['company'].queryset = _user_companies(request.user)
 
     return render(request, 'core/branch_form.html', {

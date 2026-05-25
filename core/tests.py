@@ -1,12 +1,16 @@
 from decimal import Decimal
 from pathlib import Path
 
+from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from core.forms import CompanySubscriptionRequestForm
 from core.models import Branch, Company, Employee, EmployeeAdvance, SalaryRecord
 from core.services.payroll import approve_salary, pay_salary
+
+User = get_user_model()
 
 
 class PayrollAccountingTests(TestCase):
@@ -89,3 +93,42 @@ class CompanyFormMobileTests(TestCase):
         self.assertIn("data-file-picker", template)
         self.assertIn("إرفاق إيصال التحويل", template)
         self.assertIn("input.click()", template)
+
+
+class CompanyBranchButtonsTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="owner", password="pass")
+        self.company = Company.objects.create(
+            owner=self.user,
+            name="Owner Co",
+            unified_number="200",
+            subscription_status="active",
+            subscription_ends_at=timezone.now() + timezone.timedelta(days=30),
+        )
+        self.branch = Branch.objects.create(company=self.company, name="Main")
+
+    def test_company_list_shows_branch_actions_for_company_owner(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("company_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse("branch_list") + f"?company={self.company.id}")
+        self.assertContains(response, reverse("branch_add") + f"?company={self.company.id}")
+        self.assertContains(response, "إضافة فرع")
+
+    def test_branch_list_can_filter_by_company_from_company_list_button(self):
+        other = Company.objects.create(name="Other Co", unified_number="201")
+        Branch.objects.create(company=other, name="Hidden")
+        self.client.force_login(self.user)
+        session = self.client.session
+        session["company_id"] = self.company.id
+        session["branch_id"] = self.branch.id
+        session.save()
+
+        response = self.client.get(reverse("branch_list"), {"company": self.company.id})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Owner Co")
+        self.assertContains(response, "Main")
+        self.assertNotContains(response, "Hidden")
