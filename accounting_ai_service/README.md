@@ -105,9 +105,31 @@ The Dockerfile installs Tesseract with Arabic and English language packs, then s
 uvicorn app:app --host 0.0.0.0 --port ${PORT:-10000}
 ```
 
-## Hosted model on Render
+## Strict private local model mode
 
-Render free/small instances usually cannot run large local LLMs or Ollama inside the same service. To avoid staying on the local fallback layer, use an OpenAI-compatible hosted provider:
+If you do not want to depend on any external hosted model, use only your own trained/exported model files:
+
+```text
+ACCOUNTING_AI_BACKEND=local_model
+REQUIRE_LOCAL_MODEL=true
+ACCOUNTING_AI_MODEL_PATH=/app/models/my_model
+```
+
+The directory must contain a Hugging Face compatible model and tokenizer, for example:
+
+```text
+accounting_ai_service/models/my_model/config.json
+accounting_ai_service/models/my_model/tokenizer.json
+accounting_ai_service/models/my_model/model.safetensors
+```
+
+With `REQUIRE_LOCAL_MODEL=true`, the service fails loudly if the model is missing. It will not silently use OpenRouter, OpenAI, Ollama, or the built-in local fallback as the main AI.
+
+Render free/small instances may not have enough RAM for a large model. In that case use a smaller exported model, a paid Render instance with enough RAM, or deploy the AI service on a server with CPU/RAM/GPU suitable for the model.
+
+## Optional hosted model mode
+
+If you later decide to use a hosted OpenAI-compatible provider, configure:
 
 ```text
 ACCOUNTING_AI_BACKEND=openai_compatible

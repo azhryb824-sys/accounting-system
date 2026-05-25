@@ -36,6 +36,7 @@ OPENAI_COMPATIBLE_API_KEY = os.environ.get("OPENAI_COMPATIBLE_API_KEY", "").stri
 OPENAI_COMPATIBLE_BASE_URL = os.environ.get("OPENAI_COMPATIBLE_BASE_URL", "https://api.openai.com/v1").strip().rstrip("/")
 OPENAI_COMPATIBLE_MODEL = os.environ.get("OPENAI_COMPATIBLE_MODEL", "gpt-4o-mini").strip()
 REQUIRE_HOSTED_AI = os.environ.get("REQUIRE_HOSTED_AI", "false").strip().lower() in {"1", "true", "yes", "on"}
+REQUIRE_LOCAL_MODEL = os.environ.get("REQUIRE_LOCAL_MODEL", "false").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _load_transformers_runtime():
@@ -673,6 +674,14 @@ class PrivateAccountingModel:
         if not question or not question.strip():
             raise ValueError("السؤال لا يمكن أن يكون فارغا.")
 
+        if AI_BACKEND in {"local_model", "transformers"} or REQUIRE_LOCAL_MODEL:
+            if self.model is None or self.tokenizer is None:
+                raise ValueError(
+                    "تم ضبط الخدمة على استخدام موديلك المحلي فقط، لكن أوزان الموديل غير موجودة أو لم يتم تحميلها. "
+                    "ارفع الموديل إلى accounting_ai_service/models/my_model أو اضبط ACCOUNTING_AI_MODEL_PATH."
+                )
+            return self._answer_from_transformers(question, max_new_tokens=max_new_tokens)
+
         if AI_BACKEND in {"openai", "openai_compatible", "hosted"} and not OPENAI_COMPATIBLE_API_KEY:
             raise ValueError("خدمة الذكاء الاصطناعي مضبوطة على hosted/openai_compatible لكن OPENAI_COMPATIBLE_API_KEY غير موجود في Render.")
 
@@ -703,6 +712,9 @@ class PrivateAccountingModel:
                 "- إذا سألت عن أكثر من موضوع سأجمع لك الإجابة في نقاط متعددة."
             )
 
+        return self._answer_from_transformers(question, max_new_tokens=max_new_tokens)
+
+    def _answer_from_transformers(self, question: str, max_new_tokens: int = 240) -> str:
         with self.torch.inference_mode():
             prompt = self.build_prompt(question)
             inputs = self.tokenizer(prompt, return_tensors="pt")
@@ -867,7 +879,9 @@ def runtime_status() -> dict[str, Any]:
         "openai_compatible_base_url": OPENAI_COMPATIBLE_BASE_URL,
         "openai_compatible_configured": bool(OPENAI_COMPATIBLE_API_KEY),
         "require_hosted_ai": REQUIRE_HOSTED_AI,
+        "require_local_model": REQUIRE_LOCAL_MODEL,
         "transformers_model_path": str(model.model_path),
+        "transformers_model_path_exists": model.model_path.exists(),
         "transformers_loaded": bool(model.model is not None and model.tokenizer is not None),
         "recommended_backend": "openai_compatible on Render, ollama on a server with RAM/GPU",
         "recommended_model": "OpenRouter/Groq/Together model via OpenAI-compatible API, or qwen2.5:7b-instruct with Ollama when RAM/GPU is enough",

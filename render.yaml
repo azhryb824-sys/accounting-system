@@ -6,12 +6,8 @@ services:
     healthCheckPath: /health
     envVars:
       - key: ACCOUNTING_AI_BACKEND
-        value: openai_compatible
-      - key: OPENAI_COMPATIBLE_BASE_URL
-        value: https://openrouter.ai/api/v1
-      - key: OPENAI_COMPATIBLE_MODEL
-        value: qwen/qwen-2.5-7b-instruct
-      - key: REQUIRE_HOSTED_AI
+        value: local_model
+      - key: REQUIRE_LOCAL_MODEL
         value: "true"
       - key: PYTHONUNBUFFERED
         value: "1"
