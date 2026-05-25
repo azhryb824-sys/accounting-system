@@ -37,6 +37,65 @@ OPENAI_COMPATIBLE_BASE_URL = os.environ.get("OPENAI_COMPATIBLE_BASE_URL", "https
 OPENAI_COMPATIBLE_MODEL = os.environ.get("OPENAI_COMPATIBLE_MODEL", "gpt-4o-mini").strip()
 REQUIRE_HOSTED_AI = os.environ.get("REQUIRE_HOSTED_AI", "false").strip().lower() in {"1", "true", "yes", "on"}
 REQUIRE_LOCAL_MODEL = os.environ.get("REQUIRE_LOCAL_MODEL", "false").strip().lower() in {"1", "true", "yes", "on"}
+ENABLE_OPEN_WEB_SEARCH = os.environ.get("ENABLE_OPEN_WEB_SEARCH", "true").strip().lower() not in {"0", "false", "no", "off"}
+USER_MEMORY: list[str] = []
+
+
+SPEECH_NORMALIZATION_REPLACEMENTS = {
+    "إفتح": "افتح",
+    "فتح لي": "افتح",
+    "افتح لي": "افتح",
+    "روح": "اذهب",
+    "وريني": "اعرض",
+    "ورني": "اعرض",
+    "عايز": "أريد",
+    "داير": "أريد",
+    "ابغى": "أريد",
+    "ابي": "أريد",
+    "وش": "ما",
+    "ايش": "ما",
+    "إيش": "ما",
+    "حل": "حلل",
+    "حلّل": "حلل",
+    "قيم": "قيّم",
+    "قَيّم": "قيّم",
+    "الفتره": "الفترة",
+    "الشركه": "الشركة",
+    "الفاتوره": "الفاتورة",
+    "الضريبه": "الضريبة",
+}
+
+
+def normalize_user_question_text(question: str) -> str:
+    text = re.sub(r"\s+", " ", (question or "")).strip()
+    if not text:
+        return ""
+    for old, new in SPEECH_NORMALIZATION_REPLACEMENTS.items():
+        text = re.sub(rf"(?<!\w){re.escape(old)}(?!\w)", new, text, flags=re.IGNORECASE)
+    text = re.sub(r"[؟?]{2,}", "؟", text)
+    return text.strip()
+
+
+def _analyze_question(question: str) -> dict[str, Any]:
+    normalized_text = normalize_user_question_text(_extract_user_question(question))
+    normalized = normalized_text.lower()
+    web_terms = (
+        "ابحث", "بحث", "النت", "الانترنت", "الإنترنت", "مصادر", "رابط", "روابط",
+        "أحدث", "احدث", "آخر", "اخر", "اليوم", "حاليا", "حالياً", "معلومة حديثة",
+    )
+    accounting_terms = (
+        "حلل", "تحليل", "قيّم", "قيم", "تقرير", "مبيعات", "مشتريات", "مخزون",
+        "فاتورة", "فواتير", "ربح", "خسارة", "رصيد", "ضريبة", "قيد",
+    )
+    explanation_terms = ("اشرح", "ما هو", "ما هي", "ما معنى", "لماذا", "عرف", "تعريف", "وضح")
+    execution_terms = ("افتح", "اذهب", "اعرض", "أظهر", "انتقل", "نفذ", "أضف", "اضف", "أنشئ", "انشئ")
+    return {
+        "normalized_text": normalized_text,
+        "asks_web": any(term in normalized for term in web_terms),
+        "asks_accounting": any(term in normalized for term in accounting_terms),
+        "needs_explanation": any(term in normalized for term in explanation_terms),
+        "asks_execution": any(term in normalized for term in execution_terms),
+    }
 
 
 def _load_transformers_runtime():
@@ -368,6 +427,127 @@ def _extract_user_question(text: str) -> str:
     return text.strip()
 
 
+def _remember_user_information(question: str) -> str | None:
+    normalized = normalize_user_question_text(_extract_user_question(question))
+    lowered = normalized.lower()
+    memory_markers = ("تذكر", "احفظ", "خزن", "خزّن", "معلومة عني", "معلومة مهمة")
+    if not any(marker in lowered for marker in memory_markers):
+        return None
+    cleaned = normalized
+    for marker in memory_markers:
+        cleaned = re.sub(rf"(?<!\w){re.escape(marker)}(?!\w)", "", cleaned, flags=re.IGNORECASE).strip(" :،-")
+    if not cleaned:
+        return "اكتب المعلومة التي تريد حفظها بعد كلمة: تذكر."
+    if cleaned not in USER_MEMORY:
+        USER_MEMORY.append(cleaned[:500])
+        del USER_MEMORY[:-30]
+    return f"تم حفظ المعلومة للاستفادة منها داخل جلسة خدمة الذكاء الحالية: {cleaned}"
+
+
+def _answer_from_user_memory(question: str) -> str | None:
+    if not USER_MEMORY:
+        return None
+    normalized = normalize_user_question_text(_extract_user_question(question)).lower()
+    if not any(term in normalized for term in ("ماذا تذكر", "وش تذكر", "معلوماتي", "الذي حفظته", "ما الذي تعرفه عني")):
+        return None
+    return "المعلومات المحفوظة في جلسة الذكاء الحالية:\n" + "\n".join(f"- {item}" for item in USER_MEMORY[-10:])
+
+
+def _open_web_search_answer(question: str) -> str | None:
+    if not ENABLE_OPEN_WEB_SEARCH:
+        return None
+    analysis = _analyze_question(question)
+    if not analysis.get("asks_web"):
+        return None
+
+    query = analysis["normalized_text"]
+    query = re.sub(r"\b(ابحث|بحث|في النت|على النت|في الانترنت|في الإنترنت|روابط|مصادر)\b", "", query, flags=re.IGNORECASE).strip()
+    if not query:
+        return "اكتب موضوع البحث بوضوح، وسأحاول جلب ملخص من مصادر مفتوحة."
+
+    sources: list[tuple[str, str, str]] = []
+    headers = {"User-Agent": "AccountingAIService/1.1 (+open web research)"}
+
+    try:
+        response = requests.get(
+            "https://api.duckduckgo.com/",
+            params={"q": query, "format": "json", "no_html": 1, "skip_disambig": 1},
+            headers=headers,
+            timeout=12,
+        )
+        response.raise_for_status()
+        data = response.json()
+        abstract = (data.get("AbstractText") or "").strip()
+        url = (data.get("AbstractURL") or "").strip()
+        title = (data.get("Heading") or "DuckDuckGo").strip()
+        if abstract and url:
+            sources.append((title, abstract, url))
+    except Exception:
+        pass
+
+    try:
+        response = requests.get(
+            "https://ar.wikipedia.org/api/rest_v1/page/summary/" + requests.utils.quote(query),
+            headers=headers,
+            timeout=12,
+        )
+        if response.status_code == 404:
+            response = requests.get(
+                "https://en.wikipedia.org/api/rest_v1/page/summary/" + requests.utils.quote(query),
+                headers=headers,
+                timeout=12,
+            )
+        response.raise_for_status()
+        data = response.json()
+        extract = (data.get("extract") or "").strip()
+        url = ((data.get("content_urls") or {}).get("desktop") or {}).get("page", "")
+        title = (data.get("title") or "Wikipedia").strip()
+        if extract and url:
+            sources.append((title, extract, url))
+    except Exception:
+        pass
+
+    try:
+        response = requests.get(
+            "https://api.openalex.org/works",
+            params={"search": query, "per-page": 2},
+            headers=headers,
+            timeout=12,
+        )
+        response.raise_for_status()
+        for item in (response.json().get("results") or [])[:2]:
+            title = (item.get("title") or "OpenAlex research").strip()
+            abstract = (item.get("abstract_inverted_index") and "بحث أكاديمي مفهرس عن الموضوع.") or ""
+            url = (item.get("doi") or item.get("id") or "").strip()
+            if title and url:
+                sources.append((title, abstract, url))
+    except Exception:
+        pass
+
+    if not sources:
+        return "حاولت البحث في مصادر مفتوحة، لكن لم أجد نتيجة موثوقة كافية الآن. جرّب صياغة أدق أو اسأل عن مصدر محدد."
+
+    unique_sources = []
+    seen = set()
+    for title, summary, url in sources:
+        if url in seen:
+            continue
+        seen.add(url)
+        unique_sources.append((title, summary, url))
+
+    lines = [f"نتيجة بحث مفتوح عن: {query}", "", "الخلاصة:"]
+    for index, (title, summary, url) in enumerate(unique_sources[:4], start=1):
+        concise = re.sub(r"\s+", " ", summary).strip()
+        if len(concise) > 420:
+            concise = concise[:417].rstrip() + "..."
+        lines.append(f"{index}. {title}: {concise or 'مصدر مفيد للمراجعة.'}")
+    lines.append("")
+    lines.append("روابط التحقق:")
+    for title, _summary, url in unique_sources[:4]:
+        lines.append(f"- {title}: {url}")
+    return "\n".join(lines)
+
+
 def _wants_financial_context_answer(text: str) -> bool:
     user_question = _extract_user_question(text).lower()
     keywords = (
@@ -653,15 +833,21 @@ class PrivateAccountingModel:
         self.model.eval()
 
     def build_prompt(self, question: str) -> str:
-        question = question.strip()
+        question = normalize_user_question_text(question)
         return f"{SYSTEM_PROMPT}\n\nسؤال: {question}\nالإجابة:"
 
     def build_chat_prompt(self, question: str) -> str:
-        question = question.strip()
+        question = normalize_user_question_text(question)
+        analysis = _analyze_question(question)
+        memory_context = "\n".join(f"- {item}" for item in USER_MEMORY[-10:]) if USER_MEMORY else "لا توجد معلومات محفوظة بعد."
         return (
             f"{SYSTEM_PROMPT}\n\n"
+            f"تحليل السؤال قبل الإجابة:\n{json.dumps(analysis, ensure_ascii=False)}\n\n"
+            f"معلومات محفوظة من المستخدم:\n{memory_context}\n\n"
             "تعليمات الجودة:\n"
             "- أجب كخبير مالي ومحاسبي عملي، لا كروبوت عام.\n"
+            "- حلل نية المستخدم أولا: هل يريد شرحا، تنفيذا، بحثا في النت، أم تحليلا من بيانات النظام.\n"
+            "- إذا كان السؤال يطلب بحثا حديثا أو روابط تحقق فاعتمد على نتائج البحث المفتوح المرسلة لك ولا تخترع مصادر.\n"
             "- اربط الإجابة بالأرقام والسياق الموجود في السؤال عندما تتوفر.\n"
             "- إذا كان السؤال عن النظام أو الشركة فاعتمد على البيانات المرسلة من Django ولا تخترع أرقاما.\n"
             "- اجعل الرد منظما: خلاصة، تحليل، توصية عملية، وما يحتاجه المستخدم للخطوة التالية.\n"
@@ -673,6 +859,20 @@ class PrivateAccountingModel:
     def answer(self, question: str, max_new_tokens: int = 240) -> str:
         if not question or not question.strip():
             raise ValueError("السؤال لا يمكن أن يكون فارغا.")
+
+        question = normalize_user_question_text(question)
+
+        memory_answer = _remember_user_information(question)
+        if memory_answer:
+            return memory_answer
+
+        recalled_memory = _answer_from_user_memory(question)
+        if recalled_memory:
+            return recalled_memory
+
+        web_answer = _open_web_search_answer(question)
+        if web_answer:
+            return web_answer
 
         if AI_BACKEND in {"local_model", "transformers"} or REQUIRE_LOCAL_MODEL:
             if self.model is None or self.tokenizer is None:
