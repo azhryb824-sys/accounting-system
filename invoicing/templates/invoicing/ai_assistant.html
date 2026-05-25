@@ -196,6 +196,7 @@
     let assistantIsProcessing = false;
     let assistantIsSpeaking = false;
     let speechRunId = 0;
+    let lastFinalTranscript = '';
 
     function setStatus(text) {
         statusBox.textContent = text;
@@ -796,10 +797,13 @@
             for (let i = event.resultIndex; i < event.results.length; i += 1) {
                 transcript += event.results[i][0].transcript;
             }
-            questionInput.value = transcript.trim();
+            const normalizedTranscript = transcript.replace(/\s+/g, ' ').trim();
+            questionInput.value = normalizedTranscript;
             if (event.results[event.results.length - 1].isFinal) {
+                if (!normalizedTranscript || normalizedTranscript === lastFinalTranscript) return;
+                lastFinalTranscript = normalizedTranscript;
                 const screenPayload = screenStream ? (refreshScreenContext() || latestScreenPayload) : null;
-                runAssistant(questionInput.value, false, screenPayload);
+                runAssistant(normalizedTranscript, false, screenPayload);
             }
         };
 

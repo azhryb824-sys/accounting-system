@@ -1398,8 +1398,43 @@ def _is_light_conversation_question(question):
     return any(any(word in normalized for word in words) for words, _answer in LOCAL_GENERAL_CHAT)
 
 
+SPEECH_NORMALIZATION_REPLACEMENTS = {
+    "إفتح": "افتح",
+    "فتح لي": "افتح",
+    "افتح لي": "افتح",
+    "روح": "اذهب",
+    "وريني": "اعرض",
+    "ورني": "اعرض",
+    "عايز": "أريد",
+    "داير": "أريد",
+    "ابغى": "أريد",
+    "ابي": "أريد",
+    "وش": "ما",
+    "ايش": "ما",
+    "إيش": "ما",
+    "حل": "حلل",
+    "حلّل": "حلل",
+    "قيم": "قيّم",
+    "قَيّم": "قيّم",
+    "الفتره": "الفترة",
+    "الشركه": "الشركة",
+    "الفاتوره": "الفاتورة",
+    "الضريبه": "الضريبة",
+}
+
+
+def normalize_user_question_text(question):
+    text = re.sub(r"\s+", " ", (question or "")).strip()
+    if not text:
+        return ""
+    for old, new in SPEECH_NORMALIZATION_REPLACEMENTS.items():
+        text = re.sub(rf"(?<!\w){re.escape(old)}(?!\w)", new, text, flags=re.IGNORECASE)
+    text = re.sub(r"[؟?]{2,}", "؟", text)
+    return text.strip()
+
+
 def _is_system_usage_question(question):
-    normalized = (question or "").strip().lower()
+    normalized = normalize_user_question_text(question).lower()
     usage_markers = (
         "كيف", "طريقة", "استخدم", "استخدام", "أستخدم", "افتح", "اذهب", "اضافة",
         "إضافة", "أضف", "انشئ", "أنشئ", "وين", "أين", "شرح النظام",
@@ -1408,7 +1443,7 @@ def _is_system_usage_question(question):
 
 
 def _requests_accounting_data_or_analysis(question):
-    normalized = (question or "").strip().lower()
+    normalized = normalize_user_question_text(question).lower()
     data_markers = (
         "حلل", "تحليل", "قيّم", "قيم", "أداء", "اداء", "تفاصيل", "كم", "عدد",
         "إجمالي", "اجمالي", "رصيد", "تقرير", "مبيعات", "مشتريات", "فاتورة",
@@ -1419,7 +1454,7 @@ def _requests_accounting_data_or_analysis(question):
 
 
 def _classify_question_intent(question):
-    normalized = (question or "").strip().lower()
+    normalized = normalize_user_question_text(question).lower()
     if not normalized:
         return "empty"
     if _is_light_conversation_question(question):
@@ -1503,8 +1538,9 @@ def _repair_irrelevant_answer(question, answer):
 
 
 def _analyze_user_question(question):
-    normalized = (question or "").strip().lower()
-    intent = _classify_question_intent(question)
+    normalized_text = normalize_user_question_text(question)
+    normalized = normalized_text.lower()
+    intent = _classify_question_intent(normalized_text)
     explanation_terms = ("اشرح", "ما هو", "ما هي", "ما معنى", "لماذا", "عرف", "تعريف", "وضح")
     execution_terms = (
         "افتح", "اذهب", "اعرض", "أظهر", "انتقل", "نفذ", "أضف", "اضف",
@@ -1512,10 +1548,11 @@ def _analyze_user_question(question):
     )
     needs_explanation = any(term in normalized for term in explanation_terms)
     asks_execution = any(term in normalized for term in execution_terms) and not needs_explanation
-    asks_research = _is_general_web_question(question)
-    asks_company_data = _requests_accounting_data_or_analysis(question)
+    asks_research = _is_general_web_question(normalized_text)
+    asks_company_data = _requests_accounting_data_or_analysis(normalized_text)
     return {
         "intent": intent,
+        "normalized_text": normalized_text,
         "needs_explanation": needs_explanation,
         "asks_execution": asks_execution,
         "asks_research": asks_research,
@@ -2839,8 +2876,12 @@ _model_answer_financial_question = answer_financial_question
 
 def answer_financial_question(branch_id, question, user=None):
     def finish(result):
-        return _finalize_ai_result(result, question)
+        finalized = _finalize_ai_result(result, question)
+        if "question_analysis" not in finalized:
+            finalized["question_analysis"] = question_analysis
+        return finalized
 
+    question = normalize_user_question_text(question)
     question_analysis = _analyze_user_question(question)
     policy_answer = islamic_policy_guard_answer(question)
     if policy_answer:
@@ -3097,7 +3138,7 @@ def _safe_reverse(url_name):
 
 
 def analyze_and_route_user_request(branch_id, request_text, pending=None, user=None):
-    text = (request_text or "").strip()
+    text = normalize_user_question_text(request_text)
     pending = pending or {}
     question_analysis = _analyze_user_question(text)
     def finish_route(result):

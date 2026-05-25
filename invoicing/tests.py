@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from core.models import Branch, Company
 from invoicing.models import AIInteractionLearning, AIKnowledgeEntry, AIKnowledgeSource, Customer, Invoice, InvoiceItem, Item, PurchaseInvoice, PurchaseItem, Quote, QuoteItem, Supplier, Tax
-from invoicing.ai_services import analyze_and_route_user_request, answer_financial_question, handle_ai_management_command, record_ai_interaction_learning
+from invoicing.ai_services import analyze_and_route_user_request, answer_financial_question, handle_ai_management_command, normalize_user_question_text, record_ai_interaction_learning
 from invoicing.purchase_views import post_purchase_invoice
 from invoicing.views import post_sales_invoice
 
@@ -455,6 +455,29 @@ class InvoiceAccountingTests(TestCase):
         self.assertEqual(result["action"]["type"], "answer")
         self.assertIn("أهلا", result["answer"])
         self.assertNotIn("تحليل احترافي", result["answer"])
+
+    def test_ai_normalizes_spoken_and_dialect_question_text_before_analysis(self):
+        self.assertEqual(normalize_user_question_text("  وريني   التقرير؟؟  "), "اعرض التقرير؟")
+        self.assertEqual(normalize_user_question_text("حل الوضع المالي"), "حلل الوضع المالي")
+        self.assertEqual(normalize_user_question_text("ابغى افتح الفاتوره"), "أريد افتح الفاتورة")
+
+    def test_spoken_navigation_request_is_analyzed_before_answering(self):
+        result = analyze_and_route_user_request(self.branch.id, "وريني التقرير", user=self.user)
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["question_analysis"]["normalized_text"], "اعرض التقرير")
+        self.assertTrue(result["question_analysis"]["asks_execution"])
+        self.assertEqual(result["action"]["type"], "navigate")
+
+    @patch("invoicing.ai_services.free_web_general_answer", return_value="")
+    @patch("invoicing.ai_services._private_ai_request", return_value={"ok": False, "text": ""})
+    def test_spoken_analysis_request_uses_normalized_accounting_intent(self, private_ai, web_answer):
+        result = answer_financial_question(self.branch.id, "حل الوضع المالي", user=self.user)
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["intent"], "accounting_analysis")
+        self.assertTrue(result["question_analysis"]["asks_company_data"])
+        self.assertIn("الملخص", result["answer"])
 
     @patch("invoicing.ai_services.free_web_general_answer", return_value="")
     @patch("invoicing.ai_services._private_ai_request")
