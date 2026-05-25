@@ -13,3 +13,9 @@ staticfiles/
 data.json
 .DS_Store
 Thumbs.db
+accounting_ai_service/models/**/*
+!accounting_ai_service/models/
+!accounting_ai_service/models/README.md
+!accounting_ai_service/models/my_model/
+!accounting_ai_service/models/my_model/.gitkeep
+!accounting_ai_service/models/my_model/README.md
