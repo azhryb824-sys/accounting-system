@@ -321,6 +321,21 @@ class InvoiceAccountingTests(TestCase):
         self.assertIn("Inventory turnover", result["answer"])
         self.assertIn("https://example.com/inventory-turnover", result["answer"])
 
+    def test_ai_remembers_explicit_user_information(self):
+        result = {"source": "local", "answer": "تم"}
+
+        record_ai_interaction_learning(
+            self.branch.id,
+            self.user,
+            "تذكر: العميل المفضل عندي هو شركة النور",
+            result,
+        )
+        answer = answer_financial_question(self.branch.id, "ما هو العميل المفضل عندي؟", user=self.user)
+
+        self.assertTrue(AIKnowledgeEntry.objects.filter(source_url="app://user-memory").exists())
+        self.assertEqual(answer["source"], "local_knowledge")
+        self.assertIn("شركة النور", answer["answer"])
+
     @patch("invoicing.management.commands.update_ai_knowledge.requests.get")
     def test_update_ai_knowledge_loads_multiple_public_sources(self, requests_get):
         class FakeResponse:

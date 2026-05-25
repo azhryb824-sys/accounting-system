@@ -1858,10 +1858,68 @@ def _summarize_interaction_text(text, limit=240):
     return clean[:limit]
 
 
+USER_MEMORY_TRIGGERS = (
+    "تذكر", "احفظ", "خزن", "سجل معلومة", "معلومة مهمة", "للمستقبل",
+    "remember", "save this", "note that",
+)
+
+
+def _extract_user_memory_text(question):
+    text = re.sub(r"\s+", " ", (question or "")).strip()
+    if not text:
+        return ""
+    normalized = text.lower()
+    if not any(trigger in normalized for trigger in USER_MEMORY_TRIGGERS):
+        return ""
+    cleaned = re.sub(
+        r"^(تذكر|احفظ|خزن|سجل\s+معلومة|معلومة\s+مهمة|للمستقبل|remember|save\s+this|note\s+that)[:\s،-]*",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    ).strip()
+    if len(cleaned) < 8:
+        return ""
+    return _summarize_interaction_text(cleaned, limit=700)
+
+
+def _user_memory_source():
+    source, _created = AIKnowledgeSource.objects.get_or_create(
+        url="app://user-memory",
+        defaults={
+            "name": "ذاكرة المستخدم داخل النظام",
+            "license_note": "معلومات أدخلها المستخدم صراحة للاستفادة منها لاحقا.",
+        },
+    )
+    return source
+
+
+def remember_user_information(branch_id, user, question):
+    memory_text = _extract_user_memory_text(question)
+    if not memory_text:
+        return None
+    user_id = getattr(user, "id", None) if getattr(user, "is_authenticated", False) else "anonymous"
+    content = f"user:{user_id}|branch:{branch_id}|{memory_text}"
+    content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    title = f"معلومة من المستخدم {user_id}"
+    entry, _created = AIKnowledgeEntry.objects.update_or_create(
+        content_hash=content_hash,
+        defaults={
+            "source": _user_memory_source(),
+            "title": title,
+            "summary": memory_text,
+            "source_url": "app://user-memory",
+            "topic": f"user_memory:{user_id}:branch:{branch_id or 'all'}",
+            "is_approved": True,
+        },
+    )
+    return entry
+
+
 def record_ai_interaction_learning(branch_id, user, question, result, feedback=""):
     if not getattr(settings, "ENABLE_AI_INTERACTION_LEARNING", True):
         return None
     try:
+        remember_user_information(branch_id, user, question)
         return AIInteractionLearning.objects.create(
             branch_id=branch_id,
             user=user if getattr(user, "is_authenticated", False) else None,
@@ -1874,30 +1932,36 @@ def record_ai_interaction_learning(branch_id, user, question, result, feedback="
         return None
 
 
-def search_local_knowledge_entries(question, limit=4):
+def search_local_knowledge_entries(question, limit=4, user=None, branch_id=None):
     if not _ai_auto_knowledge_enabled():
         return []
     normalized = (question or "").strip().lower()
     if not normalized:
         return []
     words = [word for word in re.split(r"[^\w\u0600-\u06FF]+", normalized) if len(word) >= 3]
-    entries = AIKnowledgeEntry.objects.filter(is_approved=True).select_related("source")[:80]
+    entries = AIKnowledgeEntry.objects.filter(is_approved=True).select_related("source")[:120]
     scored = []
     for entry in entries:
         haystack = f"{entry.title} {entry.topic} {entry.summary}".lower()
         score = sum(1 for word in words if word in haystack)
+        user_id = getattr(user, "id", None) if getattr(user, "is_authenticated", False) else None
+        if user_id and f"user_memory:{user_id}:" in entry.topic:
+            score += 3
+        if branch_id and f"branch:{branch_id}" in entry.topic:
+            score += 2
         if score:
             scored.append((score, entry))
     return [entry for score, entry in sorted(scored, key=lambda row: row[0], reverse=True)[:limit]]
 
 
-def local_knowledge_answer(question):
-    entries = search_local_knowledge_entries(question)
+def local_knowledge_answer(question, user=None, branch_id=None):
+    entries = search_local_knowledge_entries(question, user=user, branch_id=branch_id)
     if not entries:
         return ""
     lines = ["استفدت من قاعدة المعرفة المحدثة تلقائيا داخل النظام:"]
     for entry in entries:
-        lines.append(f"- {entry.title}: {entry.summary} المصدر: {entry.source_url}")
+        source_label = "ذاكرة المستخدم" if entry.source_url == "app://user-memory" else f"المصدر: {entry.source_url}"
+        lines.append(f"- {entry.title}: {entry.summary} {source_label}")
     lines.append("تنبيه: هذه المعرفة مساعدة، وعند القرارات النظامية أو المالية راجع المصدر الرسمي الأحدث.")
     return "\n".join(lines)
 
@@ -2826,7 +2890,7 @@ def answer_financial_question(branch_id, question, user=None):
             "answer": _polish_answer(usage_answer, question),
             "context": {},
         })
-    knowledge_answer = local_knowledge_answer(question)
+    knowledge_answer = local_knowledge_answer(question, user=user, branch_id=branch_id)
     if knowledge_answer:
         return finish({
             "ok": True,
