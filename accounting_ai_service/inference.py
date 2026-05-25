@@ -35,6 +35,7 @@ OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:7b-instruct").strip()
 OPENAI_COMPATIBLE_API_KEY = os.environ.get("OPENAI_COMPATIBLE_API_KEY", "").strip()
 OPENAI_COMPATIBLE_BASE_URL = os.environ.get("OPENAI_COMPATIBLE_BASE_URL", "https://api.openai.com/v1").strip().rstrip("/")
 OPENAI_COMPATIBLE_MODEL = os.environ.get("OPENAI_COMPATIBLE_MODEL", "gpt-4o-mini").strip()
+REQUIRE_HOSTED_AI = os.environ.get("REQUIRE_HOSTED_AI", "false").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _load_transformers_runtime():
@@ -672,6 +673,16 @@ class PrivateAccountingModel:
         if not question or not question.strip():
             raise ValueError("السؤال لا يمكن أن يكون فارغا.")
 
+        if AI_BACKEND in {"openai", "openai_compatible", "hosted"} and not OPENAI_COMPATIBLE_API_KEY:
+            raise ValueError("خدمة الذكاء الاصطناعي مضبوطة على hosted/openai_compatible لكن OPENAI_COMPATIBLE_API_KEY غير موجود في Render.")
+
+        hosted_answer = self._answer_from_openai_compatible(question, max_new_tokens=max_new_tokens)
+        if hosted_answer:
+            return hosted_answer
+
+        if REQUIRE_HOSTED_AI:
+            raise ValueError("تم تفعيل REQUIRE_HOSTED_AI لكن المزود الخارجي لم يرجع إجابة. راجع OPENAI_COMPATIBLE_API_KEY و OPENAI_COMPATIBLE_MODEL و OPENAI_COMPATIBLE_BASE_URL.")
+
         greeting_answer = _answer_greeting(question)
         if greeting_answer:
             return greeting_answer
@@ -679,10 +690,6 @@ class PrivateAccountingModel:
         private_answer = self._answer_from_private_knowledge(question)
         if private_answer:
             return private_answer
-
-        hosted_answer = self._answer_from_openai_compatible(question, max_new_tokens=max_new_tokens)
-        if hosted_answer:
-            return hosted_answer
 
         ollama_answer = self._answer_from_ollama(question, max_new_tokens=max_new_tokens)
         if ollama_answer:
@@ -859,6 +866,7 @@ def runtime_status() -> dict[str, Any]:
         "openai_compatible_model": OPENAI_COMPATIBLE_MODEL,
         "openai_compatible_base_url": OPENAI_COMPATIBLE_BASE_URL,
         "openai_compatible_configured": bool(OPENAI_COMPATIBLE_API_KEY),
+        "require_hosted_ai": REQUIRE_HOSTED_AI,
         "transformers_model_path": str(model.model_path),
         "transformers_loaded": bool(model.model is not None and model.tokenizer is not None),
         "recommended_backend": "openai_compatible on Render, ollama on a server with RAM/GPU",

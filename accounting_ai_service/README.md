@@ -114,8 +114,9 @@ ACCOUNTING_AI_BACKEND=openai_compatible
 OPENAI_COMPATIBLE_BASE_URL=https://openrouter.ai/api/v1
 OPENAI_COMPATIBLE_MODEL=<provider/model-name>
 OPENAI_COMPATIBLE_API_KEY=<your-api-key>
+REQUIRE_HOSTED_AI=true
 ```
 
 Any provider that supports `POST /chat/completions` can be used, such as OpenRouter, Groq, Together, or OpenAI. Keep the API key in Render environment variables only; do not commit it.
 
-If these variables are missing, the service safely falls back to its built-in local accounting knowledge.
+With `REQUIRE_HOSTED_AI=true`, the service will fail loudly if the hosted provider is not configured or does not answer. This prevents accidental silent fallback to the local knowledge layer.
