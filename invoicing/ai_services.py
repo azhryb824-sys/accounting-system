@@ -3,7 +3,10 @@ import hashlib
 import json
 import os
 import re
+from html import unescape
+from html.parser import HTMLParser
 from decimal import Decimal
+from urllib.parse import quote_plus, urlparse
 
 import requests
 from django.conf import settings
@@ -1631,6 +1634,10 @@ FREE_WEB_GENERAL_SOURCES = {
     "openalex": {
         "name": "OpenAlex",
         "license": "CC0؛ بيانات بحثية وفهرسية مفتوحة قابلة لإعادة الاستخدام التجاري.",
+    },
+    "duckduckgo": {
+        "name": "DuckDuckGo Web Search",
+        "license": "نتائج بحث وروابط إلى صفحات خارجية؛ راجع ترخيص ومحتوى كل مصدر أصلي.",
     }
 }
 
@@ -2058,6 +2065,8 @@ def _source_reliability_score(source):
         score += 12
     if "openalex" in name:
         score += 18
+    if "duckduckgo" in name:
+        score += 8
     if ".gov" in url or "zatca.gov.sa" in url:
         score += 25
     if "doi.org" in url or "openalex.org" in url:
@@ -2197,6 +2206,92 @@ def _openalex_research(question):
     return results
 
 
+class _DuckDuckGoHTMLParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.results = []
+        self._in_title = False
+        self._in_snippet = False
+        self._current = None
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        classes = attrs.get("class", "")
+        if tag == "a" and "result__a" in classes:
+            self._current = {"title": "", "url": attrs.get("href", ""), "snippet": ""}
+            self._in_title = True
+        elif self._current is not None and tag in {"a", "div"} and "result__snippet" in classes:
+            self._in_snippet = True
+
+    def handle_data(self, data):
+        if not self._current:
+            return
+        text = unescape(data or "").strip()
+        if not text:
+            return
+        if self._in_title:
+            self._current["title"] = f"{self._current['title']} {text}".strip()
+        elif self._in_snippet:
+            self._current["snippet"] = f"{self._current['snippet']} {text}".strip()
+
+    def handle_endtag(self, tag):
+        if tag == "a" and self._in_title:
+            self._in_title = False
+        if self._in_snippet and tag in {"a", "div"}:
+            self._in_snippet = False
+            if self._current and self._current.get("title") and self._current.get("url"):
+                self.results.append(self._current)
+            self._current = None
+
+
+def _clean_search_result_url(url):
+    url = unescape(url or "").strip()
+    if not url:
+        return ""
+    parsed = urlparse(url)
+    if parsed.netloc.endswith("duckduckgo.com") and "uddg=" in parsed.query:
+        match = re.search(r"(?:^|&)uddg=([^&]+)", parsed.query)
+        if match:
+            from urllib.parse import unquote
+            return unquote(match.group(1))
+    return url
+
+
+def _duckduckgo_web_search(question):
+    if not _free_web_answers_enabled() or not _is_general_web_question(question):
+        return []
+    query = _clean_general_web_query(question)
+    try:
+        response = requests.get(
+            f"https://html.duckduckgo.com/html/?q={quote_plus(query)}",
+            headers={
+                "User-Agent": "Mozilla/5.0 AccountingSystemAI/1.0 (+https://example.com)",
+                "Accept-Language": "ar,en;q=0.8",
+            },
+            timeout=8,
+        )
+        response.raise_for_status()
+    except requests.RequestException:
+        return []
+    parser = _DuckDuckGoHTMLParser()
+    parser.feed(response.text)
+    results = []
+    for row in parser.results[:5]:
+        url = _clean_search_result_url(row.get("url"))
+        title = re.sub(r"\s+", " ", row.get("title") or "").strip()
+        snippet = re.sub(r"\s+", " ", row.get("snippet") or "").strip()
+        if not title or not url:
+            continue
+        results.append({
+            "title": title,
+            "extract": snippet or "نتيجة ويب مرتبطة بالسؤال. افتح المصدر للتحقق من التفاصيل الكاملة.",
+            "source_url": url,
+            "source_name": FREE_WEB_GENERAL_SOURCES["duckduckgo"]["name"],
+            "license": FREE_WEB_GENERAL_SOURCES["duckduckgo"]["license"],
+        })
+    return results
+
+
 def _synthesize_free_web_answer(question, sources):
     if not sources:
         return ""
@@ -2242,6 +2337,7 @@ def _synthesize_free_web_answer(question, sources):
 
 def free_web_general_answer(question):
     sources = []
+    sources.extend(_duckduckgo_web_search(question))
     for source in (_wikipedia_summary(question), _wikidata_facts(question)):
         if source and source.get("extract"):
             sources.append(source)

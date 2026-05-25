@@ -176,7 +176,8 @@ class InvoiceAccountingTests(TestCase):
     @patch("invoicing.ai_services._openalex_research")
     @patch("invoicing.ai_services._wikidata_facts")
     @patch("invoicing.ai_services._wikipedia_summary")
-    def test_general_question_uses_free_trusted_web_sources(self, wikipedia, wikidata, openalex):
+    @patch("invoicing.ai_services._duckduckgo_web_search", return_value=[])
+    def test_general_question_uses_free_trusted_web_sources(self, duckduckgo, wikipedia, wikidata, openalex):
         wikipedia.return_value = {
             "title": "IFRS",
             "extract": "معايير التقارير المالية الدولية هي معايير محاسبية دولية.",
@@ -212,7 +213,8 @@ class InvoiceAccountingTests(TestCase):
     @patch("invoicing.ai_services._openalex_research")
     @patch("invoicing.ai_services._wikidata_facts")
     @patch("invoicing.ai_services._wikipedia_summary")
-    def test_scientific_question_uses_free_web_sources(self, wikipedia, wikidata, openalex):
+    @patch("invoicing.ai_services._duckduckgo_web_search", return_value=[])
+    def test_scientific_question_uses_free_web_sources(self, duckduckgo, wikipedia, wikidata, openalex):
         wikipedia.return_value = {
             "title": "Photosynthesis",
             "extract": "التمثيل الضوئي عملية تستخدم فيها النباتات الضوء لإنتاج الطاقة.",
@@ -234,7 +236,15 @@ class InvoiceAccountingTests(TestCase):
     @patch("invoicing.ai_services._openalex_research")
     @patch("invoicing.ai_services._wikidata_facts")
     @patch("invoicing.ai_services._wikipedia_summary")
-    def test_research_request_gets_professional_source_analysis(self, wikipedia, wikidata, openalex):
+    @patch("invoicing.ai_services._duckduckgo_web_search")
+    def test_research_request_gets_professional_source_analysis(self, duckduckgo, wikipedia, wikidata, openalex):
+        duckduckgo.return_value = [{
+            "title": "AI overview",
+            "extract": "نتيجة ويب عامة عن الذكاء الاصطناعي.",
+            "source_url": "https://example.com/web-ai",
+            "source_name": "DuckDuckGo Web Search",
+            "license": "web",
+        }]
         wikipedia.return_value = {
             "title": "Artificial intelligence",
             "extract": "الذكاء الاصطناعي مجال يبني أنظمة قادرة على أداء مهام تتطلب عادة ذكاء بشريا.",
@@ -258,11 +268,13 @@ class InvoiceAccountingTests(TestCase):
         self.assertIn("الخلاصة المباشرة", result["answer"])
         self.assertIn("تحليل المعلومات", result["answer"])
         self.assertIn("المصادر والتراخيص", result["answer"])
+        self.assertIn("DuckDuckGo Web Search", result["answer"])
 
     @patch("invoicing.ai_services._openalex_research")
     @patch("invoicing.ai_services._wikidata_facts")
     @patch("invoicing.ai_services._wikipedia_summary")
-    def test_latest_questions_include_current_source_warning(self, wikipedia, wikidata, openalex):
+    @patch("invoicing.ai_services._duckduckgo_web_search", return_value=[])
+    def test_latest_questions_include_current_source_warning(self, duckduckgo, wikipedia, wikidata, openalex):
         wikipedia.return_value = {
             "title": "Python",
             "extract": "بايثون لغة برمجة عالية المستوى.",
