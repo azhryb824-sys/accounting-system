@@ -56,6 +56,28 @@ DIALECT_AND_VOICE_RULES = """
 """.strip()
 
 
+WEB_RESEARCH_AND_ANALYSIS_RULES = """
+قواعد الإجابة العامة والبحث:
+- افهم نية السؤال أولا: تحية، شرح تعليمي، سؤال عن بيانات النظام، سؤال عام، أو سؤال يحتاج معلومة حديثة.
+- إذا كان السؤال عاما أو علميا أو ثقافيا أو تقنيا ولا توجد إجابته داخل بيانات النظام، استخدم المصادر المفتوحة المتاحة ورتبها حسب الموثوقية.
+- لا تخلط بيانات الشركة مع معلومات الإنترنت. بيانات النظام لها الأولوية عند سؤال المستخدم عن شركته أو فواتيره أو فرعه.
+- عند استخدام الإنترنت: اعرض خلاصة مباشرة، ثم تحليل مختصر، ثم مصادر بروابط وتراخيص أو ملاحظات موثوقية.
+- إذا كان الموضوع سريع التغير مثل الأخبار والأسعار والأنظمة والإصدارات، قل بوضوح إن المعلومة تحتاج مراجعة المصدر الرسمي الأحدث.
+- لا تخترع مصادر أو أرقاما. إذا لم تجد مصدرا كافيا، قل ذلك واطلب من المستخدم تحديد المجال أو أعطه طريقة تحقق.
+""".strip()
+
+
+WORLD_CLASS_AI_RESPONSE_CONTRACT = """
+معيار الجودة العالمي للإجابة:
+- ابدأ من سؤال المستخدم لا من قالب جاهز؛ إذا كان السؤال قصيرا أو غامضا فاطلب التوضيح بدلا من التحليل العشوائي.
+- افصل بوضوح بين: معلومة مؤكدة من النظام، معلومة من مصدر خارجي، واستنتاج تحليلي.
+- في الأسئلة المالية: اذكر الأرقام المتاحة فقط، ثم اشرح ماذا تعني، ثم أعط إجراء عمليا قابلا للتنفيذ.
+- في الأسئلة العامة: قدم جوابا مباشرا ثم سياقا مختصرا ثم مصادر أو ملاحظة تحقق.
+- في الأسئلة عالية المخاطر أو المتغيرة: لا تجزم؛ اذكر حدود المعرفة ووجّه للمصدر الرسمي أو المختص.
+- لا تكرر السؤال ولا تطل بلا فائدة. اجعل كل سطر يخدم قرارا أو فهما.
+""".strip()
+
+
 def _professional_prompt(task, question, context=None, extra=""):
     payload = {
         "task": task,
@@ -63,7 +85,7 @@ def _professional_prompt(task, question, context=None, extra=""):
         "context": context or {},
     }
     return (
-        f"{PROFESSIONAL_ASSISTANT_RULES}\n\n{SAUDI_MARKET_ADVICE_RULES}\n\n{DIALECT_AND_VOICE_RULES}\n\n"
+        f"{PROFESSIONAL_ASSISTANT_RULES}\n\n{SAUDI_MARKET_ADVICE_RULES}\n\n{DIALECT_AND_VOICE_RULES}\n\n{WEB_RESEARCH_AND_ANALYSIS_RULES}\n\n{WORLD_CLASS_AI_RESPONSE_CONTRACT}\n\n"
         f"المهمة والبيانات:\n{json.dumps(payload, ensure_ascii=False, default=str)}\n"
         f"{extra}".strip()
     )
@@ -1246,7 +1268,7 @@ LOCAL_ACCOUNTING_CONCEPTS = [
     (("حقوق الملكية", "رأس المال", "راس المال"), "حقوق الملكية تمثل حق المالك في المنشأة بعد طرح الالتزامات من الأصول. تشمل رأس المال والأرباح المحتجزة والمسحوبات."),
     (("الإيرادات", "الايرادات", "إيراد"), "الإيرادات هي ما تحققه المنشأة من بيع السلع أو تقديم الخدمات. في العادة تسجل دائنة."),
     (("المصروفات", "مصروف"), "المصروفات هي تكاليف تشغيل النشاط مثل الرواتب والإيجار والمصاريف الإدارية. في العادة تسجل مدينة وتخفض الربح."),
-    (("القيد المزدوج", "double entry"), "القيد المزدوج يعني تسجيل كل عملية بطرف مدين وطرف دائن على الأقل، ولا يكون القيد صحيحا إلا إذا توازن الطرفان."),
+    (("القيد المحاسبي", "قيد محاسبي", "القيد المزدوج", "double entry"), "القيد المحاسبي هو تسجيل أثر العملية المالية في الحسابات. غالبا يتكون من طرف مدين وطرف دائن، ويجب أن يتساوى مجموع المدين مع مجموع الدائن. مثال بسيط: عند بيع نقدي يكون الصندوق مدينا والإيراد دائنا، ومع الضريبة تسجل ضريبة المخرجات دائنة حسب النظام."),
     (("ميزان المراجعة",), "ميزان المراجعة يجمع أرصدة الحسابات للتأكد من توازن المدين والدائن، لكنه لا يضمن عدم وجود أخطاء تصنيف أو ترحيل."),
     (("قائمة الدخل", "الربح والخسارة"), "قائمة الدخل تعرض الإيرادات والمصروفات خلال فترة معينة للوصول إلى صافي الربح أو الخسارة."),
     (("المركز المالي", "الميزانية"), "قائمة المركز المالي تعرض الأصول والخصوم وحقوق الملكية. معادلتها: الأصول = الخصوم + حقوق الملكية."),
@@ -1360,6 +1382,150 @@ def local_greeting_or_concept_answer(question):
     if not matches:
         return ""
     return "\n".join(f"- {answer}" for answer in dict.fromkeys(matches))
+
+
+def _is_light_conversation_question(question):
+    normalized = (question or "").strip().lower()
+    if not normalized:
+        return False
+    if normalized in {word.lower() for word in LOCAL_GREETING_PATTERNS}:
+        return True
+    if len(normalized) <= 35 and any(word in normalized for word in LOCAL_GREETING_PATTERNS):
+        return True
+    return any(any(word in normalized for word in words) for words, _answer in LOCAL_GENERAL_CHAT)
+
+
+def _is_system_usage_question(question):
+    normalized = (question or "").strip().lower()
+    usage_markers = (
+        "كيف", "طريقة", "استخدم", "استخدام", "أستخدم", "افتح", "اذهب", "اضافة",
+        "إضافة", "أضف", "انشئ", "أنشئ", "وين", "أين", "شرح النظام",
+    )
+    return any(marker.lower() in normalized for marker in usage_markers)
+
+
+def _requests_accounting_data_or_analysis(question):
+    normalized = (question or "").strip().lower()
+    data_markers = (
+        "حلل", "تحليل", "قيّم", "قيم", "أداء", "اداء", "تفاصيل", "كم", "عدد",
+        "إجمالي", "اجمالي", "رصيد", "تقرير", "مبيعات", "مشتريات", "فاتورة",
+        "فواتير", "مخزون", "منتجات", "أصناف", "اصناف", "رواتب", "سلف",
+        "فرع", "الفرع", "ربح", "خسارة", "ضريبة", "غير مرحلة", "غير المرحلة",
+    )
+    return any(marker in normalized for marker in data_markers)
+
+
+def _classify_question_intent(question):
+    normalized = (question or "").strip().lower()
+    if not normalized:
+        return "empty"
+    if _is_light_conversation_question(question):
+        return "conversation"
+    explanation_terms = ("اشرح", "ما هو", "ما هي", "ما معنى", "لماذا", "عرف", "تعريف", "وضح")
+    if any(term in normalized for term in explanation_terms) and local_greeting_or_concept_answer(question):
+        return "explanation"
+    if _calculation_needs_more_numbers(question) or re.search(r"\d", normalized):
+        return "calculation"
+    if _is_system_usage_question(question):
+        return "system_usage"
+    if _requests_accounting_data_or_analysis(question):
+        return "accounting_analysis"
+    if _is_general_web_question(question):
+        return "web_research"
+    return "general"
+
+
+def _answer_confidence_for_source(source, answer=""):
+    if source in {"accounting_data", "local_calculator", "permissions", "zatca_regulations"}:
+        return "high"
+    if source in {"free_web", "local_knowledge", "local", "local_strong"}:
+        return "medium"
+    if source == "private":
+        return "medium" if len((answer or "").strip()) >= 120 else "low"
+    if source in {"clarification", "islamic_policy"}:
+        return "high"
+    return "low"
+
+
+def _quality_notice(intent, source, confidence):
+    if source == "clarification":
+        return ""
+    if confidence == "low":
+        return "ملاحظة جودة: الإجابة المتاحة محدودة؛ أرسل تفاصيل أكثر أو حدّد النطاق لأعطيك نتيجة أدق."
+    if intent == "accounting_analysis" and source not in {"accounting_data", "local_strong", "private", "permissions"}:
+        return "ملاحظة جودة: لم أجد بيانات كافية من النظام لهذا السؤال؛ اعتبر الرد إرشادا عاما لا تحليلا نهائيا."
+    if intent == "web_research" and source != "free_web":
+        return "ملاحظة جودة: لم أجد مصدرا خارجيا كافيا؛ راجع مصدرا رسميا إذا كان القرار مهما."
+    return ""
+
+
+def _finalize_ai_result(result, question):
+    result = dict(result or {})
+    answer = result.get("answer") or result.get("message") or ""
+    source = result.get("source", "")
+    intent = _classify_question_intent(question)
+    confidence = _answer_confidence_for_source(source, answer)
+    result["intent"] = intent
+    result["confidence"] = confidence
+    if answer:
+        notice = _quality_notice(intent, source, confidence)
+        if notice and notice not in answer:
+            answer = f"{answer.rstrip()}\n\n{notice}"
+        result["answer"] = answer
+    return result
+
+
+def _answer_looks_irrelevant(question, answer):
+    normalized_question = (question or "").strip().lower()
+    normalized_answer = (answer or "").strip().lower()
+    if not normalized_question or not normalized_answer:
+        return False
+    if _is_light_conversation_question(question) and any(marker in normalized_answer for marker in (
+        "تحليل احترافي", "الملخص التنفيذي", "المبيعات:", "المشتريات:", "هامش الربح",
+    )):
+        return True
+    if normalized_question in {"أهلا", "اهلا", "مرحبا", "هلا", "hi", "hello"} and len(normalized_answer) > 700:
+        return True
+    return False
+
+
+def _repair_irrelevant_answer(question, answer):
+    local_answer = local_greeting_or_concept_answer(question)
+    if local_answer:
+        return _polish_answer(local_answer, question)
+    ambiguous = local_ambiguous_request_answer(question)
+    if ambiguous:
+        return _polish_answer(ambiguous, question)
+    return "فهمت أن الرد السابق لم يطابق سؤالك. اكتب السؤال بصيغة مباشرة أو حدّد هل تريد شرحا، بحثا في النت، أو تحليلا من بيانات النظام."
+
+
+def _analyze_user_question(question):
+    normalized = (question or "").strip().lower()
+    intent = _classify_question_intent(question)
+    explanation_terms = ("اشرح", "ما هو", "ما هي", "ما معنى", "لماذا", "عرف", "تعريف", "وضح")
+    execution_terms = (
+        "افتح", "اذهب", "اعرض", "أظهر", "انتقل", "نفذ", "أضف", "اضف",
+        "أنشئ", "انشئ", "سجل", "احفظ", "بيع", "كاشير", "تأكيد",
+    )
+    needs_explanation = any(term in normalized for term in explanation_terms)
+    asks_execution = any(term in normalized for term in execution_terms) and not needs_explanation
+    asks_research = _is_general_web_question(question)
+    asks_company_data = _requests_accounting_data_or_analysis(question)
+    return {
+        "intent": intent,
+        "needs_explanation": needs_explanation,
+        "asks_execution": asks_execution,
+        "asks_research": asks_research,
+        "asks_company_data": asks_company_data,
+    }
+
+
+def _should_try_execution(question_analysis):
+    return bool(question_analysis.get("asks_execution")) and question_analysis.get("intent") not in {
+        "conversation",
+        "web_research",
+        "general",
+    }
 
 
 def local_system_usage_answer(question):
@@ -1554,6 +1720,10 @@ def zatca_regulations_answer(question):
 GENERAL_WEB_TRIGGERS = (
     "ابحث",
     "بحث",
+    "ابحث في النت",
+    "ابحث في الإنترنت",
+    "النت",
+    "الإنترنت",
     "من هو",
     "من هي",
     "ما هو",
@@ -1568,19 +1738,45 @@ GENERAL_WEB_TRIGGERS = (
     "عرفني على",
     "معلومات عن",
     "اشرح لي عن",
+    "حلل معلومات",
+    "حلل لي",
+    "قارن",
+    "مقارنة",
+    "مصادر",
+    "المصدر",
+    "أحدث",
+    "احدث",
+    "آخر",
+    "اخر",
+    "حالي",
+    "حالياً",
+    "اليوم",
+    "الآن",
     "who is",
     "what is",
     "when is",
     "where is",
+    "search",
+    "research",
     "explain",
     "define",
+    "compare",
+    "sources",
+    "latest",
+    "current",
+    "today",
+    "now",
 )
 
 GENERAL_KNOWLEDGE_TERMS = (
     "علم", "علمي", "علوم", "فيزياء", "كيمياء", "أحياء", "طب", "تاريخ", "جغرافيا",
     "رياضيات", "تقنية", "كمبيوتر", "ذكاء اصطناعي", "فضاء", "كوكب", "صحة",
+    "اقتصاد", "إدارة", "ادارة", "قانون", "تعليم", "ثقافة", "سياسة", "لغة",
+    "برمجة", "أمن سيبراني", "بيانات", "تحليل", "دراسة", "بحث", "مصادر",
     "science", "physics", "chemistry", "biology", "medicine", "history", "geography",
     "math", "technology", "computer", "ai", "space", "planet", "health",
+    "economics", "management", "law", "education", "culture", "programming",
+    "cybersecurity", "data", "analysis", "research",
 )
 
 SYSTEM_OR_COMPANY_TERMS = (
@@ -1842,6 +2038,43 @@ def _clean_general_web_query(question):
     return cleaned.strip(" ؟?،,.") or (question or "").strip()
 
 
+def _question_needs_current_source_warning(question):
+    normalized = (question or "").strip().lower()
+    current_markers = (
+        "أحدث", "احدث", "آخر", "اخر", "حالي", "حالياً", "الآن", "اليوم", "هذا الأسبوع",
+        "الأخبار", "اخبار", "سعر", "أسعار", "قانون جديد", "نظام جديد", "إصدار", "نسخة",
+        "latest", "current", "today", "now", "news", "price", "version", "release",
+    )
+    return any(marker in normalized for marker in current_markers)
+
+
+def _source_reliability_score(source):
+    name = (source.get("source_name") or "").lower()
+    url = (source.get("source_url") or "").lower()
+    score = 50
+    if "wikipedia" in name:
+        score += 15
+    if "wikidata" in name:
+        score += 12
+    if "openalex" in name:
+        score += 18
+    if ".gov" in url or "zatca.gov.sa" in url:
+        score += 25
+    if "doi.org" in url or "openalex.org" in url:
+        score += 10
+    if not source.get("extract"):
+        score -= 20
+    return max(0, min(score, 100))
+
+
+def _source_reliability_label(score):
+    if score >= 80:
+        return "عالية"
+    if score >= 60:
+        return "متوسطة"
+    return "محدودة"
+
+
 def _wikipedia_summary(question):
     if not _free_web_answers_enabled() or not _is_general_web_question(question):
         return {}
@@ -1967,22 +2200,43 @@ def _openalex_research(question):
 def _synthesize_free_web_answer(question, sources):
     if not sources:
         return ""
-    lead = "بحثت في مصادر مفتوحة وموثوقة قدر الإمكان، وهذه خلاصة دقيقة بدون مفاتيح مدفوعة:"
-    answer_lines = [lead]
-    primary = sources[0]
+    current_warning = _question_needs_current_source_warning(question)
+    ranked_sources = sorted(
+        sources,
+        key=lambda source: _source_reliability_score(source),
+        reverse=True,
+    )
+    primary = ranked_sources[0]
+    answer_lines = [
+        "بحثت في مصادر مفتوحة، ودرّبت الإجابة هنا على الفصل بين الخلاصة والتحليل والمصادر:",
+        "",
+        "الخلاصة المباشرة:",
+    ]
     if primary.get("extract"):
-        answer_lines.append(f"- الخلاصة: {primary['extract']}")
-    if len(sources) > 1:
+        answer_lines.append(f"- {primary['extract']}")
+    else:
+        answer_lines.append("- وجدت مصادر مرتبطة بالسؤال، لكن الخلاصة النصية المتاحة محدودة.")
+    if len(ranked_sources) > 1:
+        answer_lines.extend(["", "تحليل المعلومات:", "- اعتمدت على المصدر الأعلى صلة كخلاصة أولى، ثم قارنت مع مصادر داعمة لتقليل احتمال الإجابة المنفصلة عن السؤال."])
+        if any((source.get("source_name") or "").lower() == "openalex" for source in ranked_sources):
+            answer_lines.append("- وجود مراجع من OpenAlex يعني أن هناك أساسا بحثيا أو أكاديميا يمكن الرجوع إليه، لكنه لا يغني عن قراءة الدراسة الأصلية عند القرارات المهمة.")
         answer_lines.append("- مصادر داعمة:")
-        for source in sources[1:4]:
+        for source in ranked_sources[1:4]:
             title = source.get("title") or source.get("source_name")
             extract = source.get("extract") or ""
-            answer_lines.append(f"  - {title}: {extract}")
-    answer_lines.append("- ملاحظة دقة: إذا كان السؤال يتغير مع الوقت مثل الأنظمة أو الأسعار أو الأخبار، راجع المصدر الرسمي الأحدث قبل اتخاذ قرار.")
-    answer_lines.append("- المصادر والتراخيص:")
-    for source in sources[:5]:
+            score = _source_reliability_score(source)
+            answer_lines.append(f"  - {title}: {extract} موثوقية: {_source_reliability_label(score)}.")
+    answer_lines.append("")
+    if current_warning:
+        answer_lines.append("ملاحظة دقة: سؤالك يبدو مرتبطا بمعلومة حديثة أو متغيرة؛ راجع المصدر الرسمي الأحدث قبل اتخاذ قرار.")
+    else:
+        answer_lines.append("ملاحظة دقة: هذه خلاصة مبنية على المصادر المفتوحة المتاحة، وليست بديلا عن المصدر الرسمي أو المرجع الأصلي عند القرارات الحساسة.")
+    answer_lines.append("")
+    answer_lines.append("المصادر والتراخيص:")
+    for source in ranked_sources[:5]:
         url = source.get("source_url") or ""
-        answer_lines.append(f"  - {source.get('source_name')}: {source.get('title')} {url} | {source.get('license')}")
+        score = _source_reliability_score(source)
+        answer_lines.append(f"- {source.get('source_name')}: {source.get('title')} {url} | {source.get('license')} | موثوقية: {_source_reliability_label(score)}")
     return "\n".join(answer_lines).strip()
 
 
@@ -2047,11 +2301,19 @@ def _is_cancel_text(text):
 
 def _detect_pos_intent(text):
     normalized = _normalize_ai_text(text)
-    return any(word in normalized for word in (
-        "كاشير", "بيع", "بع", "حاسب", "فاتورة بيع", "pos", "checkout",
-        "رسيد", "رسید", "بل", "فروخت", "بیع", "زبون", "داير ابيع", "عايز ابيع",
-        "ابغى ابيع", "ابي ابيع", "تمم البيع", "خلص البيع", "bill banao", "invoice banao",
-    ))
+    explicit_pos_terms = (
+        "كاشير", "نقطة بيع", "pos", "checkout", "تمم البيع", "خلص البيع",
+        "داير ابيع", "عايز ابيع", "ابغى ابيع", "ابي ابيع", "bill banao",
+    )
+    if any(term in normalized for term in explicit_pos_terms):
+        return True
+    sale_terms = ("بيع", "بع", "فاتورة بيع", "فروخت", "بیع")
+    has_sale_term = any(term in normalized for term in sale_terms)
+    has_quantity = bool(re.search(r"\d+(?:[.,]\d+)?", normalized))
+    explanation_terms = ("اشرح", "ما هو", "ما هي", "ما معنى", "كيف", "لماذا", "عرف", "تعريف")
+    if any(term in normalized for term in explanation_terms):
+        return False
+    return has_sale_term and has_quantity
 
 
 def _extract_requested_quantity(text, item_name):
@@ -2416,89 +2678,96 @@ _model_answer_financial_question = answer_financial_question
 
 
 def answer_financial_question(branch_id, question, user=None):
+    def finish(result):
+        return _finalize_ai_result(result, question)
+
+    question_analysis = _analyze_user_question(question)
     policy_answer = islamic_policy_guard_answer(question)
     if policy_answer:
-        return {
+        return finish({
             "ok": True,
             "source": "islamic_policy",
             "answer": _polish_answer(policy_answer, question),
             "context": {},
-        }
+        })
     calculation_answer = local_calculation_answer(question)
     if calculation_answer:
-        return {
+        return finish({
             "ok": True,
             "source": "local_calculator",
             "answer": _polish_answer(calculation_answer, question),
             "context": {},
-        }
+        })
     ambiguous_answer = local_ambiguous_request_answer(question)
     if ambiguous_answer:
-        return {
+        return finish({
             "ok": True,
             "source": "clarification",
             "answer": _polish_answer(ambiguous_answer, question),
             "context": {},
-        }
+        })
     zatca_answer = zatca_regulations_answer(question)
     if zatca_answer:
-        return {
+        return finish({
             "ok": True,
             "source": "zatca_regulations",
             "answer": _polish_answer(zatca_answer, question),
             "context": {},
-        }
+        })
     local_direct_answer = local_greeting_or_concept_answer(question)
     usage_answer = local_system_usage_answer(question)
+    if local_direct_answer and _is_light_conversation_question(question):
+        return finish({
+            "ok": True,
+            "source": "local",
+            "answer": _polish_answer(local_direct_answer, question),
+            "context": {},
+        })
+    if usage_answer and _is_system_usage_question(question):
+        return finish({
+            "ok": True,
+            "source": "local",
+            "answer": _polish_answer(usage_answer, question),
+            "context": {},
+        })
     knowledge_answer = local_knowledge_answer(question)
-    if knowledge_answer and not local_direct_answer and not usage_answer:
-        return {
+    if knowledge_answer:
+        return finish({
             "ok": True,
             "source": "local_knowledge",
             "answer": _polish_answer(knowledge_answer, question),
             "context": {},
-        }
-    if not local_direct_answer and not usage_answer:
-        web_answer = free_web_general_answer(question)
-        if web_answer:
-            return {
-                "ok": True,
-                "source": "free_web",
-                "answer": _polish_answer(web_answer, question),
-                "context": {},
-            }
+        })
+    web_answer = free_web_general_answer(question)
+    if web_answer:
+        return finish({
+            "ok": True,
+            "source": "free_web",
+            "answer": _polish_answer(web_answer, question),
+            "context": {},
+        })
+    if local_direct_answer and question_analysis.get("needs_explanation"):
+        return finish({
+            "ok": True,
+            "source": "local",
+            "answer": _polish_answer(local_direct_answer, question),
+            "context": {},
+        })
     result = _model_answer_financial_question(branch_id, question, user=user)
     answer_text = result.get("answer") or result.get("message") or ""
     if _weak_ai_answer(answer_text) and result.get("source") not in {"permissions", "accounting_data"}:
         context = result.get("context") or branch_ai_context(branch_id, user=user)
-        result["answer"] = _polish_answer(strong_local_financial_answer(context, question), question)
-        result["source"] = "local_strong"
-        result["context"] = context
-        return result
-    if local_direct_answer and (
-        result.get("source") == "local"
-        or "قراءة النموذج للبيانات الحالية" in answer_text
-        or "تعذر الاتصال" in answer_text
-        or "طھط¹ط°ط±" in answer_text
-    ):
-        result["answer"] = _polish_answer(local_direct_answer, question)
-        result["source"] = "local"
-        return result
-    if local_direct_answer and not answer_text:
-        answer_text = local_direct_answer
-    if usage_answer and (
-        result.get("source") == "local"
-        or "قراءة النموذج للبيانات الحالية" in answer_text
-        or "تعذر الاتصال" in answer_text
-        or "طھط¹ط°ط±" in answer_text
-    ):
-        result["answer"] = _polish_answer(usage_answer, question)
-        result["source"] = "local"
-        return result
-    if usage_answer and not answer_text:
-        answer_text = usage_answer
+        if local_direct_answer and not _requests_accounting_data_or_analysis(question):
+            result["answer"] = _polish_answer(local_direct_answer, question)
+            result["source"] = "local"
+            result["context"] = {}
+        else:
+            result["answer"] = _polish_answer(strong_local_financial_answer(context, question), question)
+            result["source"] = "local_strong"
+            result["context"] = context
+        return finish(result)
     result["answer"] = _polish_answer(answer_text, question)
-    return result
+    return finish(result)
 
 
 ASSISTANT_ACTIONS = [
@@ -2670,9 +2939,21 @@ def _safe_reverse(url_name):
 def analyze_and_route_user_request(branch_id, request_text, pending=None, user=None):
     text = (request_text or "").strip()
     pending = pending or {}
+    question_analysis = _analyze_user_question(text)
+    def finish_route(result):
+        result = _finalize_ai_result(result, text)
+        result["question_analysis"] = question_analysis
+        answer = result.get("answer") or ""
+        if _answer_looks_irrelevant(text, answer):
+            result["answer"] = _repair_irrelevant_answer(text, answer)
+            result["source"] = "local_repaired"
+            result["confidence"] = "medium"
+            result["intent"] = _classify_question_intent(text)
+        return result
+
     if pending.get("type") == "quote_create":
         if _is_cancel_text(text):
-            return {
+            return finish_route({
                 "ok": True,
                 "answer": "تم إلغاء مسودة عرض السعر. لم يتم حفظ أي شيء في النظام.",
                 "source": "ai_quote",
@@ -2681,13 +2962,13 @@ def analyze_and_route_user_request(branch_id, request_text, pending=None, user=N
                 "suggestions": [],
                 "followups": ["إنشاء عرض سعر جديد", "افتح عروض الأسعار"],
                 "context": {},
-            }
+            })
         if _is_confirm_text(text):
             try:
                 result = _execute_quote_create(branch_id, pending, user=user)
             except Exception as exc:
                 result = {"ok": True, "source": "ai_quote", "answer": f"لم أحفظ عرض السعر بسبب مشكلة: {exc}", "pending": None}
-            return {
+            return finish_route({
                 "ok": True,
                 "answer": _polish_answer(result.get("answer", ""), text),
                 "source": result.get("source", "ai_quote"),
@@ -2696,8 +2977,8 @@ def analyze_and_route_user_request(branch_id, request_text, pending=None, user=N
                 "suggestions": [],
                 "followups": ["تنزيل PDF", "إنشاء عرض سعر جديد"],
                 "context": {},
-            }
-        return {
+            })
+        return finish_route({
             "ok": True,
             "answer": "مسودة عرض السعر بانتظار موافقتك. قل أو اكتب: تأكيد للحفظ، أو إلغاء للتراجع.",
             "source": "ai_quote",
@@ -2706,10 +2987,10 @@ def analyze_and_route_user_request(branch_id, request_text, pending=None, user=N
             "suggestions": [],
             "followups": ["تأكيد", "إلغاء"],
             "context": {},
-        }
+        })
     if pending.get("type") == "pos_checkout":
         if _is_cancel_text(text):
-            return {
+            return finish_route({
                 "ok": True,
                 "answer": "تم إلغاء مسودة الكاشير. لم يتم حفظ أي شيء في النظام.",
                 "source": "ai_pos",
@@ -2718,13 +2999,13 @@ def analyze_and_route_user_request(branch_id, request_text, pending=None, user=N
                 "suggestions": [],
                 "followups": ["ابدأ عملية كاشير جديدة", "حلل مبيعات هذا الشهر"],
                 "context": {},
-            }
+            })
         if _is_confirm_text(text):
             try:
                 result = _execute_pos_sale(branch_id, pending, user=user)
             except Exception as exc:
                 result = {"ok": True, "source": "ai_pos", "answer": f"لم أحفظ العملية بسبب مشكلة: {exc}", "pending": None}
-            return {
+            return finish_route({
                 "ok": True,
                 "answer": _polish_answer(result.get("answer", ""), text),
                 "source": result.get("source", "ai_pos"),
@@ -2733,8 +3014,8 @@ def analyze_and_route_user_request(branch_id, request_text, pending=None, user=N
                 "suggestions": [],
                 "followups": _quality_followups(text),
                 "context": {},
-            }
-        return {
+            })
+        return finish_route({
             "ok": True,
             "answer": "لا تزال مسودة الكاشير بانتظار موافقتك. قل أو اكتب: تأكيد للحفظ والترحيل، أو إلغاء للتراجع.",
             "source": "ai_pos",
@@ -2743,11 +3024,13 @@ def analyze_and_route_user_request(branch_id, request_text, pending=None, user=N
             "suggestions": [],
             "followups": ["تأكيد", "إلغاء"],
             "context": {},
-        }
+        })
 
-    quote_draft = _build_quote_draft(branch_id, text, user=user)
+    should_try_execution = _should_try_execution(question_analysis)
+
+    quote_draft = _build_quote_draft(branch_id, text, user=user) if should_try_execution else None
     if quote_draft:
-        return {
+        return finish_route({
             "ok": True,
             "answer": _polish_answer(quote_draft.get("answer", ""), text),
             "source": quote_draft.get("source", "ai_quote"),
@@ -2756,11 +3039,11 @@ def analyze_and_route_user_request(branch_id, request_text, pending=None, user=N
             "suggestions": [],
             "followups": ["تأكيد", "إلغاء"] if quote_draft.get("pending") else _quality_followups(text),
             "context": {},
-        }
+        })
 
-    pos_draft = _build_pos_sale_draft(branch_id, text, user=user)
+    pos_draft = _build_pos_sale_draft(branch_id, text, user=user) if should_try_execution else None
     if pos_draft:
-        return {
+        return finish_route({
             "ok": True,
             "answer": _polish_answer(pos_draft.get("answer", ""), text),
             "source": pos_draft.get("source", "ai_pos"),
@@ -2769,12 +3052,12 @@ def analyze_and_route_user_request(branch_id, request_text, pending=None, user=N
             "suggestions": [],
             "followups": ["تأكيد", "إلغاء"] if pos_draft.get("pending") else _quality_followups(text),
             "context": {},
-        }
+        })
 
-    management_result = handle_ai_management_command(branch_id, text, pending=pending, user=user)
+    management_result = handle_ai_management_command(branch_id, text, pending=pending, user=user) if should_try_execution else None
     if management_result:
         answer = _polish_answer(management_result.get("answer", ""), text)
-        return {
+        return finish_route({
             "ok": True,
             "answer": answer,
             "source": management_result.get("source", "ai_actions"),
@@ -2783,7 +3066,7 @@ def analyze_and_route_user_request(branch_id, request_text, pending=None, user=N
             "suggestions": [],
             "followups": _quality_followups(text),
             "context": {},
-        }
+        })
 
     normalized = text.lower()
     matched = []
@@ -2802,34 +3085,34 @@ def analyze_and_route_user_request(branch_id, request_text, pending=None, user=N
     primary = matched[0] if matched else None
     wants_open = any(word in normalized for word in ("افتح", "اذهب", "روح", "انتقل", "اعرض", "أظهر", "نفذ", "ابدأ"))
     wants_create = any(word in normalized for word in ("أضف", "اضف", "أنشئ", "انشئ", "سجل", "ادخل"))
+    wants_navigation = wants_open or wants_create
+    navigation_primary = primary if wants_navigation else None
 
     financial_answer = answer_financial_question(branch_id, text, user=user)
     answer_text = financial_answer.get("answer") or financial_answer.get("message") or ""
-    if denied_actions and not primary:
+    if denied_actions and not navigation_primary:
         title = denied_actions[0]["title"]
         answer_text = f"أعتذر بلطف، لا أستطيع فتح أو عرض {title} لأن حسابك لا يملك الصلاحية المطلوبة. يمكنك طلب الصلاحية من مدير النظام.\n\n{answer_text}".strip()
 
-    if primary:
-        action_text = f"فهمت طلبك: {primary['description']}"
+    if navigation_primary:
+        action_text = f"فهمت طلبك: {navigation_primary['description']}"
         if wants_create:
             action_text += " يمكنك إدخال البيانات من النموذج ثم الحفظ."
         elif wants_open:
             action_text += " سأفتح الصفحة المناسبة."
-        else:
-            action_text += " وجدت صفحة مناسبة لهذا الطلب."
         answer_text = f"{action_text}\n\n{answer_text}".strip()
 
-    answer_text = _polish_answer(answer_text, text, primary)
+    answer_text = _polish_answer(answer_text, text, navigation_primary)
 
-    return {
+    return finish_route({
         "ok": True,
         "answer": answer_text,
         "source": financial_answer.get("source", "local"),
         "action": {
-            "type": "navigate" if primary else "answer",
-            "title": primary["title"] if primary else "",
-            "url": primary["url"] if primary else "",
-            "auto_open": bool(primary and wants_open),
+            "type": "navigate" if navigation_primary else "answer",
+            "title": navigation_primary["title"] if navigation_primary else "",
+            "url": navigation_primary["url"] if navigation_primary else "",
+            "auto_open": bool(navigation_primary and wants_open),
         },
         "suggestions": [
             {"title": row["title"], "url": row["url"], "description": row["description"]}
@@ -2837,7 +3120,7 @@ def analyze_and_route_user_request(branch_id, request_text, pending=None, user=N
         ],
         "followups": _quality_followups(text, primary),
         "context": financial_answer.get("context", {}),
-    }
+    })
 
 
 def extract_invoice_from_image(uploaded_file):

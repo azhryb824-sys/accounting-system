@@ -71,7 +71,7 @@
                         </div>
                         <div class="col-md-3">
                             <label class="form-label" for="assistant-voice-rate">سرعة الصوت</label>
-                            <input id="assistant-voice-rate" class="form-range" type="range" min="0.7" max="1.05" step="0.05" value="0.82">
+                            <input id="assistant-voice-rate" class="form-range" type="range" min="0.75" max="1.15" step="0.05" value="0.95">
                         </div>
                     </div>
                     <div class="form-check form-switch mt-2">
@@ -195,6 +195,7 @@
     let liveConversationMode = false;
     let assistantIsProcessing = false;
     let assistantIsSpeaking = false;
+    let speechRunId = 0;
 
     function setStatus(text) {
         statusBox.textContent = text;
@@ -216,8 +217,19 @@
         return [selected, ...fallbackRecognitionLanguages.filter((lang) => lang !== selected)];
     }
 
+    function stopAssistantSpeech(reason = '') {
+        if (!('speechSynthesis' in window)) return;
+        speechRunId += 1;
+        window.speechSynthesis.cancel();
+        if (assistantIsSpeaking) {
+            assistantIsSpeaking = false;
+            setStatus(reason || 'توقفت عن القراءة لأستمع لك.');
+        }
+    }
+
     function startListening() {
-        if (!recognition || assistantIsProcessing || assistantIsSpeaking) return;
+        if (!recognition || assistantIsProcessing) return;
+        stopAssistantSpeech('توقفت عن القراءة. أستمع لك الآن...');
         try {
             recognitionLanguageIndex = 0;
             recognition.lang = dialectFallbacks()[recognitionLanguageIndex];
@@ -234,7 +246,7 @@
         if (recognition) {
             try { recognition.stop(); } catch (error) {}
         }
-        if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+        stopAssistantSpeech();
         setStatus('تم إنهاء المحادثة المباشرة.');
     }
 
@@ -371,16 +383,16 @@
 
     function preferredVoiceForDialect(voices) {
         const selected = voices.find((voice) => `${voice.name}::${voice.lang}` === voiceSelect.value);
-        if (selected && /^ar/i.test(selected.lang || '')) return selected;
         const dialect = selectedDialect().toLowerCase();
-        const professionalMalePattern = /naayf|maged|tarik|tariq|omar|hassan|khalid|zayd|microsoft.*ar.*sa|google.*arabic.*male/i;
+        const naturalFemalePattern = /hoda|salma|layla|laila|amira|mariam|fatima|zariyah|female|woman|zira|microsoft.*hoda|google.*arabic/i;
+        const oldMalePattern = /naayf|maged|tarik|tariq|omar|hassan|khalid|zayd/i;
+        if (selected && /^ar/i.test(selected.lang || '') && !oldMalePattern.test(selected.name || '')) return selected;
         return (
-            voices.find((voice) => (voice.lang || '').toLowerCase() === dialect && professionalMalePattern.test(voice.name || '')) ||
-            voices.find((voice) => professionalMalePattern.test(voice.name || '') && /^ar/i.test(voice.lang || '')) ||
-            voices.find((voice) => (voice.lang || '').toLowerCase() === dialect) ||
-            voices.find((voice) => /arabic|عربي|العربية/i.test(voice.name || '') && /^ar/i.test(voice.lang || '')) ||
-            voices.find((voice) => (voice.lang || '').toLowerCase().startsWith('ar')) ||
-            selected ||
+            voices.find((voice) => (voice.lang || '').toLowerCase() === dialect && naturalFemalePattern.test(voice.name || '')) ||
+            voices.find((voice) => naturalFemalePattern.test(voice.name || '') && /^ar/i.test(voice.lang || '')) ||
+            voices.find((voice) => (voice.lang || '').toLowerCase() === dialect && !oldMalePattern.test(voice.name || '')) ||
+            voices.find((voice) => /arabic|عربي|العربية/i.test(voice.name || '') && /^ar/i.test(voice.lang || '') && !oldMalePattern.test(voice.name || '')) ||
+            voices.find((voice) => (voice.lang || '').toLowerCase().startsWith('ar') && !oldMalePattern.test(voice.name || '')) ||
             null
         );
     }
@@ -391,9 +403,10 @@
         let score = 0;
         if (lang === selectedDialect().toLowerCase()) score += 40;
         if (lang.startsWith('ar')) score += 30;
-        if (/naayf|maged|tarik|tariq|omar|hassan|khalid|zayd/.test(name)) score += 60;
-        if (/microsoft|google/.test(name)) score += 10;
-        if (/hoda|female|woman/.test(name)) score -= 25;
+        if (/hoda|salma|layla|laila|amira|mariam|fatima|zariyah|female|woman|zira/.test(name)) score += 70;
+        if (/google|natural|online|premium/.test(name)) score += 20;
+        if (/microsoft/.test(name)) score += 10;
+        if (/naayf|maged|tarik|tariq|omar|hassan|khalid|zayd/.test(name)) score -= 60;
         return score;
     }
 
@@ -403,13 +416,13 @@
         const previousValue = voiceSelect.value;
         voiceSelect.innerHTML = '';
         voices
-            .filter((voice) => /^(ar|ur|bn)/i.test(voice.lang || '') || /arabic|urdu|bangla|bengali|hoda|naayf|maged|tarik|tariq|omar|hassan|khalid|zayd/i.test(voice.name || ''))
+            .filter((voice) => /^(ar|ur|bn)/i.test(voice.lang || '') || /arabic|urdu|bangla|bengali|hoda|salma|layla|laila|amira|mariam|fatima|zariyah|zira|naayf|maged|tarik|tariq|omar|hassan|khalid|zayd/i.test(voice.name || ''))
             .sort((a, b) => voicePriority(b) - voicePriority(a))
             .forEach((voice, index) => {
                 const option = document.createElement('option');
                 option.value = `${voice.name}::${voice.lang}`;
-                const maleHint = /naayf|maged|tarik|tariq|omar|hassan|khalid|zayd/i.test(voice.name || '') ? ' - رجالي' : '';
-                option.textContent = `${voice.name} (${voice.lang})${maleHint}`;
+                const freshHint = /hoda|salma|layla|laila|amira|mariam|fatima|zariyah|female|woman|zira/i.test(voice.name || '') ? ' - جديد' : '';
+                option.textContent = `${voice.name} (${voice.lang})${freshHint}`;
                 voiceSelect.appendChild(option);
             });
         if (!voiceSelect.options.length) {
@@ -418,15 +431,16 @@
             option.textContent = 'صوت المتصفح الافتراضي';
             voiceSelect.appendChild(option);
         }
-        if (previousValue && [...voiceSelect.options].some((option) => option.value === previousValue)) {
+        if (previousValue && !/naayf|maged|tarik|tariq|omar|hassan|khalid|zayd/i.test(previousValue) && [...voiceSelect.options].some((option) => option.value === previousValue)) {
             voiceSelect.value = previousValue;
         }
-        const preferredNames = ['Hoda', 'Naayf', 'Maged', 'Microsoft Naayf', 'Microsoft Hoda', 'Google العربية'];
+        const preferredNames = ['Hoda', 'Salma', 'Layla', 'Laila', 'Amira', 'Mariam', 'Fatima', 'Zariyah', 'Zira', 'Google العربية'];
+        const oldMaleVoicePattern = /naayf|maged|tarik|tariq|omar|hassan|khalid|zayd/i;
         arabicVoice =
-            voices.find((voice) => `${voice.name}::${voice.lang}` === voiceSelect.value) ||
-            voices.find((voice) => preferredNames.some((name) => voice.name.includes(name))) ||
-            voices.find((voice) => (voice.lang || '').toLowerCase() === 'ar-sa') ||
-            voices.find((voice) => (voice.lang || '').toLowerCase().startsWith('ar')) ||
+            voices.find((voice) => `${voice.name}::${voice.lang}` === voiceSelect.value && !oldMaleVoicePattern.test(voice.name || '')) ||
+            voices.find((voice) => preferredNames.some((name) => (voice.name || '').toLowerCase().includes(name.toLowerCase()))) ||
+            voices.find((voice) => (voice.lang || '').toLowerCase() === 'ar-sa' && !oldMaleVoicePattern.test(voice.name || '')) ||
+            voices.find((voice) => (voice.lang || '').toLowerCase().startsWith('ar') && !oldMaleVoicePattern.test(voice.name || '')) ||
             null;
         if (arabicVoice) voiceSelect.value = `${arabicVoice.name}::${arabicVoice.lang}`;
         return arabicVoice;
@@ -442,19 +456,22 @@
         const speechChunks = splitSpeechChunks(improvedText);
         if (!speechChunks.length) return;
         lastSpokenText = improvedText;
-        window.speechSynthesis.cancel();
+        stopAssistantSpeech();
         assistantIsSpeaking = true;
+        const currentSpeechRunId = speechRunId;
         const availableVoices = window.speechSynthesis.getVoices();
         const voice = preferredVoiceForDialect(availableVoices) || arabicVoice || loadArabicVoice();
         const hasUrduText = selectedDialect() === 'ur-PK' || (/[\u0600-\u06FF]/.test(improvedText) && /[پچژگٹڈڑںے]/.test(improvedText));
         const hasBanglaText = /[\u0980-\u09FF]/.test(improvedText);
         let speechIndex = 0;
         const finishSpeech = () => {
+            if (currentSpeechRunId !== speechRunId) return;
             assistantIsSpeaking = false;
             if (liveConversationMode) setStatus('أستمع لك... قل طلبك التالي أو قل إلغاء/تأكيد عند وجود مسودة.');
             resumeLiveConversation();
         };
         const playChunk = () => {
+            if (currentSpeechRunId !== speechRunId) return;
             if (speechIndex >= speechChunks.length) {
                 finishSpeech();
                 return;
@@ -474,10 +491,11 @@
                 utterance.lang = selectedDialect();
                 setStatus('لم أجد صوتا عربيا مناسبا. سأستخدم صوت المتصفح المتاح.');
             }
-            utterance.rate = Math.min(0.9, Number(voiceRate.value || 0.78));
-            utterance.pitch = 0.95;
+            utterance.rate = Math.min(1.08, Number(voiceRate.value || 0.96));
+            utterance.pitch = 1.16;
             utterance.volume = 1;
             utterance.onend = () => {
+                if (currentSpeechRunId !== speechRunId) return;
                 speechIndex += 1;
                 window.setTimeout(playChunk, 180);
             };
@@ -748,6 +766,7 @@
         recognition.maxAlternatives = 3;
 
         recognition.onstart = () => {
+            stopAssistantSpeech('أستمع لك الآن...');
             startButton.disabled = true;
             stopButton.disabled = false;
             setStatus(`أستمع الآن باللغة ${recognition.lang}...`);
@@ -772,6 +791,7 @@
             setStatus(mediaUnavailableMessage('الميكروفون'));
         };
         recognition.onresult = (event) => {
+            stopAssistantSpeech('سمعتك، توقفت عن القراءة.');
             let transcript = '';
             for (let i = event.resultIndex; i < event.results.length; i += 1) {
                 transcript += event.results[i][0].transcript;

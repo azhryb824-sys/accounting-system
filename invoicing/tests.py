@@ -206,6 +206,8 @@ class InvoiceAccountingTests(TestCase):
         self.assertIn("Wikipedia", result["answer"])
         self.assertIn("OpenAlex", result["answer"])
         self.assertIn("CC0", result["answer"])
+        self.assertIn("تحليل المعلومات", result["answer"])
+        self.assertIn("موثوقية", result["answer"])
 
     @patch("invoicing.ai_services._openalex_research")
     @patch("invoicing.ai_services._wikidata_facts")
@@ -228,6 +230,54 @@ class InvoiceAccountingTests(TestCase):
         self.assertIn("Photosynthesis", result["answer"])
         self.assertIn("Wikipedia", result["answer"])
         self.assertNotIn("الخطوة التالية المقترحة", result["answer"])
+
+    @patch("invoicing.ai_services._openalex_research")
+    @patch("invoicing.ai_services._wikidata_facts")
+    @patch("invoicing.ai_services._wikipedia_summary")
+    def test_research_request_gets_professional_source_analysis(self, wikipedia, wikidata, openalex):
+        wikipedia.return_value = {
+            "title": "Artificial intelligence",
+            "extract": "الذكاء الاصطناعي مجال يبني أنظمة قادرة على أداء مهام تتطلب عادة ذكاء بشريا.",
+            "source_url": "https://example.com/ai",
+            "source_name": "Wikipedia",
+            "license": "CC BY-SA",
+        }
+        wikidata.return_value = {}
+        openalex.return_value = [{
+            "title": "AI research review",
+            "extract": "مرجع بحثي داعم عن تطبيقات الذكاء الاصطناعي.",
+            "source_url": "https://openalex.org/W123",
+            "source_name": "OpenAlex",
+            "license": "CC0",
+        }]
+
+        result = answer_financial_question(self.branch.id, "ابحث في النت عن الذكاء الاصطناعي وحلل المعلومات")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "free_web")
+        self.assertIn("الخلاصة المباشرة", result["answer"])
+        self.assertIn("تحليل المعلومات", result["answer"])
+        self.assertIn("المصادر والتراخيص", result["answer"])
+
+    @patch("invoicing.ai_services._openalex_research")
+    @patch("invoicing.ai_services._wikidata_facts")
+    @patch("invoicing.ai_services._wikipedia_summary")
+    def test_latest_questions_include_current_source_warning(self, wikipedia, wikidata, openalex):
+        wikipedia.return_value = {
+            "title": "Python",
+            "extract": "بايثون لغة برمجة عالية المستوى.",
+            "source_url": "https://example.com/python",
+            "source_name": "Wikipedia",
+            "license": "CC BY-SA",
+        }
+        wikidata.return_value = {}
+        openalex.return_value = []
+
+        result = answer_financial_question(self.branch.id, "ما أحدث إصدار من Python؟")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "free_web")
+        self.assertIn("معلومة حديثة أو متغيرة", result["answer"])
 
     def test_ai_quote_draft_has_single_confirmation_instruction(self):
         result = analyze_and_route_user_request(self.branch.id, "أنشئ عرض سعر للعميل أحمد 2 Item", user=self.user)
@@ -349,6 +399,61 @@ class InvoiceAccountingTests(TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(result["source"], "clarification")
         self.assertIn("أمثلة", result["answer"])
+
+    @patch("invoicing.ai_services._model_answer_financial_question")
+    def test_greeting_is_answered_locally_without_financial_analysis(self, model_answer):
+        result = answer_financial_question(self.branch.id, "أهلا", user=self.user)
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "local")
+        self.assertEqual(result["intent"], "conversation")
+        self.assertEqual(result["confidence"], "medium")
+        self.assertIn("أهلا", result["answer"])
+        self.assertNotIn("تحليل احترافي", result["answer"])
+        model_answer.assert_not_called()
+
+    @patch("invoicing.ai_services._model_answer_financial_question")
+    def test_assistant_route_repairs_irrelevant_greeting_answer(self, model_answer):
+        model_answer.return_value = {
+            "ok": True,
+            "source": "local_strong",
+            "answer": "تحليل احترافي مبني على بيانات النظام:\n\nالملخص التنفيذي:\n- المبيعات: 0.00",
+            "context": {},
+        }
+
+        result = analyze_and_route_user_request(self.branch.id, "أهلا", user=self.user)
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "local")
+        self.assertEqual(result["action"]["type"], "answer")
+        self.assertIn("أهلا", result["answer"])
+        self.assertNotIn("تحليل احترافي", result["answer"])
+
+    @patch("invoicing.ai_services.free_web_general_answer", return_value="")
+    @patch("invoicing.ai_services._private_ai_request")
+    def test_explanation_question_does_not_trigger_navigation(self, private_ai, web_answer):
+        private_ai.return_value = {"ok": True, "text": "القيد المحاسبي يسجل أثر العملية في طرف مدين وطرف دائن."}
+
+        result = analyze_and_route_user_request(self.branch.id, "اشرح لي القيد المحاسبي", user=self.user)
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["intent"], "explanation")
+        self.assertEqual(result["action"]["type"], "answer")
+        self.assertIn("طرف مدين وطرف دائن", result["answer"])
+        self.assertNotIn("سأفتح الصفحة المناسبة", result["answer"])
+
+    @patch("invoicing.ai_services.free_web_general_answer", return_value="")
+    @patch("invoicing.ai_services._answer_precise_accounting_question", return_value="")
+    @patch("invoicing.ai_services._private_ai_request")
+    def test_private_short_answer_gets_quality_notice(self, private_ai, precise_answer, web_answer):
+        private_ai.return_value = {"ok": True, "text": "راجع العملاء المتأخرين وابدأ بالأكبر قيمة ثم الأقدم استحقاقا."}
+
+        result = answer_financial_question(self.branch.id, "ما أفضل إجراء لتحسين التحصيل؟", user=self.user)
+
+        self.assertTrue(result["ok"])
+        self.assertIn("confidence", result)
+        self.assertIn("intent", result)
+        self.assertIn("ملاحظة جودة", result["answer"])
 
     @patch("invoicing.ai_services.free_web_general_answer", return_value="")
     @patch("invoicing.ai_services._answer_precise_accounting_question", return_value="")
