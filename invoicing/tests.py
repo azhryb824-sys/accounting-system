@@ -641,6 +641,25 @@ class InvoiceAccountingTests(TestCase):
         self.assertNotIn("/arabic|???????/i", template)
         self.assertIn("arabic|عربي|العربية", template)
         self.assertIn("mediaUnavailableMessage", template)
+        self.assertNotIn("const cleanText = improveSpeechText", template)
+
+    @patch("invoicing.ai_services.free_web_general_answer")
+    @patch("invoicing.ai_services._model_answer_financial_question")
+    def test_ai_uses_web_when_model_answer_is_weak(self, model_answer, web_answer):
+        model_answer.return_value = {
+            "ok": True,
+            "source": "private",
+            "answer": "I cannot answer this with the available local context.",
+            "context": {},
+        }
+        web_answer.return_value = "Web researched answer with sources."
+
+        result = answer_financial_question(self.branch.id, "latest accounting standards updates", user=self.user)
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "free_web")
+        self.assertIn("Web researched answer", result["answer"])
+        web_answer.assert_called_once()
 
     def test_sales_invoice_posts_once_and_reduces_inventory_once(self):
         customer = Customer.objects.create(name="Customer")

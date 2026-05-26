@@ -645,53 +645,6 @@
             window.speechSynthesis.speak(utterance);
         };
         playChunk();
-        return;
-        if (!('speechSynthesis' in window) || !text) {
-            setStatus('المتصفح لا يدعم قراءة الصوت.');
-            resumeLiveConversation();
-            return;
-        }
-        const cleanText = improveSpeechText(normalizeDialectForSpeech(text)).slice(0, 650);
-        if (!cleanText) return;
-        lastSpokenText = cleanText;
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(cleanText);
-        assistantIsSpeaking = true;
-        const spokenLang = detectTextLanguage(cleanText);
-        const voices = window.speechSynthesis.getVoices();
-        const selectedVoice = spokenLang.startsWith('ar')
-            ? (preferredVoiceForDialect(voices) || arabicVoice || loadArabicVoice())
-            : preferredVoiceForLanguage(voices, spokenLang);
-        const hasUrdu = selectedDialect() === 'ur-PK' || (/[\u0600-\u06FF]/.test(cleanText) && /[پچژگٹڈڑںے]/.test(cleanText));
-        const hasBangla = /[\u0980-\u09FF]/.test(cleanText);
-        if (voiceMatchesLanguage(selectedVoice, spokenLang) && !hasUrdu && !hasBangla) {
-            utterance.voice = selectedVoice;
-            utterance.lang = selectedVoice.lang || spokenLang;
-            setStatus(`سيتم قراءة الرد بصوت عربي: ${selectedVoice.name}`);
-        } else if (hasUrdu) {
-            utterance.lang = 'ur-PK';
-            setStatus('سيتم قراءة الرد بلغة الأوردو إذا كان المتصفح يدعمها.');
-        } else if (hasBangla) {
-            utterance.lang = 'bn-BD';
-            setStatus('سيتم قراءة الرد باللغة البنغالية إذا كان المتصفح يدعمها.');
-        } else {
-            utterance.lang = spokenLang;
-            setStatus('لم أجد صوتا عربيا مثبتا. ثبّت صوتا عربيا من إعدادات النظام أو المتصفح.');
-        }
-        utterance.rate = Math.min(0.95, Number(voiceRate.value || 0.82));
-        utterance.pitch = 1;
-        utterance.volume = 1;
-        utterance.onend = () => {
-            assistantIsSpeaking = false;
-            if (liveConversationMode) setStatus('أستمع لك... قل طلبك التالي أو قل إلغاء/تأكيد عند وجود مسودة.');
-            resumeLiveConversation();
-        };
-        utterance.onerror = () => {
-            assistantIsSpeaking = false;
-            setStatus('تعذرت قراءة الصوت العربي من المتصفح.');
-            resumeLiveConversation();
-        };
-        window.speechSynthesis.speak(utterance);
     }
 
     function currentAnswerText() {

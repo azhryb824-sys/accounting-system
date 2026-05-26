@@ -3041,6 +3041,15 @@ def answer_financial_question(branch_id, question, user=None):
     result = _model_answer_financial_question(branch_id, question, user=user)
     answer_text = result.get("answer") or result.get("message") or ""
     if _weak_ai_answer(answer_text) and result.get("source") not in {"permissions", "accounting_data"}:
+        if _free_web_answers_enabled() and not _requests_accounting_data_or_analysis(question):
+            web_answer = free_web_general_answer(question)
+            if web_answer:
+                return finish({
+                    "ok": True,
+                    "source": "free_web",
+                    "answer": _polish_answer(web_answer, question),
+                    "context": {},
+                })
         context = result.get("context") or branch_ai_context(branch_id, user=user)
         if local_direct_answer and not _requests_accounting_data_or_analysis(question):
             result["answer"] = _polish_answer(local_direct_answer, question)
