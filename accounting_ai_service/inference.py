@@ -1076,7 +1076,6 @@ def ask(question: str, max_new_tokens: int = 240) -> str:
 
 
 def runtime_status() -> dict[str, Any]:
-    model = get_model()
     return {
         "model": MODEL_NAME,
         "backend": AI_BACKEND,
@@ -1089,9 +1088,9 @@ def runtime_status() -> dict[str, Any]:
         "openai_compatible_configured": bool(OPENAI_COMPATIBLE_API_KEY),
         "require_hosted_ai": REQUIRE_HOSTED_AI,
         "require_local_model": REQUIRE_LOCAL_MODEL,
-        "transformers_model_path": str(model.model_path),
-        "transformers_model_path_exists": model.model_path.exists(),
-        "transformers_loaded": bool(model.model is not None and model.tokenizer is not None),
+        "transformers_model_path": str(MODEL_PATH),
+        "transformers_model_path_exists": MODEL_PATH.exists(),
+        "transformers_loaded": bool(get_model.cache_info().currsize),
         "recommended_backend": "openai_compatible on Render, ollama on a server with RAM/GPU",
         "recommended_model": "OpenRouter/Groq/Together model via OpenAI-compatible API, or qwen2.5:7b-instruct with Ollama when RAM/GPU is enough",
     }
