@@ -19,7 +19,7 @@ from .services.payroll import approve_salary, pay_salary
 from .access import user_accessible_branches, user_can_access_branch
 from accounts.forms import UserRegistrationForm
 from accounts.models import Role, SubscriptionRequest, UserProfile
-from accounts.views import role_required, user_has_business_permission
+from accounts.views import is_primary_admin, role_required, user_has_business_permission
 
 APP_VERSION = "2026-05-21-company-plan-fix-2"
 
@@ -52,6 +52,8 @@ def dashboard(request):
 
     # ط¥ط°ط§ ظ„ظ… ظٹطھظ… ط§ط®طھظٹط§ط± ظپط±ط¹طŒ ظˆط¬ظ‡ ط§ظ„ظ…ط³طھط®ط¯ظ… ظ„طµظپط­ط© ط§ظ„ط§ط®طھظٹط§ط±
     if not branch_id: # _("If no branch is selected, redirect the user to the selection page")
+        if _can_use_system_without_company_scope(request.user):
+            return render(request, 'core/dashboard.html', _admin_dashboard_context(request))
         if not _user_companies(request.user).exists():
             return redirect('company_access')
         return redirect('select_company_branch')
@@ -96,6 +98,34 @@ def dashboard(request):
         "low_stock_items": items.filter(quantity__lte=F('min_quantity'), is_active=True).order_by('quantity')[:6] if can_view_item else [],
     })
     return render(request, 'core/dashboard.html', context)
+
+
+def _can_use_system_without_company_scope(user):
+    return user.is_authenticated and (is_primary_admin(user) or user.is_superuser)
+
+
+def _admin_dashboard_context(request):
+    return {
+        "accounts_count": 0,
+        "entries_count": 0,
+        "branch_name": "بدون فرع محدد",
+        "company_name": "بدون شركة محددة",
+        "title": "لوحة تحكم المشرف",
+        "invoices_count": 0,
+        "today_invoices_count": 0,
+        "sales_total": Decimal('0'),
+        "purchases_total": Decimal('0'),
+        "salary_total": Decimal('0'),
+        "employee_advances_total": Decimal('0'),
+        "operating_result": Decimal('0'),
+        "inventory_value": Decimal('0'),
+        "low_stock_count": 0,
+        "low_stock_items": [],
+        "admin_mode_without_scope": True,
+        "companies_count": Company.objects.count(),
+        "branches_count": Branch.objects.count(),
+        "users_count": UserProfile.objects.count(),
+    }
 
 
 def _user_companies(user):

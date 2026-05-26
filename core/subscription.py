@@ -59,7 +59,7 @@ class CompanySubscriptionRequiredMiddleware:
         if (
             hasattr(request, "user")
             and request.user.is_authenticated
-            and not request.user.is_superuser
+            and not _is_system_admin(request.user)
             and url_name not in SUBSCRIPTION_EXEMPT_URL_NAMES
         ):
             from .access import user_can_access_branch
@@ -95,3 +95,11 @@ class CompanySubscriptionRequiredMiddleware:
                 messages.warning(request, "اختر فرعا مصرحا لحسابك قبل متابعة العمل.")
                 return redirect("select_company_branch")
         return self.get_response(request)
+
+
+def _is_system_admin(user):
+    if user.is_superuser:
+        return True
+    from accounts.views import is_primary_admin
+
+    return is_primary_admin(user)

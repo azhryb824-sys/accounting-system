@@ -14,6 +14,41 @@
 {% can_access request 'add_purchaseinvoice' as can_add_purchaseinvoice %}
 {% can_access request 'import_ai_invoice' as can_import_ai_invoice %}
 {% can_access request 'view_ai_insights' as can_view_ai_insights %}
+{% if admin_mode_without_scope %}
+<div class="glass-card p-4 mb-4">
+    <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 align-items-lg-center">
+        <div>
+            <h5 class="text-light mb-2">وضع المشرف الرئيسي</h5>
+            <p class="text-muted-soft mb-0">يمكنك استخدام إدارة النظام بدون إضافة شركة أو فرع. ستطلب الشاشات التشغيلية اختيار فرع فقط عند الحاجة إلى بيانات شركة.</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a class="btn btn-outline-light" href="{% url 'admin_users' %}"><i class="fa-solid fa-users-gear"></i> المستخدمون</a>
+            <a class="btn btn-outline-light" href="{% url 'admin_roles' %}"><i class="fa-solid fa-key"></i> الصلاحيات</a>
+            <a class="btn btn-outline-light" href="{% url 'admin_subscription_requests' %}"><i class="fa-solid fa-file-signature"></i> الطلبات</a>
+        </div>
+    </div>
+</div>
+<div class="row g-4 mb-4">
+    <div class="col-md-4">
+        <div class="glass-soft p-3 h-100">
+            <div class="text-muted-soft mb-1">الشركات</div>
+            <div class="h4 fw-semibold mb-0">{{ companies_count }}</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="glass-soft p-3 h-100">
+            <div class="text-muted-soft mb-1">الفروع</div>
+            <div class="h4 fw-semibold mb-0">{{ branches_count }}</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="glass-soft p-3 h-100">
+            <div class="text-muted-soft mb-1">ملفات المستخدمين</div>
+            <div class="h4 fw-semibold mb-0">{{ users_count }}</div>
+        </div>
+    </div>
+</div>
+{% endif %}
 <div class="row g-4 mb-4">
     <div class="col-md-3">
         <div class="glass-soft p-3 h-100 d-flex align-items-center gap-3">

@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from core.forms import CompanySubscriptionRequestForm
 from core.models import Branch, Company, Employee, EmployeeAdvance, SalaryRecord
+from accounts.models import UserProfile
 from core.services.payroll import approve_salary, pay_salary
 
 User = get_user_model()
@@ -93,6 +94,36 @@ class CompanyFormMobileTests(TestCase):
         self.assertIn("data-file-picker", template)
         self.assertIn("إرفاق إيصال التحويل", template)
         self.assertIn("input.click()", template)
+
+
+class DashboardAccessTests(TestCase):
+    def test_superuser_can_open_dashboard_without_company_or_branch(self):
+        user = User.objects.create_superuser(username="admin", password="pass")
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["admin_mode_without_scope"])
+        self.assertContains(response, "وضع المشرف الرئيسي")
+
+    def test_primary_admin_can_open_dashboard_without_company_or_branch(self):
+        user = User.objects.create_user(username="primary", password="pass")
+        UserProfile.objects.create(user=user, national_id="2572280689")
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["admin_mode_without_scope"])
+
+    def test_regular_user_without_company_still_goes_to_company_access(self):
+        user = User.objects.create_user(username="regular", password="pass")
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("dashboard"))
+
+        self.assertRedirects(response, reverse("company_access"))
 
 
 class CompanyBranchButtonsTests(TestCase):
