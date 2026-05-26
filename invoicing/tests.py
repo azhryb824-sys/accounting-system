@@ -368,6 +368,18 @@ class InvoiceAccountingTests(TestCase):
         self.assertTrue(AIKnowledgeEntry.objects.filter(title="Accounting systems research").exists())
         self.assertIn("AI knowledge updated", out.getvalue())
 
+    def test_seed_ai_training_loads_curated_local_guidance(self):
+        out = StringIO()
+
+        call_command("seed_ai_training", stdout=out)
+
+        self.assertTrue(AIKnowledgeSource.objects.filter(url="app://curated-ai-training").exists())
+        self.assertTrue(AIKnowledgeEntry.objects.filter(title="متى يستخدم المساعد البحث في النت").exists())
+        result = answer_financial_question(self.branch.id, "متى تبحث في النت؟", user=self.user)
+        self.assertEqual(result["source"], "local_knowledge")
+        self.assertIn("المصادر المفتوحة", result["answer"])
+        self.assertIn("Seeded", out.getvalue())
+
     def test_ai_interaction_learning_stores_summary_only(self):
         record = record_ai_interaction_learning(
             self.branch.id,
