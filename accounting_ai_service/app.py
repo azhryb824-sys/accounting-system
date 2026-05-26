@@ -1,10 +1,14 @@
 import json
+import os
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from inference import MODEL_NAME, MODEL_OWNER, ask, extract_invoice_data, runtime_status
+
+
+PRIVATE_ACCOUNTING_AI_API_KEY = os.environ.get("PRIVATE_ACCOUNTING_AI_API_KEY", "").strip()
 
 
 app = FastAPI(
@@ -47,7 +51,9 @@ def health() -> dict[str, Any]:
 
 
 @app.post("/ask", response_model=AnswerResponse)
-def ask_question(request: QuestionRequest) -> AnswerResponse:
+def ask_question(request: QuestionRequest, x_accounting_ai_key: str | None = Header(default=None)) -> AnswerResponse:
+    if PRIVATE_ACCOUNTING_AI_API_KEY and x_accounting_ai_key != PRIVATE_ACCOUNTING_AI_API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid accounting AI key.")
     try:
         if request.image_base64:
             data = extract_invoice_data(

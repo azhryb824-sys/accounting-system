@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import ast
 import json
 import os
 import re
@@ -81,6 +82,46 @@ WORLD_CLASS_AI_RESPONSE_CONTRACT = """
 """.strip()
 
 
+def _detect_user_language(text):
+    text = text or ""
+    lowered = text.lower()
+    if any(term in lowered for term in ("in english", "بالانجليزي", "بالإنجليزي", "english please")):
+        return "en"
+    if any(term in lowered for term in ("بالعربي", "باللغة العربية", "in arabic")):
+        return "ar"
+    if any(term in lowered for term in ("بالأوردو", "بالاوردو", "in urdu")):
+        return "ur"
+    if any(term in lowered for term in ("بالبنغالي", "in bengali", "bangla")):
+        return "bn"
+    if re.search(r"[\u0980-\u09FF]", text):
+        return "bn"
+    if re.search(r"[پچژگٹڈڑںے]", text):
+        return "ur"
+    arabic_chars = len(re.findall(r"[\u0600-\u06FF]", text))
+    latin_chars = len(re.findall(r"[A-Za-z]", text))
+    arabic_words = len(re.findall(r"[\u0600-\u06FF]{2,}", text))
+    latin_words = len(re.findall(r"[A-Za-z]{2,}", text))
+    if arabic_chars and (arabic_chars >= latin_chars or arabic_words >= latin_words or re.match(r"\s*[\u0600-\u06FF]", text)):
+        return "ar"
+    if latin_chars:
+        return "en"
+    return "ar"
+
+
+def _language_instruction(question):
+    language = _detect_user_language(question)
+    labels = {
+        "ar": "Arabic",
+        "en": "English",
+        "ur": "Urdu",
+        "bn": "Bengali",
+    }
+    return (
+        f"Detected user language: {labels.get(language, 'Arabic')}. "
+        "Reply in the same language as the user's latest question unless the user explicitly asks for another language."
+    )
+
+
 def _professional_prompt(task, question, context=None, extra=""):
     payload = {
         "task": task,
@@ -88,7 +129,7 @@ def _professional_prompt(task, question, context=None, extra=""):
         "context": context or {},
     }
     return (
-        f"{PROFESSIONAL_ASSISTANT_RULES}\n\n{SAUDI_MARKET_ADVICE_RULES}\n\n{DIALECT_AND_VOICE_RULES}\n\n{WEB_RESEARCH_AND_ANALYSIS_RULES}\n\n{WORLD_CLASS_AI_RESPONSE_CONTRACT}\n\n"
+        f"{PROFESSIONAL_ASSISTANT_RULES}\n\n{SAUDI_MARKET_ADVICE_RULES}\n\n{DIALECT_AND_VOICE_RULES}\n\n{WEB_RESEARCH_AND_ANALYSIS_RULES}\n\n{WORLD_CLASS_AI_RESPONSE_CONTRACT}\n\n{_language_instruction(question)}\n\n"
         f"المهمة والبيانات:\n{json.dumps(payload, ensure_ascii=False, default=str)}\n"
         f"{extra}".strip()
     )
@@ -142,6 +183,17 @@ def _private_ai_url():
     ).strip()
 
 
+def _private_ai_headers():
+    headers = {"Content-Type": "application/json"}
+    api_key = (
+        getattr(settings, "PRIVATE_ACCOUNTING_AI_API_KEY", "")
+        or os.environ.get("PRIVATE_ACCOUNTING_AI_API_KEY", "")
+    ).strip()
+    if api_key:
+        headers["X-Accounting-AI-Key"] = api_key
+    return headers
+
+
 def _private_ai_request(prompt, max_new_tokens=350, **extra_payload):
     max_new_tokens = min(int(max_new_tokens or 420), 1800)
     payload = {
@@ -155,7 +207,7 @@ def _private_ai_request(prompt, max_new_tokens=350, **extra_payload):
         response = requests.post(
             _private_ai_url(),
             data=json.dumps(payload, ensure_ascii=False, default=str),
-            headers={"Content-Type": "application/json"},
+            headers=_private_ai_headers(),
             timeout=90,
         )
     except requests.RequestException as exc:
@@ -1361,6 +1413,8 @@ LOCAL_BUSINESS_ENCYCLOPEDIA = [
 
 def local_greeting_or_concept_answer(question):
     normalized = (question or "").strip().lower()
+    if _detect_user_language(question) == "en" and normalized in {"hello", "hi", "hey"}:
+        return "Hello. I am your accounting assistant inside the system. I can help with invoices, journal entries, payroll, advances, reports, system navigation, and accounting explanations."
     if _calculation_needs_more_numbers(question):
         return "أرسل العملية الحسابية أو الأرقام المطلوبة بوضوح. مثال: احسب 1500 + 375، أو احسب ضريبة 15% على 2000."
     for words, answer in LOCAL_GENERAL_CHAT:
@@ -1600,10 +1654,16 @@ def _quality_followups(question, primary=None):
 
 def _polish_answer(answer, question="", primary=None):
     text = _remove_performance_stage_directions(answer)
+    language = _detect_user_language(question)
     if not text:
         text = "أبشر، أحتاج تفاصيل أكثر حتى أساعدك بدقة. اكتب المطلوب أو استخدم الصوت، وسأسألك عن أي معلومة ناقصة قبل التنفيذ."
+    if language == "en":
+        text = text.replace("الناتج =", "Result =").replace("ط§ظ„ظ†ط§طھط¬ =", "Result =")
+        text = text.replace("أبشر، خلينا نخليها واضحة.", "Sure, let's make it clear.")
+        text = text.replace("ط£ط¨ط´ط±طŒ ط®ظ„ظٹظ†ط§ ظ†ط®ظ„ظٹظ‡ط§ ظˆط§ط¶ط­ط©.", "Sure, let's make it clear.")
     needs_friendly_intro = (
-        len(text) < 120
+        language == "ar"
+        and len(text) < 120
         and not any(greeting in text[:80] for greeting in ("أهلا", "مرحبا", "أبشر", "تمام", "وعليكم", "تم ", "لا أستطيع"))
         and not text.startswith(("-", "•"))
     )
@@ -2015,9 +2075,36 @@ def _safe_decimal_text(value):
     return text.rstrip("0").rstrip(".") if "." in text else text
 
 
+def _safe_eval_math_expression(expression):
+    def evaluate(node):
+        if isinstance(node, ast.Expression):
+            return evaluate(node.body)
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+            return Decimal(str(node.value))
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+            value = evaluate(node.operand)
+            return value if isinstance(node.op, ast.UAdd) else -value
+        if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub, ast.Mult, ast.Div)):
+            left = evaluate(node.left)
+            right = evaluate(node.right)
+            if isinstance(node.op, ast.Add):
+                return left + right
+            if isinstance(node.op, ast.Sub):
+                return left - right
+            if isinstance(node.op, ast.Mult):
+                return left * right
+            if right == 0:
+                raise ZeroDivisionError
+            return left / right
+        raise ValueError
+
+    return evaluate(ast.parse(expression, mode="eval"))
+
+
 def local_calculation_answer(question):
     normalized = (question or "").strip().lower()
-    if not any(word in normalized for word in ("احسب", "حساب", "calculate", "كم يساوي")):
+    has_math_expression = bool(re.fullmatch(r"\s*\d+(?:[.,]\d+)?\s*[+\-*/]\s*\d+(?:[.,]\d+)?(?:\s*[+\-*/]\s*\d+(?:[.,]\d+)?)*\s*", normalized))
+    if not has_math_expression and not any(word in normalized for word in ("احسب", "حساب", "calculate", "كم يساوي", "ط§ط­ط³ط¨", "ط­ط³ط§ط¨", "ظƒظ… ظٹط³ط§ظˆظٹ")):
         return ""
     numbers = [Decimal(match.replace(",", ".")) for match in re.findall(r"\d+(?:[.,]\d+)?", normalized)]
     if not numbers:
@@ -2048,10 +2135,10 @@ def local_calculation_answer(question):
     if not re.fullmatch(r"[0-9+\-*/().]+", expression):
         return ""
     try:
-        result = eval(expression, {"__builtins__": {}}, {})
+        result = _safe_eval_math_expression(expression)
     except Exception:
         return "لم أستطع فهم العملية الحسابية. اكتبها بصيغة واضحة مثل: احسب 1500 + 375 أو احسب ضريبة 15% على 2000."
-    return f"الناتج = {_safe_decimal_text(Decimal(str(result)))}."
+    return f"الناتج = {_safe_decimal_text(result)}."
 
 
 def local_ambiguous_request_answer(question):
@@ -2829,7 +2916,7 @@ def generate_financial_insights(branch_id, user=None):
     return {"ok": True, "source": "private", "context": context, "tips": tips[:7] or fallback}
 
 
-def answer_financial_question(branch_id, question, user=None):
+def _model_answer_financial_question(branch_id, question, user=None):
     context = branch_ai_context(branch_id, user=user)
     restricted_message = _restricted_context_message(context)
     if _question_requests_restricted_data(question, context):
@@ -2869,10 +2956,6 @@ def answer_financial_question(branch_id, question, user=None):
     if restricted_message:
         answer = f"{restricted_message}\n\n{answer}"
     return {"ok": True, "source": "private", "answer": answer, "context": context}
-
-
-_model_answer_financial_question = answer_financial_question
-
 
 def answer_financial_question(branch_id, question, user=None):
     def finish(result):
@@ -2939,14 +3022,15 @@ def answer_financial_question(branch_id, question, user=None):
             "answer": _polish_answer(knowledge_answer, question),
             "context": {},
         })
-    web_answer = free_web_general_answer(question)
-    if web_answer:
-        return finish({
-            "ok": True,
-            "source": "free_web",
-            "answer": _polish_answer(web_answer, question),
-            "context": {},
-        })
+    if _free_web_answers_enabled() and question_analysis.get("asks_research"):
+        web_answer = free_web_general_answer(question)
+        if web_answer:
+            return finish({
+                "ok": True,
+                "source": "free_web",
+                "answer": _polish_answer(web_answer, question),
+                "context": {},
+            })
     if local_direct_answer and question_analysis.get("needs_explanation"):
         return finish({
             "ok": True,

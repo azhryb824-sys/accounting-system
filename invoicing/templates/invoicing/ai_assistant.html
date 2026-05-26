@@ -4,150 +4,202 @@
 {% block page_subtitle %}اسأل بالصوت أو الكتابة، ودع المساعد يحلل طلبك ويفتح الإجراء المناسب داخل النظام{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="alert alert-success">
-        المساعد متصل بـ <strong>{{ ai_status.private_model }}</strong>
-        عبر <code>{{ ai_status.private_url }}</code>.
-    </div>
+<style>
+    .assistant-chat-shell {
+        max-width: 1120px;
+        margin: 0 auto;
+    }
+    .assistant-chat-card {
+        min-height: calc(100vh - 190px);
+        display: flex;
+        flex-direction: column;
+        border-radius: 14px;
+    }
+    .assistant-chat-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid rgba(255,255,255,.12);
+    }
+    .assistant-chat-messages {
+        flex: 1;
+        overflow-y: auto;
+        padding: 1.25rem .25rem;
+        display: flex;
+        flex-direction: column;
+        gap: .9rem;
+        min-height: 360px;
+        max-height: calc(100vh - 380px);
+    }
+    .chat-message {
+        max-width: min(760px, 88%);
+        padding: .9rem 1rem;
+        border-radius: 14px;
+        line-height: 1.8;
+        white-space: pre-line;
+        word-break: break-word;
+    }
+    .chat-message.assistant {
+        align-self: flex-start;
+        background: rgba(255,255,255,.08);
+        border: 1px solid rgba(255,255,255,.12);
+    }
+    .chat-message.user {
+        align-self: flex-end;
+        background: rgba(13,110,253,.25);
+        border: 1px solid rgba(13,110,253,.45);
+    }
+    .chat-message.loading {
+        opacity: .75;
+    }
+    .assistant-tools {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .5rem;
+        padding: .75rem 0;
+        border-top: 1px solid rgba(255,255,255,.1);
+    }
+    .assistant-composer {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: .6rem;
+        align-items: end;
+        padding-top: .75rem;
+    }
+    .assistant-composer textarea {
+        resize: none;
+        min-height: 54px;
+        max-height: 140px;
+    }
+    .assistant-settings {
+        display: grid;
+        grid-template-columns: 1fr 1.2fr 1fr auto;
+        gap: .75rem;
+        align-items: center;
+        margin-top: .75rem;
+    }
+    .assistant-side-panel {
+        display: grid;
+        gap: .75rem;
+        margin-top: 1rem;
+    }
+    @media (max-width: 768px) {
+        .assistant-chat-card { min-height: calc(100vh - 140px); }
+        .assistant-chat-messages { max-height: calc(100vh - 430px); }
+        .assistant-composer { grid-template-columns: 1fr; }
+        .assistant-settings { grid-template-columns: 1fr; }
+        .chat-message { max-width: 96%; }
+    }
+</style>
 
-    <div class="row g-4">
-        <div class="col-lg-7">
-            <div class="glass-card p-4 h-100">
-                <form method="post" id="classic-ai-form">
-                    {% csrf_token %}
-                    <label class="form-label" for="ai-question">سؤالك أو أمرك</label>
-                    <textarea id="ai-question" name="question" class="form-control" rows="5" placeholder="مثال: افتح كشف الرواتب، أو حلل المبيعات والمشتريات، أو اذهب إلى فاتورة مصورة">{{ question }}</textarea>
-                    <div class="d-flex flex-wrap gap-2 mt-3">
-                        <button class="btn btn-primary" type="submit">
-                            <i class="fa-solid fa-paper-plane"></i> اسأل
-                        </button>
-                        <button class="btn btn-outline-light" type="button" id="voice-start">
-                            <i class="fa-solid fa-microphone"></i> تحدث
-                        </button>
-                        <button class="btn btn-outline-light" type="button" id="voice-stop" disabled>
-                            <i class="fa-solid fa-microphone-slash"></i> إيقاف
-                        </button>
-                        <button class="btn btn-outline-light" type="button" id="camera-open">
-                            <i class="fa-solid fa-camera"></i> الكاميرا
-                        </button>
-                        <button class="btn btn-outline-light" type="button" id="camera-capture" disabled>
-                            <i class="fa-solid fa-circle-dot"></i> قراءة الصورة
-                        </button>
-                        <button class="btn btn-outline-light" type="button" id="screen-share-start">
-                            <i class="fa-solid fa-display"></i> مشاركة الشاشة
-                        </button>
-                        <button class="btn btn-outline-light" type="button" id="screen-capture" disabled>
-                            <i class="fa-solid fa-crop-simple"></i> تحليل الشاشة
-                        </button>
-                        <button class="btn btn-outline-danger" type="button" id="screen-share-stop" disabled>
-                            <i class="fa-solid fa-display"></i> إيقاف الشاشة
-                        </button>
-                        <button class="btn btn-outline-light" type="button" id="assistant-run">
-                            <i class="fa-solid fa-bolt"></i> تحليل وتنفيذ
-                        </button>
-                        <button class="btn btn-outline-light" type="button" id="voice-read">
-                            <i class="fa-solid fa-volume-high"></i> قراءة الرد
-                        </button>
-                        <button class="btn btn-success" type="button" id="live-conversation-start">
-                            <i class="fa-solid fa-headset"></i> محادثة مباشرة
-                        </button>
-                        <button class="btn btn-outline-danger" type="button" id="live-conversation-stop" disabled>
-                            <i class="fa-solid fa-circle-stop"></i> إنهاء المحادثة
-                        </button>
-                    </div>
-                    <div class="row g-2 mt-3">
-                        <div class="col-md-4">
-                            <label class="form-label" for="assistant-dialect-select">لغة/لهجة الصوت</label>
-                            <select id="assistant-dialect-select" class="form-select">
-                                <option value="ar-SA">عربي سعودي</option>
-                                <option value="ar-SD">عربي سوداني</option>
-                                <option value="ur-PK">أوردو</option>
-                                <option value="ar">عربي عام</option>
-                            </select>
-                        </div>
-                        <div class="col-md-5">
-                            <label class="form-label" for="assistant-voice-select">صوت الذكاء الاصطناعي</label>
-                            <select id="assistant-voice-select" class="form-select"></select>
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label" for="assistant-voice-rate">سرعة الصوت</label>
-                            <input id="assistant-voice-rate" class="form-range" type="range" min="0.75" max="1.15" step="0.05" value="0.95">
-                        </div>
-                    </div>
-                    <div class="form-check form-switch mt-2">
-                        <input class="form-check-input" type="checkbox" role="switch" id="assistant-auto-speak" checked>
-                        <label class="form-check-label" for="assistant-auto-speak">قراءة الرد تلقائيا</label>
-                    </div>
-                    <div class="small text-muted-soft mt-2" id="voice-status">الصوت يعمل من المتصفح مباشرة إذا كان مدعوما.</div>
-                    <div class="glass-soft p-2 mt-3 d-none" id="camera-panel">
-                        <video id="camera-preview" class="w-100 rounded" autoplay playsinline muted style="max-height: 320px; object-fit: cover; background:#020617;"></video>
-                        <canvas id="camera-canvas" class="d-none"></canvas>
-                    </div>
-                    <div class="glass-soft p-2 mt-3 d-none" id="screen-panel">
-                        <video id="screen-preview" class="w-100 rounded" autoplay playsinline muted style="max-height: 320px; object-fit: contain; background:#020617;"></video>
-                        <canvas id="screen-canvas" class="d-none"></canvas>
-                    </div>
-                </form>
+<div class="container-fluid assistant-chat-shell">
+    <div class="glass-card p-4 assistant-chat-card">
+        <div class="assistant-chat-header">
+            <div>
+                <h5 class="mb-1">المحادثة</h5>
+                <div class="small text-muted-soft" id="voice-status">المساعد متصل بـ {{ ai_status.private_model }}.</div>
+            </div>
+            <a class="btn btn-outline-light btn-sm" href="{% url 'ai_insights' %}">
+                <i class="fa-solid fa-chart-line"></i> التحليل الكامل
+            </a>
+        </div>
 
-                <div class="glass-soft p-3 mt-4 d-none" id="live-answer-card">
-                    <div class="text-muted-soft mb-2">
-                        نتيجة المساعد
-                        <span class="badge bg-success ms-2" id="live-source">مساعد النظام</span>
-                    </div>
-                    <div id="live-answer" style="white-space: pre-line;"></div>
-                    <div class="d-flex flex-wrap gap-2 mt-3" id="assistant-actions"></div>
+        <div class="assistant-chat-messages" id="chat-messages">
+            <div class="chat-message assistant">
+                أهلا، اكتب رسالتك أو استخدم الصوت. سأرد بنفس لغة سؤالك وأساعدك في التحليل أو تنفيذ الأوامر داخل النظام.
+            </div>
+            {% if question %}
+            <div class="chat-message user">{{ question }}</div>
+            {% endif %}
+            {% if answer %}
+            <div class="chat-message assistant" id="classic-answer">
+                {% if answer.ok %}{{ answer.answer }}{% else %}{{ answer.message }}{% endif %}
+            </div>
+            {% else %}
+            <div id="classic-answer" class="d-none"></div>
+            {% endif %}
+            <div class="chat-message assistant d-none" id="live-answer-card">
+                <div class="small text-muted-soft mb-2">
+                    <span class="badge bg-success" id="live-source">مساعد النظام</span>
                 </div>
-
-                {% if answer %}
-                <div class="glass-soft p-3 mt-4">
-                    <div class="text-muted-soft mb-2">
-                        الإجابة
-                        {% if answer.source == "private" %}
-                            <span class="badge bg-success ms-2">نموذجك الخاص</span>
-                        {% else %}
-                            <span class="badge bg-secondary ms-2">تحليل محلي</span>
-                        {% endif %}
-                    </div>
-                    {% if answer.warning %}
-                    <div class="alert alert-warning py-2">{{ answer.warning }}</div>
-                    {% endif %}
-                    {% if answer.ok %}
-                    <div id="classic-answer" style="white-space: pre-line;">{{ answer.answer }}</div>
-                    {% else %}
-                    <div class="text-warning">{{ answer.message }}</div>
-                    {% if answer.raw %}<pre class="small mt-2 mb-0 text-wrap">{{ answer.raw }}</pre>{% endif %}
-                    {% endif %}
-                </div>
-                {% endif %}
+                <div id="live-answer"></div>
+                <div class="d-flex flex-wrap gap-2 mt-3" id="assistant-actions"></div>
             </div>
         </div>
 
-        <div class="col-lg-5">
-            <div class="glass-card p-4 h-100">
-                <h5 class="mb-3">أوامر صوتية جاهزة</h5>
-                <div class="d-grid gap-2 mb-4">
-                    <button class="btn btn-outline-info text-start quick-command" type="button" data-command="حلل الوضع المالي باحتراف واعطني الأولويات">حلل الوضع المالي باحتراف واعطني الأولويات</button>
-                    <button class="btn btn-outline-info text-start quick-command" type="button" data-command="ما أهم شيء أراجعه اليوم في النظام؟">ما أهم شيء أراجعه اليوم في النظام؟</button>
-                    <button class="btn btn-outline-light text-start quick-command" type="button" data-command="افتح تقرير العمليات غير المرحلة">افتح تقرير العمليات غير المرحلة</button>
-                    <button class="btn btn-outline-light text-start quick-command" type="button" data-command="اذهب إلى رواتب الموظفين">اذهب إلى رواتب الموظفين</button>
-                    <button class="btn btn-outline-light text-start quick-command" type="button" data-command="افتح إضافة فاتورة مصورة">افتح إضافة فاتورة مصورة</button>
-                    <button class="btn btn-outline-light text-start quick-command" type="button" data-command="حلل المبيعات والمشتريات والمخزون">حلل المبيعات والمشتريات والمخزون</button>
-                    <button class="btn btn-outline-light text-start quick-command" type="button" data-command="اشرح لي الفرق بين المدين والدائن بمثال">اشرح لي الفرق بين المدين والدائن بمثال</button>
-                </div>
-
-                <h5 class="mb-3">قراءة فورية</h5>
-                <div class="d-grid gap-2">
-                    {% for tip in insights.tips %}
-                    <div class="glass-soft p-3">{{ tip }}</div>
-                    {% empty %}
-                    <div class="text-muted-soft">لا توجد توصيات حاليا.</div>
-                    {% endfor %}
-                </div>
-                <a class="btn btn-outline-light w-100 mt-3" href="{% url 'ai_insights' %}">
-                    <i class="fa-solid fa-chart-line"></i> فتح التحليل الكامل
-                </a>
+        <form method="post" id="classic-ai-form">
+            {% csrf_token %}
+            <div class="assistant-tools">
+                <button class="btn btn-outline-light btn-sm" type="button" id="voice-start" title="تحدث">
+                    <i class="fa-solid fa-microphone"></i>
+                </button>
+                <button class="btn btn-outline-light btn-sm" type="button" id="voice-stop" disabled title="إيقاف الصوت">
+                    <i class="fa-solid fa-microphone-slash"></i>
+                </button>
+                <button class="btn btn-outline-light btn-sm" type="button" id="camera-open" title="الكاميرا">
+                    <i class="fa-solid fa-camera"></i>
+                </button>
+                <button class="btn btn-outline-light btn-sm" type="button" id="camera-capture" disabled title="قراءة الصورة">
+                    <i class="fa-solid fa-circle-dot"></i>
+                </button>
+                <button class="btn btn-outline-light btn-sm" type="button" id="screen-share-start" title="مشاركة الشاشة">
+                    <i class="fa-solid fa-display"></i>
+                </button>
+                <button class="btn btn-outline-light btn-sm" type="button" id="screen-capture" disabled title="تحليل الشاشة">
+                    <i class="fa-solid fa-crop-simple"></i>
+                </button>
+                <button class="btn btn-outline-danger btn-sm" type="button" id="screen-share-stop" disabled title="إيقاف الشاشة">
+                    <i class="fa-solid fa-display"></i>
+                </button>
+                <button class="btn btn-outline-light btn-sm" type="button" id="voice-read" title="قراءة الرد">
+                    <i class="fa-solid fa-volume-high"></i>
+                </button>
+                <button class="btn btn-success btn-sm" type="button" id="live-conversation-start" title="محادثة مباشرة">
+                    <i class="fa-solid fa-headset"></i>
+                </button>
+                <button class="btn btn-outline-danger btn-sm" type="button" id="live-conversation-stop" disabled title="إنهاء المحادثة">
+                    <i class="fa-solid fa-circle-stop"></i>
+                </button>
+                <button class="btn btn-outline-info btn-sm quick-command" type="button" data-command="حلل الوضع المالي باحتراف واعطني الأولويات">تحليل مالي</button>
+                <button class="btn btn-outline-info btn-sm quick-command" type="button" data-command="ما أهم شيء أراجعه اليوم في النظام؟">مراجعة اليوم</button>
             </div>
-        </div>
+
+            <div class="glass-soft p-2 mt-2 d-none" id="camera-panel">
+                <video id="camera-preview" class="w-100 rounded" autoplay playsinline muted style="max-height: 320px; object-fit: cover; background:#020617;"></video>
+                <canvas id="camera-canvas" class="d-none"></canvas>
+            </div>
+            <div class="glass-soft p-2 mt-2 d-none" id="screen-panel">
+                <video id="screen-preview" class="w-100 rounded" autoplay playsinline muted style="max-height: 320px; object-fit: contain; background:#020617;"></video>
+                <canvas id="screen-canvas" class="d-none"></canvas>
+            </div>
+
+            <div class="assistant-composer">
+                <button class="btn btn-outline-light" type="button" id="assistant-run" title="تحليل وتنفيذ">
+                    <i class="fa-solid fa-bolt"></i>
+                </button>
+                <textarea id="ai-question" name="question" class="form-control" rows="2" placeholder="اكتب رسالتك هنا...">{{ question }}</textarea>
+                <button class="btn btn-primary" type="submit" title="إرسال">
+                    <i class="fa-solid fa-paper-plane"></i>
+                </button>
+            </div>
+
+            <div class="assistant-settings">
+                <select id="assistant-dialect-select" class="form-select">
+                    <option value="ar-SA">عربي سعودي</option>
+                    <option value="ar-SD">عربي سوداني</option>
+                    <option value="en-US">English</option>
+                    <option value="ur-PK">أوردو</option>
+                    <option value="ar">عربي عام</option>
+                </select>
+                <select id="assistant-voice-select" class="form-select"></select>
+                <input id="assistant-voice-rate" class="form-range" type="range" min="0.75" max="1.15" step="0.05" value="0.95">
+                <div class="form-check form-switch m-0">
+                    <input class="form-check-input" type="checkbox" role="switch" id="assistant-auto-speak" checked>
+                </div>
+            </div>
+        </form>
     </div>
 </div>
 
@@ -176,6 +228,7 @@
     const voiceRate = document.getElementById('assistant-voice-rate');
     const autoSpeakToggle = document.getElementById('assistant-auto-speak');
     const statusBox = document.getElementById('voice-status');
+    const chatMessages = document.getElementById('chat-messages');
     const answerCard = document.getElementById('live-answer-card');
     const answerBox = document.getElementById('live-answer');
     const classicAnswerBox = document.getElementById('classic-answer');
@@ -183,7 +236,8 @@
     const commandUrl = "{% url 'ai_assistant_command' %}";
     const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const fallbackRecognitionLanguages = ['ar-SA', 'ar-SD', 'ur-PK', 'ar', 'ar-EG'];
+    const fallbackRecognitionLanguages = ['ar-SA', 'ar-SD', 'en-US', 'ur-PK', 'ar', 'ar-EG'];
+    const chatStorageKey = 'accounting_ai_chat_history_v1';
     let recognition = null;
     let recognitionLanguageIndex = 0;
     let arabicVoice = null;
@@ -202,6 +256,47 @@
         statusBox.textContent = text;
     }
 
+    function scrollChatToBottom() {
+        if (chatMessages) chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function addChatMessage(role, text, extraClass = '') {
+        const message = document.createElement('div');
+        message.className = `chat-message ${role} ${extraClass}`.trim();
+        message.textContent = text || '';
+        chatMessages.appendChild(message);
+        scrollChatToBottom();
+        if (!extraClass.includes('loading')) saveChatHistory();
+        return message;
+    }
+
+    function savedChatMessages() {
+        return [...chatMessages.querySelectorAll('.chat-message.user, .chat-message.assistant')]
+            .filter((node) => node.id !== 'live-answer-card' && node.id !== 'classic-answer')
+            .map((node) => ({
+                role: node.classList.contains('user') ? 'user' : 'assistant',
+                text: node.textContent.trim(),
+            }))
+            .filter((message) => message.text)
+            .slice(-30);
+    }
+
+    function saveChatHistory() {
+        try {
+            window.localStorage.setItem(chatStorageKey, JSON.stringify(savedChatMessages()));
+        } catch (error) {}
+    }
+
+    function loadChatHistory() {
+        if (chatMessages.querySelector('.chat-message.user')) return;
+        try {
+            const history = JSON.parse(window.localStorage.getItem(chatStorageKey) || '[]');
+            if (!Array.isArray(history) || !history.length) return;
+            chatMessages.innerHTML = '';
+            history.slice(-30).forEach((message) => addChatMessage(message.role === 'user' ? 'user' : 'assistant', message.text || ''));
+        } catch (error) {}
+    }
+
     function mediaUnavailableMessage(kind) {
         if (!window.isSecureContext) {
             return `${kind} يحتاج HTTPS أو localhost حتى يسمح المتصفح بالميكروفون والكاميرا ومشاركة الشاشة. افتح الموقع عبر https أو شغله محليا على localhost.`;
@@ -211,6 +306,27 @@
 
     function selectedDialect() {
         return dialectSelect.value || 'ar-SA';
+    }
+
+    function detectTextLanguage(text) {
+        const value = text || '';
+        if (/[\u0980-\u09FF]/.test(value)) return 'bn-BD';
+        if (/[پچژگٹڈڑںے]/.test(value)) return 'ur-PK';
+        const arabicCount = (value.match(/[\u0600-\u06FF]/g) || []).length;
+        const latinCount = (value.match(/[A-Za-z]/g) || []).length;
+        if (latinCount > arabicCount) return 'en-US';
+        return selectedDialect().startsWith('ar') ? selectedDialect() : 'ar-SA';
+    }
+
+    function syncDialectWithText(text) {
+        const detected = detectTextLanguage(text);
+        const supported = [...dialectSelect.options].some((option) => option.value === detected);
+        if (supported && dialectSelect.value !== detected) {
+            dialectSelect.value = detected;
+            recognitionLanguageIndex = 0;
+            if (recognition) recognition.lang = detected;
+        }
+        return detected;
     }
 
     function dialectFallbacks() {
@@ -289,7 +405,7 @@
 
     function applyAssistantDialect(text) {
         let clean = (text || '').trim();
-        if (!clean || selectedDialect() === 'ar' || selectedDialect() === 'ur-PK') return clean;
+        if (!clean || selectedDialect() === 'ar' || selectedDialect() === 'ur-PK' || selectedDialect() === 'en-US') return clean;
         const protectedTerms = [
             'ضريبة القيمة المضافة', 'الإجمالي', 'الفاتورة', 'عرض السعر', 'المخزون',
             'القيد المحاسبي', 'الربح', 'الخسارة', 'العميل', 'المورد'
@@ -385,8 +501,8 @@
     function preferredVoiceForDialect(voices) {
         const selected = voices.find((voice) => `${voice.name}::${voice.lang}` === voiceSelect.value);
         const dialect = selectedDialect().toLowerCase();
-        const naturalFemalePattern = /hoda|salma|layla|laila|amira|mariam|fatima|zariyah|female|woman|zira|microsoft.*hoda|google.*arabic/i;
-        const oldMalePattern = /naayf|maged|tarik|tariq|omar|hassan|khalid|zayd/i;
+        const naturalFemalePattern = /naayf|maged|tarik|tariq|omar|hassan|khalid|zayd|microsoft.*naayf|google.*arabic/i;
+        const oldMalePattern = /hoda|salma|layla|laila|amira|mariam|fatima|zariyah|female|woman|zira/i;
         if (selected && /^ar/i.test(selected.lang || '') && !oldMalePattern.test(selected.name || '')) return selected;
         return (
             voices.find((voice) => (voice.lang || '').toLowerCase() === dialect && naturalFemalePattern.test(voice.name || '')) ||
@@ -398,16 +514,38 @@
         );
     }
 
+    function isArabicSpeechVoice(voice) {
+        return Boolean(voice && /^(ar|arb)/i.test(voice.lang || ''));
+    }
+
+    function voiceMatchesLanguage(voice, lang) {
+        if (!voice) return false;
+        const voiceLang = (voice.lang || '').toLowerCase();
+        const target = (lang || selectedDialect()).toLowerCase();
+        if (target.startsWith('ar')) return /^(ar|arb)/i.test(voice.lang || '');
+        if (target.startsWith('en')) return voiceLang.startsWith('en');
+        if (target.startsWith('ur')) return voiceLang.startsWith('ur');
+        if (target.startsWith('bn')) return voiceLang.startsWith('bn');
+        return voiceLang.startsWith(target.slice(0, 2));
+    }
+
+    function preferredVoiceForLanguage(voices, lang) {
+        return voices.find((voice) => `${voice.name}::${voice.lang}` === voiceSelect.value && voiceMatchesLanguage(voice, lang)) ||
+            voices.find((voice) => voiceMatchesLanguage(voice, lang) && /google|natural|online|premium|microsoft/i.test(voice.name || '')) ||
+            voices.find((voice) => voiceMatchesLanguage(voice, lang)) ||
+            null;
+    }
+
     function voicePriority(voice) {
         const name = (voice.name || '').toLowerCase();
         const lang = (voice.lang || '').toLowerCase();
         let score = 0;
         if (lang === selectedDialect().toLowerCase()) score += 40;
         if (lang.startsWith('ar')) score += 30;
-        if (/hoda|salma|layla|laila|amira|mariam|fatima|zariyah|female|woman|zira/.test(name)) score += 70;
+        if (/naayf|maged|tarik|tariq|omar|hassan|khalid|zayd/.test(name)) score += 80;
         if (/google|natural|online|premium/.test(name)) score += 20;
         if (/microsoft/.test(name)) score += 10;
-        if (/naayf|maged|tarik|tariq|omar|hassan|khalid|zayd/.test(name)) score -= 60;
+        if (/hoda|salma|layla|laila|amira|mariam|fatima|zariyah|female|woman|zira/.test(name)) score -= 70;
         return score;
     }
 
@@ -417,26 +555,26 @@
         const previousValue = voiceSelect.value;
         voiceSelect.innerHTML = '';
         voices
-            .filter((voice) => /^(ar|ur|bn)/i.test(voice.lang || '') || /arabic|urdu|bangla|bengali|hoda|salma|layla|laila|amira|mariam|fatima|zariyah|zira|naayf|maged|tarik|tariq|omar|hassan|khalid|zayd/i.test(voice.name || ''))
+            .filter((voice) => (/^(ar|ur|bn)/i.test(voice.lang || '') || /arabic|urdu|bangla|bengali|naayf|maged|tarik|tariq|omar|hassan|khalid|zayd/i.test(voice.name || '')) && !/hoda|salma|layla|laila|amira|mariam|fatima|zariyah|female|woman|zira/i.test(voice.name || ''))
             .sort((a, b) => voicePriority(b) - voicePriority(a))
             .forEach((voice, index) => {
                 const option = document.createElement('option');
                 option.value = `${voice.name}::${voice.lang}`;
-                const freshHint = /hoda|salma|layla|laila|amira|mariam|fatima|zariyah|female|woman|zira/i.test(voice.name || '') ? ' - جديد' : '';
+                const freshHint = /naayf|maged|tarik|tariq|omar|hassan|khalid|zayd/i.test(voice.name || '') ? ' - جديد' : '';
                 option.textContent = `${voice.name} (${voice.lang})${freshHint}`;
                 voiceSelect.appendChild(option);
             });
         if (!voiceSelect.options.length) {
             const option = document.createElement('option');
             option.value = '';
-            option.textContent = 'صوت المتصفح الافتراضي';
+            option.textContent = 'لا يوجد صوت عربي مثبت';
             voiceSelect.appendChild(option);
         }
-        if (previousValue && !/naayf|maged|tarik|tariq|omar|hassan|khalid|zayd/i.test(previousValue) && [...voiceSelect.options].some((option) => option.value === previousValue)) {
+        if (previousValue && !/hoda|salma|layla|laila|amira|mariam|fatima|zariyah|female|woman|zira/i.test(previousValue) && [...voiceSelect.options].some((option) => option.value === previousValue)) {
             voiceSelect.value = previousValue;
         }
-        const preferredNames = ['Hoda', 'Salma', 'Layla', 'Laila', 'Amira', 'Mariam', 'Fatima', 'Zariyah', 'Zira', 'Google العربية'];
-        const oldMaleVoicePattern = /naayf|maged|tarik|tariq|omar|hassan|khalid|zayd/i;
+        const preferredNames = ['Naayf', 'Maged', 'Tarik', 'Tariq', 'Omar', 'Hassan', 'Khalid', 'Zayd', 'Google Arabic'];
+        const oldMaleVoicePattern = /hoda|salma|layla|laila|amira|mariam|fatima|zariyah|female|woman|zira/i;
         arabicVoice =
             voices.find((voice) => `${voice.name}::${voice.lang}` === voiceSelect.value && !oldMaleVoicePattern.test(voice.name || '')) ||
             voices.find((voice) => preferredNames.some((name) => (voice.name || '').toLowerCase().includes(name.toLowerCase()))) ||
@@ -460,8 +598,11 @@
         stopAssistantSpeech();
         assistantIsSpeaking = true;
         const currentSpeechRunId = speechRunId;
+        const spokenLang = detectTextLanguage(improvedText);
         const availableVoices = window.speechSynthesis.getVoices();
-        const voice = preferredVoiceForDialect(availableVoices) || arabicVoice || loadArabicVoice();
+        const voice = spokenLang.startsWith('ar')
+            ? (preferredVoiceForDialect(availableVoices) || arabicVoice || loadArabicVoice())
+            : preferredVoiceForLanguage(availableVoices, spokenLang);
         const hasUrduText = selectedDialect() === 'ur-PK' || (/[\u0600-\u06FF]/.test(improvedText) && /[پچژگٹڈڑںے]/.test(improvedText));
         const hasBanglaText = /[\u0980-\u09FF]/.test(improvedText);
         let speechIndex = 0;
@@ -478,9 +619,9 @@
                 return;
             }
             const utterance = new SpeechSynthesisUtterance(speechChunks[speechIndex]);
-            if (voice && !hasUrduText && !hasBanglaText) {
+            if (voiceMatchesLanguage(voice, spokenLang) && !hasUrduText && !hasBanglaText) {
                 utterance.voice = voice;
-                utterance.lang = voice.lang || selectedDialect();
+                utterance.lang = voice.lang || spokenLang;
                 setStatus(`جاري قراءة الرد بصوت: ${voice.name}`);
             } else if (hasUrduText) {
                 utterance.lang = 'ur-PK';
@@ -489,8 +630,8 @@
                 utterance.lang = 'bn-BD';
                 setStatus('جاري قراءة الرد بالبنغالية إذا كان المتصفح يدعمها.');
             } else {
-                utterance.lang = selectedDialect();
-                setStatus('لم أجد صوتا عربيا مناسبا. سأستخدم صوت المتصفح المتاح.');
+                utterance.lang = spokenLang;
+                setStatus('لم أجد صوتا عربيا مثبتا. ثبّت صوتا عربيا من إعدادات النظام أو المتصفح.');
             }
             utterance.rate = Math.min(1.08, Number(voiceRate.value || 0.96));
             utterance.pitch = 1.16;
@@ -516,13 +657,16 @@
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(cleanText);
         assistantIsSpeaking = true;
+        const spokenLang = detectTextLanguage(cleanText);
         const voices = window.speechSynthesis.getVoices();
-        const selectedVoice = preferredVoiceForDialect(voices) || arabicVoice || loadArabicVoice();
+        const selectedVoice = spokenLang.startsWith('ar')
+            ? (preferredVoiceForDialect(voices) || arabicVoice || loadArabicVoice())
+            : preferredVoiceForLanguage(voices, spokenLang);
         const hasUrdu = selectedDialect() === 'ur-PK' || (/[\u0600-\u06FF]/.test(cleanText) && /[پچژگٹڈڑںے]/.test(cleanText));
         const hasBangla = /[\u0980-\u09FF]/.test(cleanText);
-        if (selectedVoice && !hasUrdu && !hasBangla) {
+        if (voiceMatchesLanguage(selectedVoice, spokenLang) && !hasUrdu && !hasBangla) {
             utterance.voice = selectedVoice;
-            utterance.lang = selectedVoice.lang || selectedDialect();
+            utterance.lang = selectedVoice.lang || spokenLang;
             setStatus(`سيتم قراءة الرد بصوت عربي: ${selectedVoice.name}`);
         } else if (hasUrdu) {
             utterance.lang = 'ur-PK';
@@ -531,8 +675,8 @@
             utterance.lang = 'bn-BD';
             setStatus('سيتم قراءة الرد باللغة البنغالية إذا كان المتصفح يدعمها.');
         } else {
-            utterance.lang = selectedDialect();
-            setStatus('لم أجد صوتا عربيا مثبتا في المتصفح. سأستخدم الصوت الافتراضي.');
+            utterance.lang = spokenLang;
+            setStatus('لم أجد صوتا عربيا مثبتا. ثبّت صوتا عربيا من إعدادات النظام أو المتصفح.');
         }
         utterance.rate = Math.min(0.95, Number(voiceRate.value || 0.82));
         utterance.pitch = 1;
@@ -556,6 +700,7 @@
 
     async function runAssistant(command, autoNavigate = false, imagePayload = null) {
         const value = (command || questionInput.value || '').trim();
+        if (value) syncDialectWithText(value);
         const liveScreenPayload = imagePayload || (screenStream ? (buildScreenPayload() || latestScreenPayload) : null);
         if (!value && !liveScreenPayload) {
             if (screenStream) {
@@ -567,11 +712,18 @@
         }
 
         if (value) questionInput.value = value;
+        if (!answerCard.classList.contains('d-none') && answerBox.textContent.trim() && answerBox.textContent.trim() !== 'لحظة...') {
+            addChatMessage('assistant', answerBox.textContent.trim());
+            answerCard.classList.add('d-none');
+        }
+        if (value) addChatMessage('user', value);
         assistantIsProcessing = true;
         setStatus('جاري تحليل الطلب...');
         answerCard.classList.remove('d-none');
+        chatMessages.appendChild(answerCard);
         answerBox.textContent = 'لحظة...';
         actionsBox.innerHTML = '';
+        scrollChatToBottom();
 
         try {
             const response = await fetch(commandUrl, {
@@ -599,6 +751,10 @@
             }
             const dialectAnswer = applyAssistantDialect(data.answer || 'تم تحليل الطلب.');
             answerBox.textContent = dialectAnswer;
+            questionInput.value = '';
+            questionInput.style.height = '';
+            scrollChatToBottom();
+            saveChatHistory();
             if (liveConversationMode || autoSpeakToggle.checked) speak(dialectAnswer);
             assistantIsProcessing = false;
 
@@ -631,6 +787,8 @@
             });
         } catch (error) {
             answerBox.textContent = error.message;
+            scrollChatToBottom();
+            saveChatHistory();
             assistantIsProcessing = false;
             setStatus('تعذر إكمال الطلب.');
             resumeLiveConversation();
@@ -749,8 +907,8 @@
         loadArabicVoice();
         window.speechSynthesis.onvoiceschanged = loadArabicVoice;
         voiceSelect.addEventListener('change', () => {
-            arabicVoice = window.speechSynthesis.getVoices().find((voice) => `${voice.name}::${voice.lang}` === voiceSelect.value) || null;
-            setStatus(arabicVoice ? `تم اختيار صوت: ${arabicVoice.name}` : 'تم اختيار صوت المتصفح الافتراضي.');
+            arabicVoice = window.speechSynthesis.getVoices().find((voice) => `${voice.name}::${voice.lang}` === voiceSelect.value && isArabicSpeechVoice(voice)) || null;
+            setStatus(arabicVoice ? `تم اختيار صوت: ${arabicVoice.name}` : 'لا يوجد صوت عربي مثبت في المتصفح.');
         });
         dialectSelect.addEventListener('change', () => {
             recognitionLanguageIndex = 0;
@@ -801,6 +959,7 @@
             questionInput.value = normalizedTranscript;
             if (event.results[event.results.length - 1].isFinal) {
                 if (!normalizedTranscript || normalizedTranscript === lastFinalTranscript) return;
+                syncDialectWithText(normalizedTranscript);
                 lastFinalTranscript = normalizedTranscript;
                 const screenPayload = screenStream ? (refreshScreenContext() || latestScreenPayload) : null;
                 runAssistant(normalizedTranscript, false, screenPayload);
@@ -835,9 +994,25 @@
     screenShareStop.addEventListener('click', stopScreenShare);
     screenCaptureButton.addEventListener('click', captureScreenImage);
     runButton.addEventListener('click', () => runAssistant('', false));
+    document.getElementById('classic-ai-form').addEventListener('submit', (event) => {
+        event.preventDefault();
+        runAssistant('', false);
+    });
+    questionInput.addEventListener('input', () => {
+        questionInput.style.height = 'auto';
+        questionInput.style.height = `${Math.min(questionInput.scrollHeight, 140)}px`;
+    });
+    questionInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            runAssistant('', false);
+        }
+    });
     document.querySelectorAll('.quick-command').forEach((button) => {
         button.addEventListener('click', () => runAssistant(button.dataset.command, false));
     });
+    loadChatHistory();
+    scrollChatToBottom();
 })();
 </script>
 {% endblock %}

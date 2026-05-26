@@ -6,8 +6,12 @@ services:
     healthCheckPath: /health
     envVars:
       - key: ACCOUNTING_AI_BACKEND
-        value: local_model
+        value: auto
       - key: REQUIRE_LOCAL_MODEL
+        value: "false"
+      - key: LOCAL_ANALYSIS_ONLY
+        value: "false"
+      - key: ENABLE_OPEN_WEB_SEARCH
         value: "true"
       - key: PYTHONUNBUFFERED
         value: "1"

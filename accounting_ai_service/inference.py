@@ -30,6 +30,7 @@ MODEL_NAME = "نموذج عبدالرحمن المحاسبي"
 MODEL_OWNER = "عبدالرحمن"
 MODEL_PATH = Path(os.environ.get("ACCOUNTING_AI_MODEL_PATH") or Path(__file__).resolve().parent / "models" / "my_model")
 AI_BACKEND = os.environ.get("ACCOUNTING_AI_BACKEND", "auto").strip().lower()
+LOCAL_ANALYSIS_ONLY = os.environ.get("LOCAL_ANALYSIS_ONLY", "false").strip().lower() not in {"0", "false", "no", "off"}
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434").strip().rstrip("/")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:7b-instruct").strip()
 OPENAI_COMPATIBLE_API_KEY = os.environ.get("OPENAI_COMPATIBLE_API_KEY", "").strip()
@@ -37,7 +38,10 @@ OPENAI_COMPATIBLE_BASE_URL = os.environ.get("OPENAI_COMPATIBLE_BASE_URL", "https
 OPENAI_COMPATIBLE_MODEL = os.environ.get("OPENAI_COMPATIBLE_MODEL", "gpt-4o-mini").strip()
 REQUIRE_HOSTED_AI = os.environ.get("REQUIRE_HOSTED_AI", "false").strip().lower() in {"1", "true", "yes", "on"}
 REQUIRE_LOCAL_MODEL = os.environ.get("REQUIRE_LOCAL_MODEL", "false").strip().lower() in {"1", "true", "yes", "on"}
-ENABLE_OPEN_WEB_SEARCH = os.environ.get("ENABLE_OPEN_WEB_SEARCH", "true").strip().lower() not in {"0", "false", "no", "off"}
+ENABLE_OPEN_WEB_SEARCH = (
+    not LOCAL_ANALYSIS_ONLY
+    and os.environ.get("ENABLE_OPEN_WEB_SEARCH", "true").strip().lower() not in {"0", "false", "no", "off"}
+)
 USER_MEMORY: list[str] = []
 
 
@@ -454,7 +458,7 @@ def _answer_from_user_memory(question: str) -> str | None:
 
 
 def _open_web_search_answer(question: str) -> str | None:
-    if not ENABLE_OPEN_WEB_SEARCH:
+    if LOCAL_ANALYSIS_ONLY or not ENABLE_OPEN_WEB_SEARCH:
         return None
     analysis = _analyze_question(question)
     if not analysis.get("asks_web"):
@@ -870,9 +874,10 @@ class PrivateAccountingModel:
         if recalled_memory:
             return recalled_memory
 
-        web_answer = _open_web_search_answer(question)
-        if web_answer:
-            return web_answer
+        if not LOCAL_ANALYSIS_ONLY:
+            web_answer = _open_web_search_answer(question)
+            if web_answer:
+                return web_answer
 
         if AI_BACKEND in {"local_model", "transformers"} or REQUIRE_LOCAL_MODEL:
             if self.model is None or self.tokenizer is None:
@@ -885,9 +890,10 @@ class PrivateAccountingModel:
         if AI_BACKEND in {"openai", "openai_compatible", "hosted"} and not OPENAI_COMPATIBLE_API_KEY:
             raise ValueError("خدمة الذكاء الاصطناعي مضبوطة على hosted/openai_compatible لكن OPENAI_COMPATIBLE_API_KEY غير موجود في Render.")
 
-        hosted_answer = self._answer_from_openai_compatible(question, max_new_tokens=max_new_tokens)
-        if hosted_answer:
-            return hosted_answer
+        if not LOCAL_ANALYSIS_ONLY:
+            hosted_answer = self._answer_from_openai_compatible(question, max_new_tokens=max_new_tokens)
+            if hosted_answer:
+                return hosted_answer
 
         if REQUIRE_HOSTED_AI:
             raise ValueError("تم تفعيل REQUIRE_HOSTED_AI لكن المزود الخارجي لم يرجع إجابة. راجع OPENAI_COMPATIBLE_API_KEY و OPENAI_COMPATIBLE_MODEL و OPENAI_COMPATIBLE_BASE_URL.")
@@ -900,9 +906,10 @@ class PrivateAccountingModel:
         if private_answer:
             return private_answer
 
-        ollama_answer = self._answer_from_ollama(question, max_new_tokens=max_new_tokens)
-        if ollama_answer:
-            return ollama_answer
+        if not LOCAL_ANALYSIS_ONLY:
+            ollama_answer = self._answer_from_ollama(question, max_new_tokens=max_new_tokens)
+            if ollama_answer:
+                return ollama_answer
 
         if self.model is None or self.tokenizer is None:
             return (
@@ -1073,6 +1080,8 @@ def runtime_status() -> dict[str, Any]:
     return {
         "model": MODEL_NAME,
         "backend": AI_BACKEND,
+        "local_analysis_only": LOCAL_ANALYSIS_ONLY,
+        "open_web_search_enabled": ENABLE_OPEN_WEB_SEARCH,
         "ollama_model": OLLAMA_MODEL,
         "ollama_url": OLLAMA_BASE_URL,
         "openai_compatible_model": OPENAI_COMPATIBLE_MODEL,
