@@ -1565,7 +1565,39 @@ def _classify_question_intent(question):
     return "general"
 
 
+def _answer_core_for_confidence(answer=""):
+    text = (answer or "").strip()
+    style_markers = (
+        "الخلاصة مباشرة:",
+        "بصياغة عملية:",
+        "الجواب المختصر:",
+        "خلينا نرتبها بوضوح:",
+        "Here is the clean answer:",
+        "A practical way to read it:",
+        "Short version first:",
+        "Let me frame it clearly:",
+    )
+    for marker in style_markers:
+        if text.startswith(marker):
+            text = text[len(marker):].strip()
+            break
+    closer_markers = (
+        "لو تريد نتيجة أدق",
+        "أستطيع تحويلها إلى خطوات تنفيذية",
+        "للتوسع أكثر",
+        "Next, I can narrow this",
+        "For a sharper result",
+        "I can also turn this",
+    )
+    for marker in closer_markers:
+        index = text.find(marker)
+        if index > 0:
+            text = text[:index].strip()
+    return text
+
+
 def _answer_confidence_for_source(source, answer=""):
+    answer = _answer_core_for_confidence(answer)
     if source in {"accounting_data", "local_calculator", "permissions", "zatca_regulations"}:
         return "high"
     if source in {"free_web", "local_knowledge", "local", "local_strong"}:
@@ -1690,6 +1722,55 @@ def _quality_followups(question, primary=None):
     return unique[:4]
 
 
+def _style_variant_index(question="", buckets=4):
+    seed = f"{question}|{timezone.now().timestamp()}".encode("utf-8", errors="ignore")
+    return int(hashlib.sha256(seed).hexdigest()[:8], 16) % buckets
+
+
+def _vary_answer_style(text, question="", language="ar", primary=None):
+    stripped = (text or "").strip()
+    if not stripped:
+        return stripped
+    if any(marker in stripped[:160] for marker in ("تأكيد", "إلغاء", "لا أستطيع", "أعتذر بلطف", "Permission", "Confirm", "Cancel")):
+        return stripped
+    if len(stripped) > 1800:
+        return stripped
+
+    idx = _style_variant_index(question)
+    if language == "en":
+        intros = (
+            "Here is the clean answer:",
+            "A practical way to read it:",
+            "Short version first:",
+            "Let me frame it clearly:",
+        )
+        closers = (
+            "",
+            "\n\nNext, I can narrow this into numbers or actions if you give me the target period.",
+            "\n\nFor a sharper result, specify the branch, period, or report you want me to use.",
+            "\n\nI can also turn this into a step-by-step action plan inside the system.",
+        )
+    else:
+        intros = (
+            "الخلاصة مباشرة:",
+            "بصياغة عملية:",
+            "الجواب المختصر:",
+            "خلينا نرتبها بوضوح:",
+        )
+        closers = (
+            "",
+            "\n\nلو تريد نتيجة أدق، حدد الفترة أو الفرع أو التقرير المطلوب.",
+            "\n\nأستطيع تحويلها إلى خطوات تنفيذية داخل النظام عند الحاجة.",
+            "\n\nللتوسع أكثر، اسألني عن السبب أو الأثر المحاسبي أو الإجراء التالي.",
+        )
+
+    if not any(stripped.startswith(intro) for intro in intros) and not stripped.startswith(("-", "•")):
+        stripped = f"{intros[idx]}\n\n{stripped}"
+    if primary is None and closers[idx] and len(stripped) < 900 and closers[idx].strip() not in stripped:
+        stripped = f"{stripped.rstrip()}{closers[idx]}"
+    return stripped
+
+
 def _polish_answer(answer, question="", primary=None):
     text = _remove_performance_stage_directions(answer)
     language = _detect_user_language(question)
@@ -1719,7 +1800,7 @@ def _polish_answer(answer, question="", primary=None):
         followups = _quality_followups(question, primary)
         if followups:
             text += "\n\nالخطوة التالية المقترحة:\n" + "\n".join(f"- {item}" for item in followups[:2])
-    return text.strip()
+    return _vary_answer_style(text, question=question, language=language, primary=primary).strip()
 
 
 ISLAMIC_POLICY_TERMS = (

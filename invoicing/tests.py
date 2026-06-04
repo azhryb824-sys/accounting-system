@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from core.models import Branch, Company
 from invoicing.models import AIInteractionLearning, AIKnowledgeEntry, AIKnowledgeSource, Customer, Invoice, InvoiceItem, Item, PurchaseInvoice, PurchaseItem, Quote, QuoteItem, Supplier, Tax
-from invoicing.ai_services import analyze_and_route_user_request, answer_financial_question, handle_ai_management_command, normalize_user_question_text, record_ai_interaction_learning
+from invoicing.ai_services import _polish_answer, analyze_and_route_user_request, answer_financial_question, handle_ai_management_command, normalize_user_question_text, record_ai_interaction_learning
 from invoicing.purchase_views import post_purchase_invoice
 from invoicing.views import post_sales_invoice
 
@@ -735,6 +735,16 @@ class InvoiceAccountingTests(TestCase):
         self.assertEqual(result["source"], "free_web")
         self.assertIn("Web researched answer", result["answer"])
         web_answer.assert_called_once()
+
+    @patch("invoicing.ai_services._style_variant_index", side_effect=[0, 1])
+    def test_ai_varies_style_for_repeated_same_answer(self, variant_index):
+        first = _polish_answer("عدد الشركات المتاحة في حسابك: 1.", "كم عدد الشركات في حسابي؟")
+        second = _polish_answer("عدد الشركات المتاحة في حسابك: 1.", "كم عدد الشركات في حسابي؟")
+
+        self.assertNotEqual(first, second)
+        self.assertIn("عدد الشركات المتاحة", first)
+        self.assertIn("عدد الشركات المتاحة", second)
+        self.assertEqual(variant_index.call_count, 2)
 
     def test_sales_invoice_posts_once_and_reduces_inventory_once(self):
         customer = Customer.objects.create(name="Customer")
