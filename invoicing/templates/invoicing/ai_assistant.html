@@ -777,7 +777,7 @@
         return (answerBox.textContent || classicAnswerBox?.textContent || '').trim();
     }
 
-    async function runAssistant(command, autoNavigate = false, imagePayload = null) {
+    async function runAssistant(command, autoNavigate = false, imagePayload = null, inputSource = 'typed') {
         const value = (command || questionInput.value || '').trim();
         if (value) syncDialectWithText(value);
         const liveScreenPayload = imagePayload || (screenStream ? (buildScreenPayload() || latestScreenPayload) : null);
@@ -834,7 +834,8 @@
             questionInput.style.height = '';
             scrollChatToBottom();
             saveChatHistory();
-            if (liveConversationMode || autoSpeakToggle.checked) speak(dialectAnswer);
+            const shouldSpeakAutomatically = inputSource === 'voice' || inputSource === 'live';
+            if (shouldSpeakAutomatically && (liveConversationMode || autoSpeakToggle.checked)) speak(dialectAnswer);
             assistantIsProcessing = false;
 
             if (data.action && data.action.url) {
@@ -1041,7 +1042,7 @@
                 syncDialectWithText(normalizedTranscript);
                 lastFinalTranscript = normalizedTranscript;
                 const screenPayload = screenStream ? (refreshScreenContext() || latestScreenPayload) : null;
-                runAssistant(normalizedTranscript, false, screenPayload);
+                runAssistant(normalizedTranscript, false, screenPayload, liveConversationMode ? 'live' : 'voice');
             }
         };
 
