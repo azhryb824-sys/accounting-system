@@ -665,6 +665,11 @@ class InvoiceAccountingTests(TestCase):
         self.assertIn("arabic|عربي|العربية", template)
         self.assertIn("mediaUnavailableMessage", template)
         self.assertNotIn("const cleanText = improveSpeechText", template)
+        self.assertIn("pronounceArabicNumber", template)
+        self.assertIn("addArabicSpeechPauses", template)
+        self.assertIn("ضريبة القيمة المضافة", template)
+        self.assertIn("المعايير الدولية للتقرير المالي", template)
+        self.assertIn("واجهة برمجة التطبيقات", template)
 
     @patch("invoicing.ai_services.free_web_general_answer")
     @patch("invoicing.ai_services._model_answer_financial_question")

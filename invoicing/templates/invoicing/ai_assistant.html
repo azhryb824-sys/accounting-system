@@ -455,18 +455,55 @@
         return clean;
     }
 
-    function improveSpeechText(text) {
+    function pronounceArabicNumber(match) {
+        const value = Number(String(match).replace(/,/g, ''));
+        if (!Number.isFinite(value)) return match;
+        const common = {
+            0: 'صفر', 1: 'واحد', 2: 'اثنين', 3: 'ثلاثة', 4: 'أربعة', 5: 'خمسة',
+            6: 'ستة', 7: 'سبعة', 8: 'ثمانية', 9: 'تسعة', 10: 'عشرة',
+            15: 'خمسة عشر', 20: 'عشرون', 30: 'ثلاثون', 50: 'خمسون',
+            100: 'مئة', 500: 'خمسمئة', 1000: 'ألف',
+        };
+        if (common[value]) return common[value];
+        if (value >= 1000 && value <= 9999) return String(match).split('').join(' ');
+        return match;
+    }
+
+    function addArabicSpeechPauses(text) {
         return (text || '')
+            .replace(/\s*[:：]\s*/g, '. ')
+            .replace(/\s*[؛;]\s*/g, '. ')
+            .replace(/\s*[-–—]\s*/g, '، ')
+            .replace(/\s*[•]\s*/g, '. ')
+            .replace(/\s*(\d+(?:[.,]\d+)?)\s*%\s*/g, '$1 في المئة ')
+            .replace(/\b(\d+(?:[.,]\d+)?)\s*(?:SAR|ر\.س|ريال سعودي)\b/gi, '$1 ريال ')
+            .replace(/\b(\d+(?:[.,]\d+)?)\s*(?:kg|KG|كجم)\b/g, '$1 كيلو جرام ')
+            .replace(/\b(\d+(?:[.,]\d+)?)\s*(?:km|KM|كم)\b/g, '$1 كيلو متر ')
+            .replace(/\b(\d+(?:[.,]\d+)?)\s*(?:m|M|متر)\b/g, '$1 متر ');
+    }
+
+    function improveSpeechText(text) {
+        return addArabicSpeechPauses(text || '')
             .replace(/[()]/g, ' ')
             .replace(/[-–—]{2,}/g, ' ')
             .replace(/https?:\/\/\S+/g, 'رابط')
-            .replace(/\b\d{4,}\b/g, (match) => match.split('').join(' '))
+            .replace(/\b\d{1,4}\b/g, pronounceArabicNumber)
+            .replace(/\b\d{5,}\b/g, (match) => match.split('').join(' '))
             .replace(/[•â€¢*_`#>|[\]{}]/g, ' ')
             .replace(/\bSAR\b/gi, 'ريال')
             .replace(/\bVAT\b/gi, 'ضريبة القيمة المضافة')
             .replace(/\bPDF\b/gi, 'ملف بي دي إف')
             .replace(/\bOCR\b/gi, 'قراءة النص من الصورة')
             .replace(/\bAI\b/gi, 'الذكاء الاصطناعي')
+            .replace(/\bIFRS\b/gi, 'المعايير الدولية للتقرير المالي')
+            .replace(/\bPOS\b/gi, 'نقطة البيع')
+            .replace(/\bAPI\b/gi, 'واجهة برمجة التطبيقات')
+            .replace(/\bURL\b/gi, 'الرابط')
+            .replace(/\bHTML\b/gi, 'إتش تي إم إل')
+            .replace(/\bJSON\b/gi, 'جيسون')
+            .replace(/\bSQL\b/gi, 'إس كيو إل')
+            .replace(/\s+([،.؟!])/g, '$1')
+            .replace(/([،.؟!])(?=\S)/g, '$1 ')
             .replace(/\s+/g, ' ')
             .trim();
     }
@@ -633,8 +670,8 @@
                 utterance.lang = spokenLang;
                 setStatus('لم أجد صوتا عربيا مثبتا. ثبّت صوتا عربيا من إعدادات النظام أو المتصفح.');
             }
-            utterance.rate = Math.min(1.08, Number(voiceRate.value || 0.96));
-            utterance.pitch = 1.16;
+            utterance.rate = Math.min(1.02, Number(voiceRate.value || 0.92));
+            utterance.pitch = 1.04;
             utterance.volume = 1;
             utterance.onend = () => {
                 if (currentSpeechRunId !== speechRunId) return;
