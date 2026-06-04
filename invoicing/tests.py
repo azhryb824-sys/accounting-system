@@ -666,6 +666,8 @@ class InvoiceAccountingTests(TestCase):
         self.assertIn("mediaUnavailableMessage", template)
         self.assertNotIn("const cleanText = improveSpeechText", template)
         self.assertIn("pronounceArabicNumber", template)
+        self.assertIn("keepSpeechPhraseTogether", template)
+        self.assertIn("limitSpeechTextByWord", template)
         self.assertIn("addArabicSpeechPauses", template)
         self.assertIn("ضريبة القيمة المضافة", template)
         self.assertIn("المعايير الدولية للتقرير المالي", template)

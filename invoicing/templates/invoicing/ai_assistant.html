@@ -469,6 +469,25 @@
         return match;
     }
 
+    function keepSpeechPhraseTogether(text) {
+        const phrases = [
+            'بي دي إف',
+            'إس كيو إل',
+            'إتش تي إم إل',
+            'ضريبة القيمة المضافة',
+            'المعايير الدولية للتقرير المالي',
+            'واجهة برمجة التطبيقات',
+            'الذكاء الاصطناعي',
+            'نقطة البيع',
+            'قراءة النص من الصورة',
+        ];
+        let clean = text || '';
+        phrases.forEach((phrase) => {
+            clean = clean.replaceAll(phrase, phrase.replace(/\s+/g, '\u00A0'));
+        });
+        return clean;
+    }
+
     function addArabicSpeechPauses(text) {
         return (text || '')
             .replace(/\s*[:：]\s*/g, '. ')
@@ -483,7 +502,7 @@
     }
 
     function improveSpeechText(text) {
-        return addArabicSpeechPauses(text || '')
+        return keepSpeechPhraseTogether(addArabicSpeechPauses(text || '')
             .replace(/[()]/g, ' ')
             .replace(/[-–—]{2,}/g, ' ')
             .replace(/https?:\/\/\S+/g, 'رابط')
@@ -505,10 +524,22 @@
             .replace(/\s+([،.؟!])/g, '$1')
             .replace(/([،.؟!])(?=\S)/g, '$1 ')
             .replace(/\s+/g, ' ')
-            .trim();
+            .trim());
+    }
+
+    function limitSpeechTextByWord(text, maxLength = 1200) {
+        const clean = (text || '').trim();
+        if (clean.length <= maxLength) return clean;
+        const sentenceCut = clean.lastIndexOf('.', maxLength);
+        const questionCut = clean.lastIndexOf('؟', maxLength);
+        const commaCut = clean.lastIndexOf('،', maxLength);
+        const spaceCut = clean.lastIndexOf(' ', maxLength);
+        const cutAt = Math.max(sentenceCut, questionCut, commaCut, spaceCut);
+        return clean.slice(0, cutAt > 300 ? cutAt : maxLength).trim();
     }
 
     function splitSpeechChunks(text) {
+        const maxChunkLength = 210;
         const sentences = (text || '')
             .replace(/([.؟?!؛:])\s+/g, '$1|')
             .split('|')
@@ -516,18 +547,35 @@
             .filter(Boolean);
         const chunks = [];
         sentences.forEach((sentence) => {
-            if (sentence.length <= 180) {
+            if (sentence.length <= maxChunkLength) {
                 chunks.push(sentence);
                 return;
             }
-            const words = sentence.split(/\s+/);
+            const softParts = sentence
+                .replace(/([،])\s+/g, '$1|')
+                .split('|')
+                .map((part) => part.trim())
+                .filter(Boolean);
             let current = '';
-            words.forEach((word) => {
-                if ((current + ' ' + word).trim().length > 160) {
-                    if (current) chunks.push(current.trim());
-                    current = word;
+            softParts.forEach((part) => {
+                if ((current + ' ' + part).trim().length <= maxChunkLength) {
+                    current = `${current} ${part}`.trim();
                 } else {
-                    current = `${current} ${word}`.trim();
+                    if (current) chunks.push(current.trim());
+                    if (part.length <= maxChunkLength) {
+                        current = part;
+                    } else {
+                        const words = part.split(/\s+/);
+                        current = '';
+                        words.forEach((word) => {
+                            if ((current + ' ' + word).trim().length > 180) {
+                                if (current) chunks.push(current.trim());
+                                current = word;
+                            } else {
+                                current = `${current} ${word}`.trim();
+                            }
+                        });
+                    }
                 }
             });
             if (current) chunks.push(current.trim());
@@ -628,7 +676,7 @@
             resumeLiveConversation();
             return;
         }
-        const improvedText = improveSpeechText(normalizeDialectForSpeech(text)).slice(0, 900);
+        const improvedText = limitSpeechTextByWord(improveSpeechText(normalizeDialectForSpeech(text)), 1200);
         const speechChunks = splitSpeechChunks(improvedText);
         if (!speechChunks.length) return;
         lastSpokenText = improvedText;
