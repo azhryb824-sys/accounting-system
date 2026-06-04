@@ -375,6 +375,13 @@ class InvoiceAccountingTests(TestCase):
 
         self.assertTrue(AIKnowledgeSource.objects.filter(url="app://curated-ai-training").exists())
         self.assertTrue(AIKnowledgeEntry.objects.filter(title="متى يستخدم المساعد البحث في النت").exists())
+        self.assertTrue(AIKnowledgeEntry.objects.filter(title="تدريب الرياضيات").exists())
+        self.assertTrue(AIKnowledgeEntry.objects.filter(title="تدريب اللغة العربية").exists())
+        self.assertTrue(AIKnowledgeEntry.objects.filter(title="تدريب اللغة الإنجليزية").exists())
+        self.assertTrue(AIKnowledgeEntry.objects.filter(title="تدريب علوم الفلك").exists())
+        self.assertTrue(AIKnowledgeEntry.objects.filter(title="تدريب الهندسة").exists())
+        self.assertTrue(AIKnowledgeEntry.objects.filter(title="تدريب العلوم المحاسبية").exists())
+        self.assertTrue(AIKnowledgeEntry.objects.filter(title="تدريب الفيزياء").exists())
         result = answer_financial_question(self.branch.id, "متى تبحث في النت؟", user=self.user)
         self.assertEqual(result["source"], "local_knowledge")
         self.assertIn("المصادر المفتوحة", result["answer"])
