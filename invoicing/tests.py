@@ -108,6 +108,17 @@ class InvoiceAccountingTests(TestCase):
         self.assertIn("S-DETAIL-1", result["answer"])
         self.assertIn("115.00", result["answer"])
 
+    def test_ai_answers_user_company_count_from_system_data(self):
+        Company.objects.create(name="Second Co", unified_number="201")
+
+        result = answer_financial_question(self.branch.id, "كم عدد الشركات في حسابي", user=self.user)
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "accounting_data")
+        self.assertIn("عدد الشركات المتاحة في حسابك", result["answer"])
+        self.assertIn("2", result["answer"])
+        self.assertIn("ليست من الإنترنت", result["answer"])
+
     def test_ai_pos_checkout_requires_confirmation_then_posts_accounting(self):
         draft = analyze_and_route_user_request(self.branch.id, "بيع 2 Item كاشير", user=self.user)
 

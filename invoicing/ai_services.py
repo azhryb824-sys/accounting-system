@@ -17,6 +17,7 @@ from django.db.models.functions import Coalesce
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
+from core.access import user_companies
 from core.models import Branch, Employee, EmployeeAdvance, JournalEntry, JournalEntryLine, SalaryRecord
 from .models import AIInteractionLearning, AIKnowledgeEntry, AIKnowledgeSource, Customer, Invoice, InvoiceItem, Item, PurchaseInvoice, PurchaseItem, Quote, QuoteItem, Supplier, Tax
 from .zatca import prepare_zatca_payload
@@ -1153,9 +1154,46 @@ def _answer_invoice_details(branch_id, question, user):
     return ""
 
 
+def _answer_account_scope_question(branch_id, question, user=None):
+    normalized = (question or "").strip().lower()
+    asks_company_scope = any(term in normalized for term in (
+        "كم عدد الشركات", "عدد الشركات", "شركاتي", "الشركات في حسابي", "شركات في حسابي",
+        "الشركات عندي", "الشركات لدي", "my companies", "company count",
+    ))
+    asks_branch_scope = any(term in normalized for term in (
+        "كم عدد الفروع", "عدد الفروع", "فروعي", "الفروع في حسابي", "فروع في حسابي",
+        "branches count", "my branches",
+    ))
+    if not asks_company_scope and not asks_branch_scope:
+        return ""
+    if not getattr(user, "is_authenticated", False):
+        return "لا أستطيع معرفة الشركات أو الفروع قبل تسجيل الدخول."
+
+    companies = user_companies(user).order_by("name")
+    branches = Branch.objects.filter(company__in=companies, is_active=True).select_related("company").order_by("company__name", "name")
+    current_branch = Branch.objects.filter(id=branch_id).select_related("company").first() if branch_id else None
+
+    lines = ["هذه المعلومة من بيانات النظام وليست من الإنترنت:"]
+    if asks_company_scope:
+        lines.append(f"- عدد الشركات المتاحة في حسابك: {companies.count()}.")
+        company_names = list(companies.values_list("name", flat=True)[:5])
+        if company_names:
+            lines.append("- أمثلة: " + "، ".join(company_names) + ("..." if companies.count() > 5 else "."))
+    if asks_branch_scope:
+        lines.append(f"- عدد الفروع المتاحة في حسابك: {branches.count()}.")
+    if current_branch:
+        lines.append(f"- الفرع المحدد الآن: {current_branch.company.name} / {current_branch.name}.")
+    lines.append("يمكنك تغيير الشركة أو الفرع من صفحة اختيار الشركة والفرع.")
+    return "\n".join(lines)
+
+
 def _answer_precise_accounting_question(branch_id, question, user=None):
     normalized = (question or "").lower()
     start, end = _date_range_from_question(question)
+
+    account_scope = _answer_account_scope_question(branch_id, question, user=user)
+    if account_scope:
+        return account_scope
 
     invoice_details = _answer_invoice_details(branch_id, question, user)
     if invoice_details:
@@ -1898,8 +1936,12 @@ SYSTEM_OR_COMPANY_TERMS = (
     "تقرير",
     "تقارير",
     "الشركة",
+    "الشركات",
     "شركتي",
+    "شركاتي",
     "فرع",
+    "الفروع",
+    "فروعي",
     "النظام",
     "المحاسبة",
     "محاسبي",
@@ -1918,8 +1960,12 @@ SYSTEM_OR_COMPANY_TERMS = (
 COMPANY_DATA_TERMS = (
     "شركتي",
     "الشركة",
+    "شركاتي",
+    "الشركات",
     "فرعي",
     "الفرع",
+    "فروعي",
+    "الفروع",
     "فواتيري",
     "فاتورتي",
     "عملائي",
