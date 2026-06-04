@@ -3,8 +3,12 @@ services:
     name: accounting-ai-service
     env: docker
     rootDir: accounting_ai_service
+    dockerfilePath: ./Dockerfile
+    dockerCommand: sh render-start.sh
     healthCheckPath: /health
     envVars:
+      - key: PORT
+        value: "10000"
       - key: ACCOUNTING_AI_BACKEND
         value: auto
       - key: REQUIRE_LOCAL_MODEL
