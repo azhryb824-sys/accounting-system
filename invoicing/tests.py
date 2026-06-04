@@ -674,6 +674,35 @@ class InvoiceAccountingTests(TestCase):
         self.assertIn("تحليل الشاشة/الصورة", sent_command)
         self.assertIn("تظهر فاتورة بيع", sent_command)
 
+    def test_ai_assistant_page_allows_superuser_without_branch(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get("/invoicing/purchases/ai/assistant/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "المحادثة")
+
+    @patch("invoicing.purchase_views.answer_financial_question")
+    def test_ai_assistant_command_allows_superuser_without_branch(self, answer_question):
+        self.client.force_login(self.user)
+        answer_question.return_value = {
+            "ok": True,
+            "source": "accounting_data",
+            "answer": "عدد الشركات المتاحة في حسابك: 1.",
+            "context": {},
+        }
+
+        response = self.client.post(
+            "/invoicing/purchases/ai/assistant/command/",
+            data=json.dumps({"command": "كم عدد الشركات في حسابي؟"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["ok"])
+        answer_question.assert_called_once()
+        self.assertIsNone(answer_question.call_args.args[0])
+
     def test_ai_assistant_template_has_valid_voice_patterns(self):
         template = Path("invoicing/templates/invoicing/ai_assistant.html").read_text(encoding="utf-8")
 

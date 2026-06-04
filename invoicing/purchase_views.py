@@ -1,4 +1,5 @@
 import json
+import logging
 
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
@@ -11,12 +12,28 @@ from .models import PurchaseInvoice, PurchaseItem, Supplier, Item, StockMovement
 from .forms import PurchaseInvoiceForm, ItemForm, AIInvoiceUploadForm
 from .ai_services import ai_configuration_status, analyze_and_route_user_request, answer_financial_question, command_from_camera_image, extract_invoice_from_image, generate_financial_insights, match_invoice_items, record_ai_interaction_learning
 from django.utils.translation import gettext_lazy as _
-from accounts.views import role_required
+from accounts.views import is_primary_admin, role_required
 from core.models import Branch
 from core.services.accounting import create_balanced_entry
 from core.services.monthly_close import assert_month_open
 from decimal import Decimal
 from datetime import date
+
+
+logger = logging.getLogger(__name__)
+
+
+def _assistant_without_branch_allowed(user):
+    return bool(user and user.is_authenticated and (user.is_superuser or is_primary_admin(user)))
+
+
+def _empty_assistant_insights(message="اختر شركة وفرعا لعرض التحليل المالي التفصيلي."):
+    return {
+        "ok": True,
+        "source": "system_scope",
+        "context": {},
+        "tips": [message],
+    }
 
 
 def post_purchase_invoice(invoice):
@@ -265,6 +282,16 @@ def ai_invoice_import(request):
 def ai_insights(request):
     branch_id = request.session.get('branch_id')
     if not branch_id:
+        if _assistant_without_branch_allowed(request.user):
+            insights = _empty_assistant_insights("أنت تستخدم النظام بصلاحية المشرف الرئيسي. اختر شركة وفرعا عند الحاجة لتحليل مالي تفصيلي.")
+            return render(request, 'invoicing/ai_insights.html', {
+                "title": "نصائح وتوقعات الذكاء الاصطناعي",
+                "tips": insights.get("tips", []),
+                "insights": insights,
+                "purchases": [],
+                "low_stock": 0,
+                "ai_status": ai_configuration_status(),
+            })
         return redirect("select_company_branch")
     low_stock = Item.objects.filter(branch_id=branch_id, quantity__lte=F("min_quantity"), is_active=True).count()
     purchases = PurchaseInvoice.objects.filter(branch_id=branch_id).order_by("-issue_date")[:5]
@@ -283,15 +310,32 @@ def ai_insights(request):
 @role_required('view_ai_insights')
 def ai_assistant(request):
     branch_id = request.session.get('branch_id')
-    if not branch_id:
+    without_branch_allowed = _assistant_without_branch_allowed(request.user)
+    if not branch_id and not without_branch_allowed:
         return redirect("select_company_branch")
     answer = None
     question = ""
-    insights = generate_financial_insights(branch_id, user=request.user)
+    if branch_id:
+        try:
+            insights = generate_financial_insights(branch_id, user=request.user)
+        except Exception:
+            logger.exception("AI assistant insights failed")
+            insights = _empty_assistant_insights("تعذر تجهيز التحليل المالي الآن. يمكنك متابعة المحادثة أو اختيار فرع آخر.")
+    else:
+        insights = _empty_assistant_insights("أنت داخل نطاق المشرف الرئيسي. يمكنني الإجابة عن أسئلة النظام والحساب والمعرفة العامة، وللتحليل المالي التفصيلي اختر شركة وفرعا.")
     if request.method == "POST":
         question = (request.POST.get("question") or "").strip()
         if question:
-            answer = answer_financial_question(branch_id, question, user=request.user)
+            try:
+                answer = answer_financial_question(branch_id, question, user=request.user)
+            except Exception:
+                logger.exception("AI assistant page answer failed")
+                answer = {
+                    "ok": True,
+                    "source": "safe_fallback",
+                    "answer": "تعذر تجهيز الإجابة الكاملة الآن. أعد صياغة السؤال أو اختر شركة وفرعا إذا كان السؤال مرتبطا ببيانات مالية.",
+                    "context": {},
+                }
         else:
             messages.warning(request, "اكتب سؤالك أولاً.")
     return render(request, "invoicing/ai_assistant.html", {
@@ -309,7 +353,8 @@ def ai_assistant(request):
 def ai_assistant_command(request):
     branch_id = request.session.get('branch_id')
     if not branch_id:
-        return JsonResponse({"ok": False, "message": "اختر الشركة والفرع أولا."}, status=400)
+        if not _assistant_without_branch_allowed(request.user):
+            return JsonResponse({"ok": False, "message": "اختر الشركة والفرع أولا."}, status=400, json_dumps_params={"ensure_ascii": False})
 
     try:
         payload = json.loads(request.body.decode("utf-8") or "{}")
@@ -335,8 +380,28 @@ def ai_assistant_command(request):
 
     request.user._ai_company_id = request.session.get("company_id")
     pending = request.session.get("ai_pending_command")
-    result = analyze_and_route_user_request(branch_id, command, pending=pending, user=request.user)
-    record_ai_interaction_learning(branch_id, request.user, command, result)
+    try:
+        if not branch_id:
+            result = answer_financial_question(branch_id, command, user=request.user)
+            result.setdefault("action", {"type": "answer", "title": "", "url": "", "auto_open": False})
+            result.setdefault("suggestions", [])
+            result.setdefault("followups", ["اختر شركة وفرعا للتحليل المالي", "كم عدد الشركات في حسابي؟", "اشرح لي القيد المحاسبي"])
+            result.setdefault("pending", None)
+        else:
+            result = analyze_and_route_user_request(branch_id, command, pending=pending, user=request.user)
+        record_ai_interaction_learning(branch_id, request.user, command, result)
+    except Exception:
+        logger.exception("AI assistant command failed")
+        result = {
+            "ok": True,
+            "answer": "تعذر تنفيذ الطلب الآن. إن كان السؤال مرتبطا ببيانات مالية فاختر شركة وفرعا، وإن كان سؤالا عاما فأعد صياغته باختصار.",
+            "source": "safe_fallback",
+            "pending": None,
+            "action": {"type": "answer", "title": "", "url": "", "auto_open": False},
+            "suggestions": [],
+            "followups": ["اختر شركة وفرعا", "حلل الوضع المالي", "كم عدد الشركات في حسابي؟"],
+            "context": {},
+        }
     if image_base64:
         result["camera_command"] = visual_command or command
     if result.get("pending"):
