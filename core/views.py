@@ -25,11 +25,20 @@ APP_VERSION = "2026-06-04-dashboard-500-fix"
 
 
 def health_version(request):
+    db_status = "ok"
+    db_error = ""
+    try:
+        Company.objects.count()
+    except Exception as exc:
+        db_status = "error"
+        db_error = str(exc)[:300]
     return JsonResponse({
         "version": APP_VERSION,
         "company_add_plan_fix": True,
         "dashboard_account_count_fix": True,
         "ai_training_entries": 39,
+        "database": db_status,
+        "database_error": db_error,
     })
 
 

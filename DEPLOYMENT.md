@@ -6,6 +6,13 @@ Run these commands on the production server after pulling the latest code:
 python manage.py migrate
 python manage.py collectstatic --noinput
 python manage.py update_ai_knowledge
+python manage.py seed_ai_training
+```
+
+Recommended Render start command for the Django web service:
+
+```bash
+sh render-start.sh
 ```
 
 Recommended environment variables:
