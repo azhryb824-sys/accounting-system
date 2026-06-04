@@ -125,6 +125,23 @@ class DashboardAccessTests(TestCase):
 
         self.assertRedirects(response, reverse("company_access"))
 
+    def test_dashboard_with_selected_branch_does_not_filter_accounts_by_company(self):
+        user = User.objects.create_superuser(username="scoped-admin", password="pass")
+        company = Company.objects.create(name="Scoped Co", unified_number="300")
+        branch = Branch.objects.create(company=company, name="Main")
+        session = self.client.session
+        session["company_id"] = company.id
+        session["company_name"] = company.name
+        session["branch_id"] = branch.id
+        session["branch_name"] = branch.name
+        session.save()
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["accounts_count"], 0)
+
 
 class CompanyBranchButtonsTests(TestCase):
     def setUp(self):

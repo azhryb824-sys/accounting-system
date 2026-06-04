@@ -62,7 +62,7 @@ def dashboard(request):
     can_view_account = user_has_business_permission(request.user, 'view_account', company)
     can_view_journal = user_has_business_permission(request.user, 'view_journalentry', company)
     context = {
-        "accounts_count": Account.objects.filter(company_id=request.session.get('company_id')).count() if can_view_account else 0,
+        "accounts_count": Account.objects.count() if can_view_account else 0,
         "entries_count": JournalEntry.objects.filter(branch_id=branch_id).count() if can_view_journal else 0,
         "branch_name": request.session.get("branch_name"),
         "company_name": request.session.get("company_name"),
