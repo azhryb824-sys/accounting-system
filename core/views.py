@@ -21,13 +21,15 @@ from accounts.forms import UserRegistrationForm
 from accounts.models import Role, SubscriptionRequest, UserProfile
 from accounts.views import is_primary_admin, role_required, user_has_business_permission
 
-APP_VERSION = "2026-05-21-company-plan-fix-2"
+APP_VERSION = "2026-06-04-dashboard-500-fix"
 
 
 def health_version(request):
     return JsonResponse({
         "version": APP_VERSION,
         "company_add_plan_fix": True,
+        "dashboard_account_count_fix": True,
+        "ai_training_entries": 39,
     })
 
 
