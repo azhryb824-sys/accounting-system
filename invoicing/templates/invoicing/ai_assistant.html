@@ -542,8 +542,19 @@
             .replace(/\bالجمعة\b/g, 'الجُمُعَةُ');
     }
 
+    function normalizeArabicProsodyForSpeech(text) {
+        return (text || '')
+            .replace(/\b(لكن|لٰكِنَّ|لذلك|ثم|بعد ذلك|أيضا|أولاً|ثانيا|ثالثا)\b/g, '، $1،')
+            .replace(/\b(الخلاصة|الجواب المختصر|بصياغة عملية|تنبيه مهني|ملاحظة جودة)\b/g, '$1. ')
+            .replace(/\s*([.؟!])\s*/g, '$1 ')
+            .replace(/\s*،\s*/g, '، ')
+            .replace(/،\s*،+/g, '، ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
     function improveSpeechText(text) {
-        return keepSpeechPhraseTogether(applyArabicCaseForSpeech(addArabicSpeechPauses(text || '')
+        return keepSpeechPhraseTogether(normalizeArabicProsodyForSpeech(applyArabicCaseForSpeech(addArabicSpeechPauses(text || '')
             .replace(/[()]/g, ' ')
             .replace(/[-–—]{2,}/g, ' ')
             .replace(/https?:\/\/\S+/g, 'رابط')
@@ -565,7 +576,7 @@
             .replace(/\s+([،.؟!])/g, '$1')
             .replace(/([،.؟!])(?=\S)/g, '$1 ')
             .replace(/\s+/g, ' ')
-            .trim()));
+            .trim())));
     }
 
     function limitSpeechTextByWord(text, maxLength = 1200) {
@@ -580,7 +591,7 @@
     }
 
     function splitSpeechChunks(text) {
-        const maxChunkLength = 210;
+        const maxChunkLength = 170;
         const sentences = (text || '')
             .replace(/([.؟?!؛:])\s+/g, '$1|')
             .split('|')
@@ -732,6 +743,18 @@
         const hasUrduText = selectedDialect() === 'ur-PK' || (/[\u0600-\u06FF]/.test(improvedText) && /[پچژگٹڈڑںے]/.test(improvedText));
         const hasBanglaText = /[\u0980-\u09FF]/.test(improvedText);
         let speechIndex = 0;
+        function speechProsodyForChunk(chunk) {
+            const cleanChunk = chunk || '';
+            const baseRate = Math.min(0.98, Number(voiceRate.value || 0.9));
+            const isQuestion = /[؟?]\s*$/.test(cleanChunk);
+            const isShort = cleanChunk.length < 70;
+            const isLong = cleanChunk.length > 150;
+            return {
+                rate: Math.max(0.82, Math.min(0.98, baseRate + (isShort ? 0.02 : 0) - (isLong ? 0.04 : 0))),
+                pitch: Math.max(0.96, Math.min(1.08, 1.0 + (isQuestion ? 0.05 : 0) - (isLong ? 0.02 : 0))),
+                pause: isQuestion ? 240 : (isLong ? 230 : 170),
+            };
+        }
         const finishSpeech = () => {
             if (currentSpeechRunId !== speechRunId) return;
             assistantIsSpeaking = false;
@@ -759,13 +782,14 @@
                 utterance.lang = spokenLang;
                 setStatus('لم أجد صوتا عربيا مثبتا. ثبّت صوتا عربيا من إعدادات النظام أو المتصفح.');
             }
-            utterance.rate = Math.min(1.02, Number(voiceRate.value || 0.92));
-            utterance.pitch = 1.04;
+            const prosody = speechProsodyForChunk(speechChunks[speechIndex]);
+            utterance.rate = prosody.rate;
+            utterance.pitch = prosody.pitch;
             utterance.volume = 1;
             utterance.onend = () => {
                 if (currentSpeechRunId !== speechRunId) return;
                 speechIndex += 1;
-                window.setTimeout(playChunk, 180);
+                window.setTimeout(playChunk, prosody.pause);
             };
             utterance.onerror = finishSpeech;
             window.speechSynthesis.speak(utterance);
