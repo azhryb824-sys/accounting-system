@@ -508,8 +508,42 @@
             .replace(/\b(\d+(?:[.,]\d+)?)\s*(?:m|M|متر)\b/g, '$1 متر ');
     }
 
+    function applyArabicCaseForSpeech(text) {
+        return (text || '')
+            .replace(/\bهذا\b/g, 'هٰذا')
+            .replace(/\bهذه\b/g, 'هٰذِهِ')
+            .replace(/\bذلك\b/g, 'ذٰلِكَ')
+            .replace(/\bلكن\b/g, 'لٰكِنَّ')
+            .replace(/\bإن\b/g, 'إِنَّ')
+            .replace(/\bأن\b/g, 'أَنَّ')
+            .replace(/\bعدد أيام الأسبوع\b/g, 'عَدَدُ أَيَّامِ الأُسْبُوعِ')
+            .replace(/\bأيام الأسبوع\b/g, 'أَيَّامُ الأُسْبُوعِ')
+            .replace(/\bضريبة القيمة المضافة\b/g, 'ضَرِيبَةُ القِيمَةِ المُضَافَةِ')
+            .replace(/\bهيئة الزكاة والضريبة والجمارك\b/g, 'هَيْئَةُ الزَّكَاةِ وَالضَّرِيبَةِ وَالجَمَارِكِ')
+            .replace(/\bالمعايير الدولية للتقرير المالي\b/g, 'المَعَايِيرُ الدَّوْلِيَّةُ لِلتَّقْرِيرِ المَالِيِّ')
+            .replace(/\bالقيد المحاسبي\b/g, 'القَيْدُ المُحَاسَبِيُّ')
+            .replace(/\bالذكاء الاصطناعي\b/g, 'الذَّكَاءُ الاِصْطِنَاعِيُّ')
+            .replace(/\bالبيانات المتاحة\b/g, 'البَيَانَاتُ المُتَاحَةُ')
+            .replace(/\bالخطوة التالية\b/g, 'الخُطْوَةُ التَّالِيَةُ')
+            .replace(/\bإجمالي\b/g, 'إِجْمَالِيُّ')
+            .replace(/\bالإجمالي\b/g, 'الإِجْمَالِيُّ')
+            .replace(/\bالفرع\b/g, 'الفَرْعُ')
+            .replace(/\bالنظام\b/g, 'النِّظَامُ')
+            .replace(/\bالمستخدم\b/g, 'المُسْتَخْدِمُ')
+            .replace(/\bالمبيعات\b/g, 'المَبِيعَاتُ')
+            .replace(/\bالمشتريات\b/g, 'المُشْتَرَيَاتُ')
+            .replace(/\bالمخزون\b/g, 'المَخْزُونُ')
+            .replace(/\bالسبت\b/g, 'السَّبْتُ')
+            .replace(/\bالأحد\b/g, 'الأَحَدُ')
+            .replace(/\bالاثنين\b/g, 'الاِثْنَيْنِ')
+            .replace(/\bالثلاثاء\b/g, 'الثُّلَاثَاءُ')
+            .replace(/\bالأربعاء\b/g, 'الأَرْبِعَاءُ')
+            .replace(/\bالخميس\b/g, 'الخَمِيسُ')
+            .replace(/\bالجمعة\b/g, 'الجُمُعَةُ');
+    }
+
     function improveSpeechText(text) {
-        return keepSpeechPhraseTogether(addArabicSpeechPauses(text || '')
+        return keepSpeechPhraseTogether(applyArabicCaseForSpeech(addArabicSpeechPauses(text || '')
             .replace(/[()]/g, ' ')
             .replace(/[-–—]{2,}/g, ' ')
             .replace(/https?:\/\/\S+/g, 'رابط')
@@ -531,7 +565,7 @@
             .replace(/\s+([،.؟!])/g, '$1')
             .replace(/([،.؟!])(?=\S)/g, '$1 ')
             .replace(/\s+/g, ' ')
-            .trim());
+            .trim()));
     }
 
     function limitSpeechTextByWord(text, maxLength = 1200) {
