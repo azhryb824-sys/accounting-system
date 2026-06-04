@@ -117,7 +117,7 @@ class InvoiceAccountingTests(TestCase):
         self.assertEqual(result["source"], "accounting_data")
         self.assertIn("عدد الشركات المتاحة في حسابك", result["answer"])
         self.assertIn("2", result["answer"])
-        self.assertIn("ليست من الإنترنت", result["answer"])
+        self.assertIn("هذه المعلومة من بيانات النظام", result["answer"])
 
     def test_ai_pos_checkout_requires_confirmation_then_posts_accounting(self):
         draft = analyze_and_route_user_request(self.branch.id, "بيع 2 Item كاشير", user=self.user)
@@ -215,11 +215,12 @@ class InvoiceAccountingTests(TestCase):
 
         self.assertTrue(result["ok"])
         self.assertEqual(result["source"], "free_web")
-        self.assertIn("Wikipedia", result["answer"])
-        self.assertIn("OpenAlex", result["answer"])
-        self.assertIn("CC0", result["answer"])
-        self.assertIn("تحليل المعلومات", result["answer"])
-        self.assertIn("موثوقية", result["answer"])
+        self.assertIn("IFRS", result["answer"])
+        self.assertIn("https://example.com/openalex-ifrs", result["answer"])
+        self.assertNotIn("بحثت", result["answer"])
+        self.assertNotIn("CC0", result["answer"])
+        self.assertIn("توضيح مهني", result["answer"])
+        self.assertIn("درجة الاعتماد", result["answer"])
 
     @patch("invoicing.ai_services._openalex_research")
     @patch("invoicing.ai_services._wikidata_facts")
@@ -241,7 +242,8 @@ class InvoiceAccountingTests(TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(result["source"], "free_web")
         self.assertIn("Photosynthesis", result["answer"])
-        self.assertIn("Wikipedia", result["answer"])
+        self.assertIn("https://example.com/photosynthesis", result["answer"])
+        self.assertNotIn("Wikipedia", result["answer"])
         self.assertNotIn("الخطوة التالية المقترحة", result["answer"])
 
     @patch("invoicing.ai_services._openalex_research")
@@ -276,10 +278,11 @@ class InvoiceAccountingTests(TestCase):
 
         self.assertTrue(result["ok"])
         self.assertEqual(result["source"], "free_web")
-        self.assertIn("الخلاصة المباشرة", result["answer"])
-        self.assertIn("تحليل المعلومات", result["answer"])
-        self.assertIn("المصادر والتراخيص", result["answer"])
-        self.assertIn("DuckDuckGo Web Search", result["answer"])
+        self.assertIn("الخلاصة", result["answer"])
+        self.assertIn("توضيح مهني", result["answer"])
+        self.assertIn("مراجع مختصرة للتحقق", result["answer"])
+        self.assertNotIn("بحثت", result["answer"])
+        self.assertNotIn("المصادر والتراخيص", result["answer"])
 
     @patch("invoicing.ai_services._openalex_research")
     @patch("invoicing.ai_services._wikidata_facts")
@@ -300,7 +303,8 @@ class InvoiceAccountingTests(TestCase):
 
         self.assertTrue(result["ok"])
         self.assertEqual(result["source"], "free_web")
-        self.assertIn("معلومة حديثة أو متغيرة", result["answer"])
+        self.assertIn("حديثا أو سريع التغير", result["answer"])
+        self.assertIn("الجهة الرسمية الأحدث", result["answer"])
 
     def test_ai_quote_draft_has_single_confirmation_instruction(self):
         result = analyze_and_route_user_request(self.branch.id, "أنشئ عرض سعر للعميل أحمد 2 Item", user=self.user)
@@ -330,7 +334,8 @@ class InvoiceAccountingTests(TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(result["source"], "local_knowledge")
         self.assertIn("Inventory turnover", result["answer"])
-        self.assertIn("https://example.com/inventory-turnover", result["answer"])
+        self.assertIn("وفق المعرفة المتاحة داخل النظام", result["answer"])
+        self.assertNotIn("https://example.com/inventory-turnover", result["answer"])
 
     def test_ai_remembers_explicit_user_information(self):
         result = {"source": "local", "answer": "تم"}

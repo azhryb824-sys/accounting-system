@@ -1173,7 +1173,7 @@ def _answer_account_scope_question(branch_id, question, user=None):
     branches = Branch.objects.filter(company__in=companies, is_active=True).select_related("company").order_by("company__name", "name")
     current_branch = Branch.objects.filter(id=branch_id).select_related("company").first() if branch_id else None
 
-    lines = ["هذه المعلومة من بيانات النظام وليست من الإنترنت:"]
+    lines = ["هذه المعلومة من بيانات النظام:"]
     if asks_company_scope:
         lines.append(f"- عدد الشركات المتاحة في حسابك: {companies.count()}.")
         company_names = list(companies.values_list("name", flat=True)[:5])
@@ -2101,11 +2101,10 @@ def local_knowledge_answer(question, user=None, branch_id=None):
     entries = search_local_knowledge_entries(question, user=user, branch_id=branch_id)
     if not entries:
         return ""
-    lines = ["استفدت من قاعدة المعرفة المحدثة تلقائيا داخل النظام:"]
+    lines = ["وفق المعرفة المتاحة داخل النظام:"]
     for entry in entries:
-        source_label = "ذاكرة المستخدم" if entry.source_url == "app://user-memory" else f"المصدر: {entry.source_url}"
-        lines.append(f"- {entry.title}: {entry.summary} {source_label}")
-    lines.append("تنبيه: هذه المعرفة مساعدة، وعند القرارات النظامية أو المالية راجع المصدر الرسمي الأحدث.")
+        lines.append(f"- {entry.title}: {entry.summary}")
+    lines.append("ملاحظة مهنية: عند القرارات النظامية أو المالية الحساسة، راجع النص الرسمي الأحدث.")
     return "\n".join(lines)
 
 
@@ -2537,35 +2536,38 @@ def _synthesize_free_web_answer(question, sources):
     )
     primary = ranked_sources[0]
     answer_lines = [
-        "بحثت في مصادر مفتوحة، ودرّبت الإجابة هنا على الفصل بين الخلاصة والتحليل والمصادر:",
-        "",
-        "الخلاصة المباشرة:",
+        "الخلاصة:",
     ]
     if primary.get("extract"):
         answer_lines.append(f"- {primary['extract']}")
     else:
-        answer_lines.append("- وجدت مصادر مرتبطة بالسؤال، لكن الخلاصة النصية المتاحة محدودة.")
+        answer_lines.append("- المعلومة المتاحة محدودة، لذلك الأفضل تضييق السؤال أو الرجوع لجهة رسمية متخصصة.")
     if len(ranked_sources) > 1:
-        answer_lines.extend(["", "تحليل المعلومات:", "- اعتمدت على المصدر الأعلى صلة كخلاصة أولى، ثم قارنت مع مصادر داعمة لتقليل احتمال الإجابة المنفصلة عن السؤال."])
+        answer_lines.extend(["", "توضيح مهني:", "- تمت موازنة أكثر من نتيجة مرتبطة بالسؤال لتقليل الاعتماد على خلاصة منفردة أو غير مكتملة."])
         if any((source.get("source_name") or "").lower() == "openalex" for source in ranked_sources):
-            answer_lines.append("- وجود مراجع من OpenAlex يعني أن هناك أساسا بحثيا أو أكاديميا يمكن الرجوع إليه، لكنه لا يغني عن قراءة الدراسة الأصلية عند القرارات المهمة.")
-        answer_lines.append("- مصادر داعمة:")
+            answer_lines.append("- توجد إشارات بحثية أو أكاديمية مرتبطة بالموضوع؛ عند قرار مهم اقرأ المرجع الأصلي أو المصدر الرسمي.")
+        answer_lines.append("- نقاط داعمة مختصرة:")
         for source in ranked_sources[1:4]:
             title = source.get("title") or source.get("source_name")
             extract = source.get("extract") or ""
             score = _source_reliability_score(source)
-            answer_lines.append(f"  - {title}: {extract} موثوقية: {_source_reliability_label(score)}.")
+            answer_lines.append(f"  - {title}: {extract} درجة الاعتماد: {_source_reliability_label(score)}.")
     answer_lines.append("")
     if current_warning:
-        answer_lines.append("ملاحظة دقة: سؤالك يبدو مرتبطا بمعلومة حديثة أو متغيرة؛ راجع المصدر الرسمي الأحدث قبل اتخاذ قرار.")
+        answer_lines.append("تنبيه مهني: الموضوع يبدو حديثا أو سريع التغير؛ اعتمد على الجهة الرسمية الأحدث قبل اتخاذ قرار.")
     else:
-        answer_lines.append("ملاحظة دقة: هذه خلاصة مبنية على المصادر المفتوحة المتاحة، وليست بديلا عن المصدر الرسمي أو المرجع الأصلي عند القرارات الحساسة.")
-    answer_lines.append("")
-    answer_lines.append("المصادر والتراخيص:")
-    for source in ranked_sources[:5]:
+        answer_lines.append("تنبيه مهني: هذه خلاصة مساعدة وليست بديلا عن المرجع الرسمي عند القرارات الحساسة.")
+
+    references = []
+    for source in ranked_sources[:3]:
         url = source.get("source_url") or ""
-        score = _source_reliability_score(source)
-        answer_lines.append(f"- {source.get('source_name')}: {source.get('title')} {url} | {source.get('license')} | موثوقية: {_source_reliability_label(score)}")
+        title = source.get("title") or source.get("source_name") or ""
+        if url and url.startswith("http"):
+            references.append(f"{title}: {url}")
+    if references:
+        answer_lines.append("")
+        answer_lines.append("مراجع مختصرة للتحقق:")
+        answer_lines.extend(f"- {item}" for item in references)
     return "\n".join(answer_lines).strip()
 
 
