@@ -1453,6 +1453,9 @@ def local_greeting_or_concept_answer(question):
     normalized = (question or "").strip().lower()
     if _detect_user_language(question) == "en" and normalized in {"hello", "hi", "hey"}:
         return "Hello. I am your accounting assistant inside the system. I can help with invoices, journal entries, payroll, advances, reports, system navigation, and accounting explanations."
+    simple_fact = _simple_general_fact_answer(question)
+    if simple_fact:
+        return simple_fact
     if _calculation_needs_more_numbers(question):
         return "أرسل العملية الحسابية أو الأرقام المطلوبة بوضوح. مثال: احسب 1500 + 375، أو احسب ضريبة 15% على 2000."
     for words, answer in LOCAL_GENERAL_CHAT:
@@ -1534,8 +1537,21 @@ def _is_system_usage_question(question):
     return any(marker.lower() in normalized for marker in usage_markers)
 
 
+def _simple_general_fact_answer(question):
+    normalized = normalize_user_question_text(question).lower()
+    if any(term in normalized for term in ("كم عدد أيام الأسبوع", "كم عدد ايام الاسبوع", "كم يوم في الأسبوع", "كم يوم في الاسبوع", "عدد أيام الاسبوع", "عدد ايام الاسبوع", "عدد أيام الأسبوع")):
+        return "عدد أيام الأسبوع سبعة أيام: السبت، الأحد، الاثنين، الثلاثاء، الأربعاء، الخميس، الجمعة."
+    if any(term in normalized for term in ("كم عدد شهور السنة", "كم شهر في السنة", "عدد أشهر السنة", "عدد شهور السنة")):
+        return "عدد شهور السنة اثنا عشر شهرا."
+    if any(term in normalized for term in ("كم ساعة في اليوم", "عدد ساعات اليوم")):
+        return "اليوم يتكوّن من 24 ساعة."
+    return ""
+
+
 def _requests_accounting_data_or_analysis(question):
     normalized = normalize_user_question_text(question).lower()
+    if _simple_general_fact_answer(normalized):
+        return False
     data_markers = (
         "حلل", "تحليل", "قيّم", "قيم", "أداء", "اداء", "تفاصيل", "كم", "عدد",
         "إجمالي", "اجمالي", "رصيد", "تقرير", "مبيعات", "مشتريات", "فاتورة",
@@ -1732,6 +1748,8 @@ def _vary_answer_style(text, question="", language="ar", primary=None):
     if not stripped:
         return stripped
     if any(marker in stripped[:160] for marker in ("تأكيد", "إلغاء", "لا أستطيع", "أعتذر بلطف", "Permission", "Confirm", "Cancel")):
+        return stripped
+    if _simple_general_fact_answer(question):
         return stripped
     if len(stripped) > 1800:
         return stripped
@@ -1932,11 +1950,15 @@ def zatca_regulations_answer(question):
         if index_page not in matches:
             matches.append(index_page)
     lines = [
-        "تم ربط إجابة الذكاء الاصطناعي بالمراجع الرسمية لهيئة الزكاة والضريبة والجمارك. عند أي سؤال ضريبي أو زكوي يجب الاعتماد على أحدث نص منشور في هذه الروابط، لأن اللوائح قد تتغير:",
+        "هيئة الزكاة والضريبة والجمارك هي الجهة الحكومية المختصة في السعودية بإدارة الزكاة والضرائب والجمارك، ومن ضمن ذلك ضريبة القيمة المضافة والفوترة الإلكترونية واللوائح المرتبطة بها.",
+        "",
+        "أهم المراجع الرسمية:",
     ]
     for item in matches[:8]:
-        lines.append(f"- {item['title']}: {item['note']} {item['url']}")
-    lines.append("تنبيه مهم: لا تعتبر هذه الخلاصة استشارة ضريبية نهائية؛ عند اتخاذ قرار التزام أو إقرار ضريبي راجع النص الرسمي الأحدث أو مستشارا ضريبيا مرخصا.")
+        lines.append(f"- {item['title']}: {item['note']}")
+        lines.append(f"  {item['url']}")
+    lines.append("")
+    lines.append("تنبيه مهني: عند اتخاذ قرار ضريبي أو زكوي، اعتمد على آخر نص رسمي منشور أو راجع مختصا مرخصا.")
     return "\n".join(lines)
 
 
@@ -3130,6 +3152,13 @@ def answer_financial_question(branch_id, question, user=None):
     local_direct_answer = local_greeting_or_concept_answer(question)
     usage_answer = local_system_usage_answer(question)
     if local_direct_answer and _is_light_conversation_question(question):
+        return finish({
+            "ok": True,
+            "source": "local",
+            "answer": _polish_answer(local_direct_answer, question),
+            "context": {},
+        })
+    if local_direct_answer and not question_analysis.get("asks_research") and not question_analysis.get("asks_company_data"):
         return finish({
             "ok": True,
             "source": "local",

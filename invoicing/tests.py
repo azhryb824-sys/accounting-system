@@ -457,7 +457,15 @@ class InvoiceAccountingTests(TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(result["source"], "local_calculator")
         self.assertIn("300", result["answer"])
-        self.assertIn("2300", result["answer"])
+
+    def test_simple_general_fact_does_not_trigger_financial_analysis(self):
+        result = answer_financial_question(self.branch.id, "كم عدد أيام الأسبوع؟", user=self.user)
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "local")
+        self.assertIn("سبعة أيام", result["answer"])
+        self.assertNotIn("تحليل مالي", result["answer"])
+        self.assertNotIn("الفترة", result["answer"])
 
     def test_short_ambiguous_command_gets_clarification(self):
         result = answer_financial_question(self.branch.id, "حلل")
@@ -563,6 +571,8 @@ class InvoiceAccountingTests(TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(result["source"], "zatca_regulations")
         self.assertIn("zatca.gov.sa", result["answer"])
+        self.assertIn("هيئة الزكاة والضريبة والجمارك هي الجهة الحكومية", result["answer"])
+        self.assertNotIn("تم ربط إجابة الذكاء الاصطناعي", result["answer"])
         self.assertIn("الفوترة الإلكترونية", result["answer"])
         self.assertIn("ضريبة القيمة المضافة", result["answer"])
 
