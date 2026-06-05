@@ -200,6 +200,12 @@
                     <option value="ur-PK">أوردو</option>
                     <option value="ar">عربي عام</option>
                 </select>
+                <select id="assistant-voice-profile" class="form-select">
+                    <option value="auto">صوت عربي تلقائي</option>
+                    <option value="male">صوت رجالي</option>
+                    <option value="youth">صوت شبابي</option>
+                    <option value="child">صوت طفولي</option>
+                </select>
                 <select id="assistant-voice-select" class="form-select"></select>
                 <input id="assistant-voice-rate" class="form-range" type="range" min="0.75" max="1.15" step="0.05" value="0.95">
                 <div class="form-check form-switch m-0">
@@ -231,6 +237,7 @@
     const liveConversationStart = document.getElementById('live-conversation-start');
     const liveConversationStop = document.getElementById('live-conversation-stop');
     const dialectSelect = document.getElementById('assistant-dialect-select');
+    const voiceProfileSelect = document.getElementById('assistant-voice-profile');
     const voiceSelect = document.getElementById('assistant-voice-select');
     const voiceRate = document.getElementById('assistant-voice-rate');
     const autoSpeakToggle = document.getElementById('assistant-auto-speak');
@@ -638,15 +645,16 @@
     function preferredVoiceForDialect(voices) {
         const selected = voices.find((voice) => `${voice.name}::${voice.lang}` === voiceSelect.value);
         const dialect = selectedDialect().toLowerCase();
-        const naturalFemalePattern = /naayf|maged|tarik|tariq|omar|hassan|khalid|zayd|microsoft.*naayf|google.*arabic/i;
-        const oldMalePattern = /hoda|salma|layla|laila|amira|mariam|fatima|zariyah|female|woman|zira/i;
-        if (selected && /^ar/i.test(selected.lang || '') && !oldMalePattern.test(selected.name || '')) return selected;
+        const desiredProfile = voiceProfileSelect?.value || 'auto';
+        if (selected && /^ar/i.test(selected.lang || '')) return selected;
         return (
-            voices.find((voice) => (voice.lang || '').toLowerCase() === dialect && naturalFemalePattern.test(voice.name || '')) ||
-            voices.find((voice) => naturalFemalePattern.test(voice.name || '') && /^ar/i.test(voice.lang || '')) ||
-            voices.find((voice) => (voice.lang || '').toLowerCase() === dialect && !oldMalePattern.test(voice.name || '')) ||
-            voices.find((voice) => /arabic|عربي|العربية/i.test(voice.name || '') && /^ar/i.test(voice.lang || '') && !oldMalePattern.test(voice.name || '')) ||
-            voices.find((voice) => (voice.lang || '').toLowerCase().startsWith('ar') && !oldMalePattern.test(voice.name || '')) ||
+            voices.find((voice) => (voice.lang || '').toLowerCase() === dialect && voiceProfile(voice) === desiredProfile) ||
+            voices.find((voice) => /^ar/i.test(voice.lang || '') && voiceProfile(voice) === desiredProfile) ||
+            voices.find((voice) => (voice.lang || '').toLowerCase() === dialect && voiceQualityPattern(voice)) ||
+            voices.find((voice) => voiceQualityPattern(voice) && /^ar/i.test(voice.lang || '')) ||
+            voices.find((voice) => (voice.lang || '').toLowerCase() === dialect) ||
+            voices.find((voice) => /arabic|عربي|العربية/i.test(voice.name || '') && /^ar/i.test(voice.lang || '')) ||
+            voices.find((voice) => (voice.lang || '').toLowerCase().startsWith('ar')) ||
             null
         );
     }
@@ -673,16 +681,42 @@
             null;
     }
 
+    function voiceQualityPattern(voice) {
+        return /google|natural|online|premium|microsoft|neural|naayf|maged|tarik|tariq|omar|hassan|khalid|zayd/i.test(voice?.name || '');
+    }
+
+    function voiceProfile(voice) {
+        const name = (voice?.name || '').toLowerCase();
+        if (/child|kid|boy|girl|طفل|طفولي/.test(name)) return 'child';
+        if (/young|youth|teen|شاب|شبابي|zayd|zariyah/.test(name)) return 'youth';
+        if (/naayf|maged|tarik|tariq|omar|hassan|khalid|male|man|رجال|رجل/.test(name)) return 'male';
+        if (/hoda|salma|layla|laila|amira|mariam|fatima|female|woman|zira/.test(name)) return 'female';
+        return 'auto';
+    }
+
+    function voiceProfileLabel(profile) {
+        return {
+            male: 'رجالي',
+            youth: 'شبابي',
+            child: 'طفولي',
+            female: 'نسائي',
+            auto: 'عام',
+        }[profile] || 'عام';
+    }
+
     function voicePriority(voice) {
         const name = (voice.name || '').toLowerCase();
         const lang = (voice.lang || '').toLowerCase();
+        const desiredProfile = voiceProfileSelect?.value || 'auto';
+        const profile = voiceProfile(voice);
         let score = 0;
         if (lang === selectedDialect().toLowerCase()) score += 40;
         if (lang.startsWith('ar')) score += 30;
-        if (/naayf|maged|tarik|tariq|omar|hassan|khalid|zayd/.test(name)) score += 80;
-        if (/google|natural|online|premium/.test(name)) score += 20;
+        if (desiredProfile !== 'auto' && profile === desiredProfile) score += 90;
+        if (/naayf|maged|tarik|tariq|omar|hassan|khalid|zayd/.test(name)) score += 45;
+        if (/google|natural|online|premium|neural/.test(name)) score += 25;
         if (/microsoft/.test(name)) score += 10;
-        if (/hoda|salma|layla|laila|amira|mariam|fatima|zariyah|female|woman|zira/.test(name)) score -= 70;
+        if (desiredProfile === 'male' && profile === 'female') score -= 45;
         return score;
     }
 
@@ -692,13 +726,14 @@
         const previousValue = voiceSelect.value;
         voiceSelect.innerHTML = '';
         voices
-            .filter((voice) => (/^(ar|ur|bn)/i.test(voice.lang || '') || /arabic|urdu|bangla|bengali|naayf|maged|tarik|tariq|omar|hassan|khalid|zayd/i.test(voice.name || '')) && !/hoda|salma|layla|laila|amira|mariam|fatima|zariyah|female|woman|zira/i.test(voice.name || ''))
+            .filter((voice) => /^(ar|ur|bn)/i.test(voice.lang || '') || /arabic|عربي|العربية|urdu|bangla|bengali|naayf|maged|tarik|tariq|omar|hassan|khalid|zayd/i.test(voice.name || ''))
             .sort((a, b) => voicePriority(b) - voicePriority(a))
             .forEach((voice, index) => {
                 const option = document.createElement('option');
                 option.value = `${voice.name}::${voice.lang}`;
-                const freshHint = /naayf|maged|tarik|tariq|omar|hassan|khalid|zayd/i.test(voice.name || '') ? ' - جديد' : '';
-                option.textContent = `${voice.name} (${voice.lang})${freshHint}`;
+                const profile = voiceProfile(voice);
+                const qualityHint = voiceQualityPattern(voice) ? ' - واضح' : '';
+                option.textContent = `${voiceProfileLabel(profile)} - ${voice.name} (${voice.lang})${qualityHint}`;
                 voiceSelect.appendChild(option);
             });
         if (!voiceSelect.options.length) {
@@ -707,16 +742,12 @@
             option.textContent = 'لا يوجد صوت عربي مثبت';
             voiceSelect.appendChild(option);
         }
-        if (previousValue && !/hoda|salma|layla|laila|amira|mariam|fatima|zariyah|female|woman|zira/i.test(previousValue) && [...voiceSelect.options].some((option) => option.value === previousValue)) {
+        if (previousValue && [...voiceSelect.options].some((option) => option.value === previousValue)) {
             voiceSelect.value = previousValue;
         }
-        const preferredNames = ['Naayf', 'Maged', 'Tarik', 'Tariq', 'Omar', 'Hassan', 'Khalid', 'Zayd', 'Google Arabic'];
-        const oldMaleVoicePattern = /hoda|salma|layla|laila|amira|mariam|fatima|zariyah|female|woman|zira/i;
         arabicVoice =
-            voices.find((voice) => `${voice.name}::${voice.lang}` === voiceSelect.value && !oldMaleVoicePattern.test(voice.name || '')) ||
-            voices.find((voice) => preferredNames.some((name) => (voice.name || '').toLowerCase().includes(name.toLowerCase()))) ||
-            voices.find((voice) => (voice.lang || '').toLowerCase() === 'ar-sa' && !oldMaleVoicePattern.test(voice.name || '')) ||
-            voices.find((voice) => (voice.lang || '').toLowerCase().startsWith('ar') && !oldMaleVoicePattern.test(voice.name || '')) ||
+            voices.find((voice) => `${voice.name}::${voice.lang}` === voiceSelect.value) ||
+            preferredVoiceForDialect(voices) ||
             null;
         if (arabicVoice) voiceSelect.value = `${arabicVoice.name}::${arabicVoice.lang}`;
         return arabicVoice;
@@ -749,9 +780,12 @@
             const isQuestion = /[؟?]\s*$/.test(cleanChunk);
             const isShort = cleanChunk.length < 70;
             const isLong = cleanChunk.length > 150;
+            const profile = voiceProfileSelect?.value || 'auto';
+            const profileRateBoost = profile === 'child' ? 0.03 : (profile === 'youth' ? 0.02 : 0);
+            const profilePitchBoost = profile === 'child' ? 0.12 : (profile === 'youth' ? 0.07 : 0);
             return {
-                rate: Math.max(0.82, Math.min(0.98, baseRate + (isShort ? 0.02 : 0) - (isLong ? 0.04 : 0))),
-                pitch: Math.max(0.96, Math.min(1.08, 1.0 + (isQuestion ? 0.05 : 0) - (isLong ? 0.02 : 0))),
+                rate: Math.max(0.82, Math.min(1.02, baseRate + profileRateBoost + (isShort ? 0.02 : 0) - (isLong ? 0.04 : 0))),
+                pitch: Math.max(0.94, Math.min(1.18, 1.0 + profilePitchBoost + (isQuestion ? 0.05 : 0) - (isLong ? 0.02 : 0))),
                 pause: isQuestion ? 240 : (isLong ? 230 : 170),
             };
         }
@@ -1014,9 +1048,15 @@
             arabicVoice = window.speechSynthesis.getVoices().find((voice) => `${voice.name}::${voice.lang}` === voiceSelect.value && isArabicSpeechVoice(voice)) || null;
             setStatus(arabicVoice ? `تم اختيار صوت: ${arabicVoice.name}` : 'لا يوجد صوت عربي مثبت في المتصفح.');
         });
+        voiceProfileSelect.addEventListener('change', () => {
+            loadArabicVoice();
+            const profileText = voiceProfileSelect.options[voiceProfileSelect.selectedIndex].textContent;
+            setStatus(`تم اختيار نمط الصوت: ${profileText}. سيتم استخدام أقرب صوت متاح في المتصفح.`);
+        });
         dialectSelect.addEventListener('change', () => {
             recognitionLanguageIndex = 0;
             if (recognition) recognition.lang = dialectFallbacks()[0];
+            loadArabicVoice();
             setStatus(`تم اختيار لغة/لهجة الصوت: ${dialectSelect.options[dialectSelect.selectedIndex].textContent}.`);
         });
     }
