@@ -27,6 +27,20 @@ def _assistant_without_branch_allowed(user):
     return bool(user and user.is_authenticated and (user.is_superuser or is_primary_admin(user)))
 
 
+def _apply_live_chat_style(answer, style):
+    text = (answer or "").strip()
+    style = (style or "").strip().lower()
+    if not text or style not in {"balanced", "serious", "warm"}:
+        return text
+    if any(word in text for word in ("قل أو اكتب: تأكيد", "تأكيد للحفظ", "إلغاء للتراجع")):
+        return text
+    if style == "serious":
+        return text.replace("أبشر، ", "").replace("تمام، ", "").strip()
+    if style == "warm" and len(text) > 40 and not text.startswith(("تمام", "أبشر", "حاضر")):
+        return f"تمام، {text}"
+    return text
+
+
 def _empty_assistant_insights(message="اختر شركة وفرعا لعرض التحليل المالي التفصيلي."):
     return {
         "ok": True,
@@ -362,6 +376,7 @@ def ai_assistant_command(request):
         payload = request.POST
 
     command = (payload.get("command") or payload.get("question") or "").strip()
+    live_style = (payload.get("live_style") or "").strip()
     image_base64 = (payload.get("image_base64") or "").strip()
     media_type = (payload.get("media_type") or "image/jpeg").strip()
     visual_command = ""
@@ -402,8 +417,11 @@ def ai_assistant_command(request):
             "followups": ["اختر شركة وفرعا", "حلل الوضع المالي", "كم عدد الشركات في حسابي؟"],
             "context": {},
         }
+    result = dict(result)
     if image_base64:
         result["camera_command"] = visual_command or command
+    if live_style and result.get("answer"):
+        result["answer"] = _apply_live_chat_style(result.get("answer"), live_style)
     if result.get("pending"):
         request.session["ai_pending_command"] = result["pending"]
     else:

@@ -24,6 +24,54 @@
         padding-bottom: 1rem;
         border-bottom: 1px solid rgba(255,255,255,.12);
     }
+    .live-session-panel {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: .75rem;
+        align-items: center;
+        padding: .7rem .85rem;
+        margin-top: .85rem;
+        border: 1px solid rgba(14,165,233,.28);
+        background: rgba(14,165,233,.08);
+        border-radius: 10px;
+    }
+    .live-session-panel.is-active {
+        border-color: rgba(34,197,94,.45);
+        background: rgba(34,197,94,.09);
+    }
+    .live-stage-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .45rem;
+        margin-top: .35rem;
+    }
+    .live-stage {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        font-size: .78rem;
+        color: rgba(255,255,255,.68);
+    }
+    .live-stage::before {
+        content: "";
+        width: .45rem;
+        height: .45rem;
+        border-radius: 50%;
+        background: rgba(255,255,255,.28);
+    }
+    .live-stage.active {
+        color: #fff;
+    }
+    .live-stage.active::before {
+        background: #22c55e;
+        box-shadow: 0 0 0 .22rem rgba(34,197,94,.16);
+    }
+    .live-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .45rem;
+        justify-content: flex-end;
+    }
     .assistant-chat-messages {
         flex: 1;
         overflow-y: auto;
@@ -97,6 +145,8 @@
         }
         .assistant-composer { grid-template-columns: 1fr; }
         .assistant-settings { grid-template-columns: 1fr; }
+        .live-session-panel { grid-template-columns: 1fr; }
+        .live-controls { justify-content: flex-start; }
         .chat-message { max-width: 96%; }
     }
 </style>
@@ -111,6 +161,25 @@
             <a class="btn btn-outline-light btn-sm" href="{% url 'ai_insights' %}">
                 <i class="fa-solid fa-chart-line"></i> التحليل الكامل
             </a>
+        </div>
+        <div class="live-session-panel" id="live-session-panel">
+            <div>
+                <div class="fw-semibold" id="live-session-title">الدردشة المباشرة جاهزة</div>
+                <div class="small text-muted-soft" id="live-session-hint">قل طلبك بصوت طبيعي. يمكنك قول: توقف، أعد، اختصر، أو فصل.</div>
+                <div class="live-stage-list">
+                    <span class="live-stage" data-stage="listen">استماع</span>
+                    <span class="live-stage" data-stage="think">تحليل</span>
+                    <span class="live-stage" data-stage="speak">رد صوتي</span>
+                </div>
+            </div>
+            <div class="live-controls">
+                <button class="btn btn-outline-light btn-sm live-style-option active" type="button" data-live-style="balanced">متوازن</button>
+                <button class="btn btn-outline-light btn-sm live-style-option" type="button" data-live-style="serious">جاد</button>
+                <button class="btn btn-outline-light btn-sm live-style-option" type="button" data-live-style="warm">مرح خفيف</button>
+                <button class="btn btn-outline-warning btn-sm" type="button" id="live-repeat-answer" title="إعادة آخر رد">
+                    <i class="fa-solid fa-rotate-right"></i>
+                </button>
+            </div>
         </div>
 
         <div class="assistant-chat-messages" id="chat-messages">
@@ -248,6 +317,10 @@
     const voiceRate = document.getElementById('assistant-voice-rate');
     const autoSpeakToggle = document.getElementById('assistant-auto-speak');
     const statusBox = document.getElementById('voice-status');
+    const liveSessionPanel = document.getElementById('live-session-panel');
+    const liveSessionTitle = document.getElementById('live-session-title');
+    const liveSessionHint = document.getElementById('live-session-hint');
+    const liveRepeatAnswer = document.getElementById('live-repeat-answer');
     const chatMessages = document.getElementById('chat-messages');
     const answerCard = document.getElementById('live-answer-card');
     const answerBox = document.getElementById('live-answer');
@@ -273,9 +346,27 @@
     let speechRunId = 0;
     let speechWatchdogTimer = null;
     let lastFinalTranscript = '';
+    let lastAssistantAnswer = '';
+    let liveResponseStyle = 'balanced';
+    let liveSilenceCount = 0;
 
     function setStatus(text) {
         statusBox.textContent = text;
+    }
+
+    function updateLiveStage(stage, hint = '') {
+        document.querySelectorAll('.live-stage').forEach((item) => {
+            item.classList.toggle('active', item.dataset.stage === stage);
+        });
+        liveSessionPanel?.classList.toggle('is-active', Boolean(stage));
+        if (liveSessionTitle) {
+            liveSessionTitle.textContent = {
+                listen: 'أستمع لك الآن',
+                think: 'أحلل طلبك',
+                speak: 'أقرأ الرد',
+            }[stage] || 'الدردشة المباشرة جاهزة';
+        }
+        if (hint && liveSessionHint) liveSessionHint.textContent = hint;
     }
 
     function scrollChatToBottom() {
@@ -390,6 +481,7 @@
             try { recognition.stop(); } catch (error) {}
         }
         stopAssistantSpeech();
+        updateLiveStage('', 'تم إنهاء المحادثة المباشرة. يمكنك البدء مرة أخرى في أي وقت.');
         setStatus('تم إنهاء المحادثة المباشرة.');
     }
 
@@ -949,9 +1041,38 @@
         return (answerBox.textContent || classicAnswerBox?.textContent || '').trim();
     }
 
+    function handleLiveConversationCommand(text) {
+        const clean = (text || '').toLowerCase().trim();
+        if (!liveConversationMode || !clean) return false;
+        if (/(^|\s)(توقف|ايقاف|إيقاف|انهاء|إنهاء|خلاص|اسكت|stop|end)(\s|$)/i.test(clean)) {
+            stopLiveConversation();
+            return true;
+        }
+        if (/(^|\s)(اعد|أعد|كرر|كررها|repeat|again)(\s|$)/i.test(clean)) {
+            if (lastAssistantAnswer) speak(lastAssistantAnswer);
+            else setStatus('لا يوجد رد سابق لإعادته.');
+            return true;
+        }
+        if (/(^|\s)(اختصر|مختصر|باختصار|summary|brief)(\s|$)/i.test(clean)) {
+            runAssistant('اختصر آخر إجابة في نقاط قليلة واضحة', false, null, 'live');
+            return true;
+        }
+        if (/(^|\s)(فصل|فصّل|اشرح اكثر|اشرح أكثر|details|more)(\s|$)/i.test(clean)) {
+            runAssistant('فصل آخر إجابة بمثال عملي وخطوات واضحة', false, null, 'live');
+            return true;
+        }
+        if (/(^|\s)(انتظر|لحظة|hold|wait)(\s|$)/i.test(clean)) {
+            setStatus('تمام، سأبقى جاهزا. اضغط المحادثة المباشرة عندما تريد المتابعة.');
+            updateLiveStage('', 'متوقف مؤقتا. يمكنك استئناف المحادثة متى أردت.');
+            return true;
+        }
+        return false;
+    }
+
     async function runAssistant(command, autoNavigate = false, imagePayload = null, inputSource = 'typed') {
         const value = (command || questionInput.value || '').trim();
         if (value) syncDialectWithText(value);
+        if (handleLiveConversationCommand(value)) return;
         const liveScreenPayload = imagePayload || (screenStream ? (buildScreenPayload() || latestScreenPayload) : null);
         if (!value && !liveScreenPayload) {
             if (screenStream) {
@@ -969,7 +1090,13 @@
         }
         if (value) addChatMessage('user', value);
         assistantIsProcessing = true;
-        setStatus('جاري تحليل الطلب...');
+        if (inputSource === 'live') {
+            updateLiveStage('think', 'سمعتك. أرتب الإجابة الآن بشكل واضح ومباشر.');
+            setStatus('سمعتك، جاري تجهيز رد مناسب للمحادثة المباشرة...');
+        } else {
+            updateLiveStage('', 'قل طلبك بصوت طبيعي. يمكنك قول: توقف، أعد، اختصر، أو فصل.');
+            setStatus('جاري تحليل الطلب...');
+        }
         answerCard.classList.remove('d-none');
         chatMessages.appendChild(answerCard);
         answerBox.textContent = 'لحظة...';
@@ -985,6 +1112,7 @@
                 },
                 body: JSON.stringify({
                     command: value,
+                    live_style: inputSource === 'live' ? liveResponseStyle : '',
                     image_base64: liveScreenPayload ? liveScreenPayload.image_base64 : '',
                     media_type: liveScreenPayload ? liveScreenPayload.media_type : '',
                 }),
@@ -1002,12 +1130,18 @@
             }
             const dialectAnswer = applyAssistantDialect(data.answer || 'تم تحليل الطلب.');
             answerBox.textContent = dialectAnswer;
+            lastAssistantAnswer = dialectAnswer;
             questionInput.value = '';
             questionInput.style.height = '';
             scrollChatToBottom();
             saveChatHistory();
             const shouldSpeakAutomatically = inputSource === 'voice' || inputSource === 'live';
-            if (shouldSpeakAutomatically && (liveConversationMode || autoSpeakToggle.checked)) speak(dialectAnswer);
+            if (shouldSpeakAutomatically && (liveConversationMode || autoSpeakToggle.checked)) {
+                updateLiveStage('speak', 'سأقرأ الرد ثم أعود للاستماع تلقائيا.');
+                speak(dialectAnswer);
+            } else {
+                updateLiveStage('', 'الرد جاهز. يمكنك متابعة السؤال كتابة أو صوتيا.');
+            }
             assistantIsProcessing = false;
 
             if (data.action && data.action.url) {
@@ -1187,6 +1321,7 @@
             stopAssistantSpeech('أستمع لك الآن...');
             startButton.disabled = true;
             stopButton.disabled = false;
+            updateLiveStage('listen', 'تكلم بجملة طبيعية. لو احتجت أمرا سريعا قل: أعد، اختصر، فصل، أو توقف.');
             setStatus(`أستمع الآن باللغة ${recognition.lang}...`);
         };
         recognition.onend = () => {
@@ -1199,6 +1334,18 @@
         };
         recognition.onerror = (event) => {
             const languages = dialectFallbacks();
+            if (event.error === 'no-speech' && liveConversationMode) {
+                liveSilenceCount += 1;
+                const hint = liveSilenceCount >= 2
+                    ? 'لم ألتقط صوتا واضحا. اقترب من الميكروفون أو اكتب السؤال وسأكمل معك.'
+                    : 'لم أسمع شيئا واضحا. سأعيد الاستماع الآن.';
+                setStatus(hint);
+                updateLiveStage('listen', hint);
+                window.setTimeout(() => {
+                    if (liveConversationMode && !assistantIsProcessing && !assistantIsSpeaking) startListening();
+                }, liveSilenceCount >= 2 ? 1100 : 500);
+                return;
+            }
             if ((event.error === 'language-not-supported' || event.error === 'no-speech') && recognitionLanguageIndex < languages.length - 1) {
                 recognitionLanguageIndex += 1;
                 recognition.lang = languages[recognitionLanguageIndex];
@@ -1218,6 +1365,7 @@
             questionInput.value = normalizedTranscript;
             if (event.results[event.results.length - 1].isFinal) {
                 if (!normalizedTranscript || normalizedTranscript === lastFinalTranscript) return;
+                liveSilenceCount = 0;
                 syncDialectWithText(normalizedTranscript);
                 lastFinalTranscript = normalizedTranscript;
                 const screenPayload = screenStream ? (refreshScreenContext() || latestScreenPayload) : null;
@@ -1232,8 +1380,10 @@
         stopButton.addEventListener('click', () => recognition.stop());
         liveConversationStart.addEventListener('click', () => {
             liveConversationMode = true;
+            liveSilenceCount = 0;
             liveConversationStart.disabled = true;
             liveConversationStop.disabled = false;
+            updateLiveStage('listen', 'بدأت الجلسة. تحدث بحرية وسأرد صوتيا ثم أعود للاستماع.');
             setStatus('بدأت المحادثة المباشرة. تكلم الآن، وسأرد صوتيا ثم أعود للاستماع.');
             startListening();
         });
@@ -1248,6 +1398,21 @@
 
     readButton.addEventListener('click', () => speak(currentAnswerText() || lastSpokenText));
     audioSamplePlay.addEventListener('click', playStaticAudioSample);
+    liveRepeatAnswer?.addEventListener('click', () => {
+        const text = lastAssistantAnswer || currentAnswerText() || lastSpokenText;
+        if (text) speak(text);
+        else setStatus('لا يوجد رد سابق لإعادته.');
+    });
+    document.querySelectorAll('.live-style-option').forEach((button) => {
+        button.addEventListener('click', () => {
+            liveResponseStyle = button.dataset.liveStyle || 'balanced';
+            document.querySelectorAll('.live-style-option').forEach((item) => item.classList.remove('active'));
+            button.classList.add('active');
+            const label = button.textContent.trim();
+            setStatus(`تم اختيار أسلوب الدردشة: ${label}.`);
+            updateLiveStage(liveConversationMode ? 'listen' : '', `سيكون الرد في الجلسة بأسلوب: ${label}.`);
+        });
+    });
     cameraOpenButton.addEventListener('click', openCamera);
     cameraCaptureButton.addEventListener('click', captureCameraImage);
     screenShareStart.addEventListener('click', startScreenShare);

@@ -713,6 +713,27 @@ class InvoiceAccountingTests(TestCase):
         answer_question.assert_called_once()
         self.assertIsNone(answer_question.call_args.args[0])
 
+    @patch("invoicing.purchase_views.answer_financial_question")
+    def test_ai_assistant_command_applies_live_style_without_polluting_command(self, answer_question):
+        self.client.force_login(self.user)
+        answer_question.return_value = {
+            "ok": True,
+            "source": "local",
+            "answer": "هذه إجابة مهنية تفصيلية عن التحصيل وتحسين المتابعة اليومية للعملاء.",
+            "context": {},
+        }
+
+        response = self.client.post(
+            "/invoicing/purchases/ai/assistant/command/",
+            data=json.dumps({"command": "كيف أحسن التحصيل؟", "live_style": "warm"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(answer_question.return_value["answer"], response.json()["answer"])
+        self.assertNotEqual(response.json()["answer"], answer_question.return_value["answer"])
+        self.assertEqual(answer_question.call_args.args[1], "كيف أحسن التحصيل؟")
+
     def test_ai_assistant_template_has_valid_voice_patterns(self):
         template = Path("invoicing/templates/invoicing/ai_assistant.html").read_text(encoding="utf-8")
 
@@ -729,6 +750,11 @@ class InvoiceAccountingTests(TestCase):
         self.assertIn("normalizeDatesForArabicSpeech", template)
         self.assertIn("pronounceArabicDate", template)
         self.assertIn("speechWatchdogTimer", template)
+        self.assertIn("live-session-panel", template)
+        self.assertIn("handleLiveConversationCommand", template)
+        self.assertIn("live_style", template)
+        self.assertIn("liveSilenceCount", template)
+        self.assertIn("live-style-option", template)
         self.assertIn("speechProsodyForChunk", template)
         self.assertIn("assistant-voice-profile", template)
         self.assertIn("assistant-audio-sample-select", template)
