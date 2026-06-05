@@ -1,0 +1,17 @@
+{
+  "voices": [
+    {
+      "id": "silma-arabic-reference",
+      "label": "SILMA Arabic reference voice",
+      "profile": "auto",
+      "language": "ar",
+      "license": "Apache-2.0 model repository; verify individual audio file terms before production use",
+      "source": "https://huggingface.co/silma-ai/silma-tts",
+      "file": ""
+    }
+  ],
+  "notes": [
+    "Static audio files are previews only. Dynamic AI replies require a TTS engine that generates audio from text.",
+    "Add licensed wav/mp3 files in this folder and set the file field to /static/audio/voices/<filename>."
+  ]
+}

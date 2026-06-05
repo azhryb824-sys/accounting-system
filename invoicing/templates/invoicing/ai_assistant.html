@@ -207,6 +207,10 @@
                     <option value="child">صوت طفولي</option>
                 </select>
                 <select id="assistant-voice-select" class="form-select"></select>
+                <select id="assistant-audio-sample-select" class="form-select d-none"></select>
+                <button class="btn btn-outline-light d-none" type="button" id="assistant-audio-sample-play" title="معاينة ملف صوتي">
+                    <i class="fa-solid fa-play"></i>
+                </button>
                 <input id="assistant-voice-rate" class="form-range" type="range" min="0.75" max="1.15" step="0.05" value="0.95">
                 <div class="form-check form-switch m-0">
                     <input class="form-check-input" type="checkbox" role="switch" id="assistant-auto-speak" checked>
@@ -239,6 +243,8 @@
     const dialectSelect = document.getElementById('assistant-dialect-select');
     const voiceProfileSelect = document.getElementById('assistant-voice-profile');
     const voiceSelect = document.getElementById('assistant-voice-select');
+    const audioSampleSelect = document.getElementById('assistant-audio-sample-select');
+    const audioSamplePlay = document.getElementById('assistant-audio-sample-play');
     const voiceRate = document.getElementById('assistant-voice-rate');
     const autoSpeakToggle = document.getElementById('assistant-auto-speak');
     const statusBox = document.getElementById('voice-status');
@@ -259,6 +265,7 @@
     let cameraStream = null;
     let screenStream = null;
     let latestScreenPayload = null;
+    let audioSamplePlayer = null;
     let screenContextTimer = null;
     let liveConversationMode = false;
     let assistantIsProcessing = false;
@@ -659,6 +666,43 @@
         );
     }
 
+    async function loadStaticAudioSamples() {
+        if (!audioSampleSelect || !audioSamplePlay) return;
+        try {
+            const response = await fetch('/static/audio/voices/voices.json', { cache: 'no-store' });
+            if (!response.ok) return;
+            const payload = await response.json();
+            const samples = (payload.voices || []).filter((voice) => voice.file);
+            if (!samples.length) return;
+            audioSampleSelect.innerHTML = '';
+            samples.forEach((sample) => {
+                const option = document.createElement('option');
+                option.value = sample.file;
+                option.textContent = `${sample.label} (${sample.profile || 'عام'})`;
+                audioSampleSelect.appendChild(option);
+            });
+            audioSampleSelect.classList.remove('d-none');
+            audioSamplePlay.classList.remove('d-none');
+        } catch (error) {
+            // Static samples are optional; keep the assistant usable if unavailable.
+        }
+    }
+
+    function playStaticAudioSample() {
+        const sampleUrl = audioSampleSelect?.value;
+        if (!sampleUrl) {
+            setStatus('لا توجد ملفات صوتية ثابتة جاهزة للمعاينة.');
+            return;
+        }
+        if (audioSamplePlayer) {
+            audioSamplePlayer.pause();
+        }
+        audioSamplePlayer = new Audio(sampleUrl);
+        audioSamplePlayer.play()
+            .then(() => setStatus('جاري تشغيل معاينة الصوت.'))
+            .catch(() => setStatus('تعذر تشغيل ملف الصوت.'));
+    }
+
     function isArabicSpeechVoice(voice) {
         return Boolean(voice && /^(ar|arb)/i.test(voice.lang || ''));
     }
@@ -1043,6 +1087,7 @@
 
     if ('speechSynthesis' in window) {
         loadArabicVoice();
+        loadStaticAudioSamples();
         window.speechSynthesis.onvoiceschanged = loadArabicVoice;
         voiceSelect.addEventListener('change', () => {
             arabicVoice = window.speechSynthesis.getVoices().find((voice) => `${voice.name}::${voice.lang}` === voiceSelect.value && isArabicSpeechVoice(voice)) || null;
@@ -1132,6 +1177,7 @@
     }
 
     readButton.addEventListener('click', () => speak(currentAnswerText() || lastSpokenText));
+    audioSamplePlay.addEventListener('click', playStaticAudioSample);
     cameraOpenButton.addEventListener('click', openCamera);
     cameraCaptureButton.addEventListener('click', captureCameraImage);
     screenShareStart.addEventListener('click', startScreenShare);
