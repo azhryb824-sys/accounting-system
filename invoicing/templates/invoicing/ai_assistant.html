@@ -434,6 +434,24 @@
         referencesPanel.classList.remove('d-none');
     }
 
+    async function readAssistantJsonResponse(response) {
+        const rawText = await response.text();
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+            return JSON.parse(rawText || '{}');
+        }
+        const htmlTitle = rawText.match(/<title[^>]*>(.*?)<\/title>/i)?.[1]?.replace(/\s+/g, ' ').trim();
+        const isLoginPage = /name=["']password["']|login|تسجيل الدخول/i.test(rawText);
+        const message = isLoginPage
+            ? 'انتهت جلسة الدخول. حدّث الصفحة وسجل الدخول ثم أعد المحاولة.'
+            : (htmlTitle ? `تعذر إكمال الطلب: ${htmlTitle}` : 'تعذر إكمال الطلب لأن الخادم أعاد صفحة غير متوقعة.');
+        return {
+            ok: false,
+            message,
+            references: [],
+        };
+    }
+
     function savedChatMessages() {
         return [...chatMessages.querySelectorAll('.chat-message.user, .chat-message.assistant')]
             .filter((node) => node.id !== 'live-answer-card' && node.id !== 'classic-answer')
@@ -1199,7 +1217,7 @@
                     media_type: liveScreenPayload ? liveScreenPayload.media_type : '',
                 }),
             });
-            const data = await response.json();
+            const data = await readAssistantJsonResponse(response);
             if (!response.ok || !data.ok) {
                 throw new Error(data.message || 'تعذر تنفيذ الطلب.');
             }

@@ -782,6 +782,8 @@ class InvoiceAccountingTests(TestCase):
         self.assertIn("live-style-option", template)
         self.assertIn("assistant-references", template)
         self.assertIn("renderAnswerReferences", template)
+        self.assertIn("readAssistantJsonResponse", template)
+        self.assertIn("انتهت جلسة الدخول", template)
         self.assertIn("speechProsodyForChunk", template)
         self.assertIn("assistant-voice-profile", template)
         self.assertIn("assistant-audio-sample-select", template)
