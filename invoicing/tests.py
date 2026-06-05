@@ -749,6 +749,8 @@ class InvoiceAccountingTests(TestCase):
         self.assertIn("normalizeArabicProsodyForSpeech", template)
         self.assertIn("normalizeDatesForArabicSpeech", template)
         self.assertIn("pronounceArabicDate", template)
+        self.assertIn("pronounceArabicYear", template)
+        self.assertIn("\\u0623\\u0644\\u0641\\u064a\\u0646", template)
         self.assertIn("speechWatchdogTimer", template)
         self.assertIn("live-session-panel", template)
         self.assertIn("handleLiveConversationCommand", template)

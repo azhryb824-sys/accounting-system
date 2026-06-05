@@ -601,6 +601,35 @@
         return match;
     }
 
+    function pronounceArabicYear(year) {
+        const value = Number(String(year).replace(/,/g, ''));
+        if (!Number.isFinite(value) || value < 1000 || value > 2999) return String(year);
+        const belowHundred = (number) => pronounceArabicNumber(String(number));
+        const hundreds = {
+            1: '\u0645\u0626\u0629',
+            2: '\u0645\u0626\u062a\u0627\u0646',
+            3: '\u062b\u0644\u0627\u062b \u0645\u0626\u0629',
+            4: '\u0623\u0631\u0628\u0639 \u0645\u0626\u0629',
+            5: '\u062e\u0645\u0633 \u0645\u0626\u0629',
+            6: '\u0633\u062a \u0645\u0626\u0629',
+            7: '\u0633\u0628\u0639 \u0645\u0626\u0629',
+            8: '\u062b\u0645\u0627\u0646 \u0645\u0626\u0629',
+            9: '\u062a\u0633\u0639 \u0645\u0626\u0629',
+        };
+        if (value >= 2000 && value < 2100) {
+            const rest = value - 2000;
+            return rest ? `\u0623\u0644\u0641\u064a\u0646 \u0648 ${belowHundred(rest)}` : '\u0623\u0644\u0641\u064a\u0646';
+        }
+        const thousands = Math.floor(value / 1000);
+        const rest = value % 1000;
+        let spoken = thousands === 1 ? '\u0623\u0644\u0641' : `${pronounceArabicNumber(String(thousands))} \u0622\u0644\u0627\u0641`;
+        const hundredPart = Math.floor(rest / 100);
+        const tail = rest % 100;
+        if (hundredPart) spoken += ` \u0648 ${hundreds[hundredPart] || pronounceArabicNumber(String(hundredPart * 100))}`;
+        if (tail) spoken += ` \u0648 ${belowHundred(tail)}`;
+        return spoken;
+    }
+
     function keepSpeechPhraseTogether(text) {
         const phrases = [
             'بي دي إف',
@@ -631,7 +660,7 @@
         const d = Number(day);
         if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d) || !monthNames[m]) return match;
         const spokenDay = pronounceArabicNumber(String(d));
-        const spokenYear = String(y).split('').join(' ');
+        const spokenYear = pronounceArabicYear(y);
         let spoken = `\u064a\u0648\u0645 ${spokenDay} \u0645\u0646 \u0634\u0647\u0631 ${monthNames[m]} \u0633\u0646\u0629 ${spokenYear}`;
         if (hour !== undefined && minute !== undefined) {
             spoken += `\u060c \u0627\u0644\u0633\u0627\u0639\u0629 ${pronounceArabicNumber(String(Number(hour)))} \u0648 ${pronounceArabicNumber(String(Number(minute)))} \u062f\u0642\u064a\u0642\u0629`;
@@ -642,7 +671,8 @@
     function normalizeDatesForArabicSpeech(text) {
         return (text || '')
             .replace(/\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[ T](\d{1,2}):(\d{2}))?\b/g, pronounceArabicDate)
-            .replace(/\b(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:[ T](\d{1,2}):(\d{2}))?\b/g, (match, day, month, year, hour, minute) => pronounceArabicDate(match, year, month, day, hour, minute));
+            .replace(/\b(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:[ T](\d{1,2}):(\d{2}))?\b/g, (match, day, month, year, hour, minute) => pronounceArabicDate(match, year, month, day, hour, minute))
+            .replace(/(^|\s)(\u0633\u0646\u0629|\u0639\u0627\u0645|\u0641\u064a|\u062e\u0644\u0627\u0644)\s+(\d{4})(?=\s|$|[.،,؛:؟?!])/g, (match, before, prefix, year) => `${before}${prefix} ${pronounceArabicYear(year)}`);
     }
 
     function addArabicSpeechPauses(text) {
