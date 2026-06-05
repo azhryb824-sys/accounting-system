@@ -4,6 +4,7 @@ import ast
 import json
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from html import unescape
 from html.parser import HTMLParser
 from decimal import Decimal
@@ -11,6 +12,7 @@ from urllib.parse import quote_plus, urlparse
 
 import requests
 from django.conf import settings
+from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Count, F, Sum
 from django.db.models.functions import Coalesce
@@ -2675,12 +2677,30 @@ def _synthesize_free_web_answer(question, sources):
 
 
 def free_web_general_answer(question):
+    normalized_question = normalize_user_question_text(question or "").strip().lower()
+    cache_key = "ai_free_web_answer:" + hashlib.sha256(normalized_question.encode("utf-8")).hexdigest()
+    cached_answer = cache.get(cache_key)
+    if cached_answer:
+        return cached_answer
+
     sources = []
-    sources.extend(_duckduckgo_web_search(question))
-    for source in (_wikipedia_summary(question), _wikidata_facts(question)):
-        if source and source.get("extract"):
-            sources.append(source)
-    sources.extend(_openalex_research(question))
+    search_jobs = (
+        ("duckduckgo", _duckduckgo_web_search),
+        ("wikipedia", _wikipedia_summary),
+        ("wikidata", _wikidata_facts),
+        ("openalex", _openalex_research),
+    )
+    with ThreadPoolExecutor(max_workers=len(search_jobs)) as executor:
+        futures = {executor.submit(func, question): name for name, func in search_jobs}
+        for future in as_completed(futures):
+            try:
+                result = future.result()
+            except Exception:
+                continue
+            if isinstance(result, list):
+                sources.extend(result)
+            elif result and result.get("extract"):
+                sources.append(result)
     seen = set()
     unique_sources = []
     for source in sources:
@@ -2689,7 +2709,10 @@ def free_web_general_answer(question):
             continue
         seen.add(key)
         unique_sources.append(source)
-    return _synthesize_free_web_answer(question, unique_sources)
+    answer = _synthesize_free_web_answer(question, unique_sources)
+    if answer:
+        cache.set(cache_key, answer, 60 * 10)
+    return answer
 
 
 def _weak_ai_answer(text):

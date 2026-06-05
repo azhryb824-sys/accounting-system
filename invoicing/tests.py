@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
+from django.core.cache import cache
 from django.test import TestCase
 from django.utils import timezone
 
@@ -283,6 +284,27 @@ class InvoiceAccountingTests(TestCase):
         self.assertIn("مراجع مختصرة للتحقق", result["answer"])
         self.assertNotIn("بحثت", result["answer"])
         self.assertNotIn("المصادر والتراخيص", result["answer"])
+
+    @patch("invoicing.ai_services._openalex_research", return_value=[])
+    @patch("invoicing.ai_services._wikidata_facts", return_value=None)
+    @patch("invoicing.ai_services._wikipedia_summary")
+    @patch("invoicing.ai_services._duckduckgo_web_search", return_value=[])
+    def test_free_web_answer_uses_short_cache_for_repeated_questions(self, duckduckgo, wikipedia, wikidata, openalex):
+        cache.clear()
+        wikipedia.return_value = {
+            "title": "Cached topic",
+            "extract": "Cached answer extract.",
+            "source_url": "https://example.com/cached",
+            "source_name": "Wikipedia",
+        }
+
+        first = answer_financial_question(self.branch.id, "ما هو موضوع سريع؟")
+        second = answer_financial_question(self.branch.id, "ما هو موضوع سريع؟")
+
+        self.assertEqual(first["source"], "free_web")
+        self.assertEqual(second["source"], "free_web")
+        self.assertIn("Cached answer extract", second["answer"])
+        wikipedia.assert_called_once()
 
     @patch("invoicing.ai_services._openalex_research")
     @patch("invoicing.ai_services._wikidata_facts")
