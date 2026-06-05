@@ -271,6 +271,7 @@
     let assistantIsProcessing = false;
     let assistantIsSpeaking = false;
     let speechRunId = 0;
+    let speechWatchdogTimer = null;
     let lastFinalTranscript = '';
 
     function setStatus(text) {
@@ -358,6 +359,10 @@
     function stopAssistantSpeech(reason = '') {
         if (!('speechSynthesis' in window)) return;
         speechRunId += 1;
+        if (speechWatchdogTimer) {
+            window.clearTimeout(speechWatchdogTimer);
+            speechWatchdogTimer = null;
+        }
         window.speechSynthesis.cancel();
         if (assistantIsSpeaking) {
             assistantIsSpeaking = false;
@@ -486,6 +491,20 @@
             100: 'مئة', 500: 'خمسمئة', 1000: 'ألف',
         };
         if (common[value]) return common[value];
+        if (value > 10 && value < 100) {
+            const ones = {
+                1: '\u0648\u0627\u062d\u062f', 2: '\u0627\u062b\u0646\u0627\u0646', 3: '\u062b\u0644\u0627\u062b\u0629', 4: '\u0623\u0631\u0628\u0639\u0629', 5: '\u062e\u0645\u0633\u0629',
+                6: '\u0633\u062a\u0629', 7: '\u0633\u0628\u0639\u0629', 8: '\u062b\u0645\u0627\u0646\u064a\u0629', 9: '\u062a\u0633\u0639\u0629',
+            };
+            const tens = {
+                2: '\u0639\u0634\u0631\u0648\u0646', 3: '\u062b\u0644\u0627\u062b\u0648\u0646', 4: '\u0623\u0631\u0628\u0639\u0648\u0646', 5: '\u062e\u0645\u0633\u0648\u0646',
+                6: '\u0633\u062a\u0648\u0646', 7: '\u0633\u0628\u0639\u0648\u0646', 8: '\u062b\u0645\u0627\u0646\u0648\u0646', 9: '\u062a\u0633\u0639\u0648\u0646',
+            };
+            const unit = value % 10;
+            const ten = Math.floor(value / 10);
+            if (unit && tens[ten]) return `${ones[unit]} \u0648 ${tens[ten]}`;
+            if (tens[ten]) return tens[ten];
+        }
         if (value >= 1000 && value <= 9999) return String(match).split('').join(' ');
         return match;
     }
@@ -507,6 +526,31 @@
             clean = clean.replaceAll(phrase, phrase.replace(/\s+/g, '\u00A0'));
         });
         return clean;
+    }
+
+    function pronounceArabicDate(match, year, month, day, hour, minute) {
+        const monthNames = [
+            '', '\u064a\u0646\u0627\u064a\u0631', '\u0641\u0628\u0631\u0627\u064a\u0631', '\u0645\u0627\u0631\u0633', '\u0623\u0628\u0631\u064a\u0644',
+            '\u0645\u0627\u064a\u0648', '\u064a\u0648\u0646\u064a\u0648', '\u064a\u0648\u0644\u064a\u0648', '\u0623\u063a\u0633\u0637\u0633',
+            '\u0633\u0628\u062a\u0645\u0628\u0631', '\u0623\u0643\u062a\u0648\u0628\u0631', '\u0646\u0648\u0641\u0645\u0628\u0631', '\u062f\u064a\u0633\u0645\u0628\u0631',
+        ];
+        const y = Number(year);
+        const m = Number(month);
+        const d = Number(day);
+        if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d) || !monthNames[m]) return match;
+        const spokenDay = pronounceArabicNumber(String(d));
+        const spokenYear = String(y).split('').join(' ');
+        let spoken = `\u064a\u0648\u0645 ${spokenDay} \u0645\u0646 \u0634\u0647\u0631 ${monthNames[m]} \u0633\u0646\u0629 ${spokenYear}`;
+        if (hour !== undefined && minute !== undefined) {
+            spoken += `\u060c \u0627\u0644\u0633\u0627\u0639\u0629 ${pronounceArabicNumber(String(Number(hour)))} \u0648 ${pronounceArabicNumber(String(Number(minute)))} \u062f\u0642\u064a\u0642\u0629`;
+        }
+        return spoken;
+    }
+
+    function normalizeDatesForArabicSpeech(text) {
+        return (text || '')
+            .replace(/\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[ T](\d{1,2}):(\d{2}))?\b/g, pronounceArabicDate)
+            .replace(/\b(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:[ T](\d{1,2}):(\d{2}))?\b/g, (match, day, month, year, hour, minute) => pronounceArabicDate(match, year, month, day, hour, minute));
     }
 
     function addArabicSpeechPauses(text) {
@@ -605,7 +649,7 @@
     }
 
     function splitSpeechChunks(text) {
-        const maxChunkLength = 170;
+        const maxChunkLength = 130;
         const sentences = (text || '')
             .replace(/([.؟?!؛:])\s+/g, '$1|')
             .split('|')
@@ -634,7 +678,7 @@
                         const words = part.split(/\s+/);
                         current = '';
                         words.forEach((word) => {
-                            if ((current + ' ' + word).trim().length > 180) {
+                            if ((current + ' ' + word).trim().length > 140) {
                                 if (current) chunks.push(current.trim());
                                 current = word;
                             } else {
@@ -646,7 +690,7 @@
             });
             if (current) chunks.push(current.trim());
         });
-        return chunks.slice(0, 8);
+        return chunks.slice(0, 60);
     }
 
     function preferredVoiceForDialect(voices) {
@@ -803,7 +847,7 @@
             resumeLiveConversation();
             return;
         }
-        const improvedText = limitSpeechTextByWord(improveSpeechText(normalizeDialectForSpeech(text)), 1200);
+        const improvedText = limitSpeechTextByWord(improveSpeechText(normalizeDatesForArabicSpeech(normalizeDialectForSpeech(text))), 5000);
         const speechChunks = splitSpeechChunks(improvedText);
         if (!speechChunks.length) return;
         lastSpokenText = improvedText;
@@ -835,6 +879,10 @@
         }
         const finishSpeech = () => {
             if (currentSpeechRunId !== speechRunId) return;
+            if (speechWatchdogTimer) {
+                window.clearTimeout(speechWatchdogTimer);
+                speechWatchdogTimer = null;
+            }
             assistantIsSpeaking = false;
             if (liveConversationMode) setStatus('أستمع لك... قل طلبك التالي أو قل إلغاء/تأكيد عند وجود مسودة.');
             resumeLiveConversation();
@@ -844,6 +892,10 @@
             if (speechIndex >= speechChunks.length) {
                 finishSpeech();
                 return;
+            }
+            if (speechWatchdogTimer) {
+                window.clearTimeout(speechWatchdogTimer);
+                speechWatchdogTimer = null;
             }
             const utterance = new SpeechSynthesisUtterance(speechChunks[speechIndex]);
             if (voiceMatchesLanguage(voice, spokenLang) && !hasUrduText && !hasBanglaText) {
@@ -866,11 +918,29 @@
             utterance.volume = 1;
             utterance.onend = () => {
                 if (currentSpeechRunId !== speechRunId) return;
+                if (speechWatchdogTimer) {
+                    window.clearTimeout(speechWatchdogTimer);
+                    speechWatchdogTimer = null;
+                }
                 speechIndex += 1;
                 window.setTimeout(playChunk, prosody.pause);
             };
-            utterance.onerror = finishSpeech;
+            utterance.onerror = () => {
+                if (currentSpeechRunId !== speechRunId) return;
+                if (speechWatchdogTimer) {
+                    window.clearTimeout(speechWatchdogTimer);
+                    speechWatchdogTimer = null;
+                }
+                speechIndex += 1;
+                window.setTimeout(playChunk, prosody.pause);
+            };
             window.speechSynthesis.speak(utterance);
+            speechWatchdogTimer = window.setTimeout(() => {
+                if (currentSpeechRunId !== speechRunId || !assistantIsSpeaking) return;
+                if (window.speechSynthesis.speaking || window.speechSynthesis.pending) return;
+                speechIndex += 1;
+                playChunk();
+            }, Math.max(4500, speechChunks[speechIndex].length * 95));
         };
         playChunk();
     }
