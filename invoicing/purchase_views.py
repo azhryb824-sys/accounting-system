@@ -41,6 +41,44 @@ def _apply_live_chat_style(answer, style):
     return text
 
 
+def _split_answer_references(answer):
+    text = (answer or "").strip()
+    if not text:
+        return "", []
+    reference_headings = {
+        "مراجع مختصرة للتحقق:",
+        "المراجع:",
+        "مراجع:",
+        "المصادر:",
+        "روابط للتحقق:",
+    }
+    answer_lines = []
+    references = []
+    in_references = False
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            if not in_references:
+                answer_lines.append(raw_line)
+            continue
+        if line in reference_headings:
+            in_references = True
+            continue
+        if in_references:
+            cleaned = line.lstrip("-• ").strip()
+            if "http" in cleaned:
+                title, separator, url = cleaned.partition("http")
+                references.append({
+                    "title": title.rstrip(": -") or "مرجع",
+                    "url": f"http{url}".strip(),
+                })
+            elif cleaned:
+                references.append({"title": cleaned, "url": ""})
+            continue
+        answer_lines.append(raw_line)
+    return "\n".join(answer_lines).strip(), references
+
+
 def _empty_assistant_insights(message="اختر شركة وفرعا لعرض التحليل المالي التفصيلي."):
     return {
         "ok": True,
@@ -422,6 +460,12 @@ def ai_assistant_command(request):
         result["camera_command"] = visual_command or command
     if live_style and result.get("answer"):
         result["answer"] = _apply_live_chat_style(result.get("answer"), live_style)
+    if result.get("answer"):
+        clean_answer, references = _split_answer_references(result.get("answer"))
+        result["answer"] = clean_answer
+        result["references"] = references
+    else:
+        result.setdefault("references", [])
     if result.get("pending"):
         request.session["ai_pending_command"] = result["pending"]
     else:

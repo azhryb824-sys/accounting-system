@@ -72,6 +72,26 @@
         gap: .45rem;
         justify-content: flex-end;
     }
+    .assistant-references {
+        margin-top: .85rem;
+        padding-top: .75rem;
+        border-top: 1px solid rgba(255,255,255,.12);
+    }
+    .assistant-reference-list {
+        display: grid;
+        gap: .45rem;
+        margin: .4rem 0 0;
+        padding: 0;
+        list-style: none;
+    }
+    .assistant-reference-list a {
+        color: #7dd3fc;
+        text-decoration: none;
+        overflow-wrap: anywhere;
+    }
+    .assistant-reference-list a:hover {
+        text-decoration: underline;
+    }
     .assistant-chat-messages {
         flex: 1;
         overflow-y: auto;
@@ -201,6 +221,10 @@
                     <span class="badge bg-success" id="live-source">مساعد النظام</span>
                 </div>
                 <div id="live-answer"></div>
+                <div class="assistant-references d-none" id="assistant-references">
+                    <div class="small text-muted-soft">المراجع</div>
+                    <ul class="assistant-reference-list" id="assistant-reference-list"></ul>
+                </div>
                 <div class="d-flex flex-wrap gap-2 mt-3" id="assistant-actions"></div>
             </div>
         </div>
@@ -325,6 +349,8 @@
     const answerCard = document.getElementById('live-answer-card');
     const answerBox = document.getElementById('live-answer');
     const classicAnswerBox = document.getElementById('classic-answer');
+    const referencesPanel = document.getElementById('assistant-references');
+    const referencesList = document.getElementById('assistant-reference-list');
     const actionsBox = document.getElementById('assistant-actions');
     const commandUrl = "{% url 'ai_assistant_command' %}";
     const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
@@ -381,6 +407,31 @@
         scrollChatToBottom();
         if (!extraClass.includes('loading')) saveChatHistory();
         return message;
+    }
+
+    function renderAnswerReferences(references = []) {
+        if (!referencesPanel || !referencesList) return;
+        referencesList.innerHTML = '';
+        const cleanReferences = (references || []).filter((item) => item && (item.url || item.title));
+        if (!cleanReferences.length) {
+            referencesPanel.classList.add('d-none');
+            return;
+        }
+        cleanReferences.slice(0, 6).forEach((item) => {
+            const row = document.createElement('li');
+            if (item.url) {
+                const link = document.createElement('a');
+                link.href = item.url;
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+                link.textContent = item.title || item.url;
+                row.appendChild(link);
+            } else {
+                row.textContent = item.title;
+            }
+            referencesList.appendChild(row);
+        });
+        referencesPanel.classList.remove('d-none');
     }
 
     function savedChatMessages() {
@@ -1130,6 +1181,7 @@
         answerCard.classList.remove('d-none');
         chatMessages.appendChild(answerCard);
         answerBox.textContent = 'لحظة...';
+        renderAnswerReferences([]);
         actionsBox.innerHTML = '';
         scrollChatToBottom();
 
@@ -1160,6 +1212,7 @@
             }
             const dialectAnswer = applyAssistantDialect(data.answer || 'تم تحليل الطلب.');
             answerBox.textContent = dialectAnswer;
+            renderAnswerReferences(data.references || []);
             lastAssistantAnswer = dialectAnswer;
             questionInput.value = '';
             questionInput.style.height = '';

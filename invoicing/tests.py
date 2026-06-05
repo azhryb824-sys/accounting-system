@@ -734,6 +734,29 @@ class InvoiceAccountingTests(TestCase):
         self.assertNotEqual(response.json()["answer"], answer_question.return_value["answer"])
         self.assertEqual(answer_question.call_args.args[1], "كيف أحسن التحصيل؟")
 
+    @patch("invoicing.purchase_views.answer_financial_question")
+    def test_ai_assistant_command_splits_references_from_answer(self, answer_question):
+        self.client.force_login(self.user)
+        answer_question.return_value = {
+            "ok": True,
+            "source": "free_web",
+            "answer": "الإجابة المباشرة.\n\nمراجع مختصرة للتحقق:\n- مرجع أول: https://example.com/one\n- مرجع ثان: https://example.com/two",
+            "context": {},
+        }
+
+        response = self.client.post(
+            "/invoicing/purchases/ai/assistant/command/",
+            data=json.dumps({"command": "سؤال عام"}),
+            content_type="application/json",
+        )
+
+        payload = response.json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["answer"], "الإجابة المباشرة.")
+        self.assertNotIn("مراجع مختصرة للتحقق", payload["answer"])
+        self.assertEqual(payload["references"][0]["url"], "https://example.com/one")
+        self.assertEqual(payload["references"][1]["title"], "مرجع ثان")
+
     def test_ai_assistant_template_has_valid_voice_patterns(self):
         template = Path("invoicing/templates/invoicing/ai_assistant.html").read_text(encoding="utf-8")
 
@@ -757,6 +780,8 @@ class InvoiceAccountingTests(TestCase):
         self.assertIn("live_style", template)
         self.assertIn("liveSilenceCount", template)
         self.assertIn("live-style-option", template)
+        self.assertIn("assistant-references", template)
+        self.assertIn("renderAnswerReferences", template)
         self.assertIn("speechProsodyForChunk", template)
         self.assertIn("assistant-voice-profile", template)
         self.assertIn("assistant-audio-sample-select", template)
