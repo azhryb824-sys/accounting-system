@@ -827,6 +827,18 @@ class InvoiceAccountingTests(TestCase):
         self.assertIn("المعايير الدولية للتقرير المالي", template)
         self.assertIn("واجهة برمجة التطبيقات", template)
 
+    def test_optional_open_source_audio_requirements_are_documented(self):
+        requirements = Path("accounting_ai_service/requirements-audio.txt").read_text(encoding="utf-8")
+        readme = Path("accounting_ai_service/README.md").read_text(encoding="utf-8")
+
+        self.assertIn("Piper TTS", readme)
+        self.assertIn("phonemizer", readme)
+        self.assertIn("librosa", requirements)
+        self.assertIn("soundfile", requirements)
+        self.assertIn("faster-whisper", requirements)
+        self.assertIn("requirements-audio.txt", readme)
+        self.assertIn("Do not commit large voice/STT model files", readme)
+
     @patch("invoicing.ai_services.free_web_general_answer")
     @patch("invoicing.ai_services._model_answer_financial_question")
     def test_ai_uses_web_when_model_answer_is_weak(self, model_answer, web_answer):

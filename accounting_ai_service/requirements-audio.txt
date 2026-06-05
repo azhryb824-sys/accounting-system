@@ -1,0 +1,16 @@
+# Optional open-source audio stack for local/server-side speech features.
+# Install only on the AI service environment when you want advanced TTS/STT/audio processing.
+
+# Audio loading, analysis, resampling, and feature extraction.
+librosa
+soundfile
+soxr
+
+# Simple audio conversion/segment utilities. Requires ffmpeg for many formats.
+pydub
+
+# Speech activity detection for live voice sessions.
+webrtcvad-wheels
+
+# Optional offline speech-to-text. Large models are downloaded separately.
+faster-whisper

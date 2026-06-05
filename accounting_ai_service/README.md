@@ -68,6 +68,41 @@ Browser voices depend on the user's device and operating system. For the best Ar
 - Keep responses short and sentence-based for clearer pronunciation.
 - For future server-side TTS, prefer commercially usable open TTS models such as Apache/MIT licensed Arabic TTS projects, but verify each voice/model license before deployment.
 
+## Optional open-source audio libraries
+
+Advanced audio features are kept in a separate optional requirements file so the core Django app and the AI service do not become slow or fragile on small Render instances.
+
+Install them only in the AI service virtual environment:
+
+```powershell
+cd accounting_ai_service
+python -m pip install -r requirements-audio.txt
+```
+
+If the packages were pre-downloaded to the repository-local wheelhouse, install without internet from the repository root:
+
+```powershell
+python -m pip install --no-index --find-links .audio_wheelhouse -r accounting_ai_service\requirements-audio.txt
+```
+
+Included libraries:
+
+- Piper TTS: use it as an external open-source system binary or service when available for your server OS/Python. Download compatible Arabic voice models separately and verify each voice license.
+- `phonemizer` or `espeak-ng`: install as external tools when available for the server OS; use them for phoneme/text preprocessing in TTS pipelines.
+- `librosa`, `soundfile`, `soxr`: audio loading, resampling, and signal processing.
+- `pydub`: audio conversion and segment handling. Install `ffmpeg` on the server for full format support.
+- `webrtcvad-wheels`: voice activity detection for live voice sessions.
+- `faster-whisper`: optional offline speech-to-text. Download STT models separately according to their licenses.
+
+Recommended model storage:
+
+```text
+accounting_ai_service/models/voices/
+accounting_ai_service/models/stt/
+```
+
+Do not commit large voice/STT model files to Git. Store them on the server, a mounted disk, or an artifact store, then point the service to them with environment variables when server-side TTS/STT is enabled.
+
 ## Photographed invoice OCR
 
 The invoice image reader uses only free open-source components that can be used commercially:
