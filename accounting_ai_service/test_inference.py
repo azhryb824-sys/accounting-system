@@ -67,6 +67,17 @@ class InferenceServiceTests(unittest.TestCase):
         kazakhstan = inference.ask("ما عاصمة كازاخستان وأين تقع؟")
         self.assertIn("أستانا", kazakhstan)
         self.assertIn("آسيا", kazakhstan)
+        self.assertEqual(inference.ask("ما هي عاصمة السعودية"), "عاصمة المملكة العربية السعودية هي الرياض.")
+
+    def test_common_history_question_has_direct_relevant_answer(self):
+        answer = inference.ask("من هو الخديوي؟")
+        self.assertIn("لقب", answer)
+        self.assertIn("حاكم مصر", answer)
+        self.assertNotIn("doi.org", answer)
+
+    def test_search_relevance_rejects_unrelated_academic_results(self):
+        self.assertTrue(inference._source_is_relevant("الخديوي", "الخديوي إسماعيل", "حاكم مصر"))
+        self.assertFalse(inference._source_is_relevant("عاصمة السعودية", "تحليل التوسع العمراني", "دراسة أكاديمية مفهرسة"))
 
     def test_jameel_chat_keeps_composer_inside_viewport(self):
         template = (Path(__file__).resolve().parent / "templates" / "jameel.html").read_text(encoding="utf-8")

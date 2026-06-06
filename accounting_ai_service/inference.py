@@ -118,6 +118,10 @@ SYSTEM_PROMPT = f"""
 
 GENERAL_KNOWLEDGE_PATTERNS = [
     (
+        ("عاصمة السعودية", "عاصمة المملكة العربية السعودية", "ما هي عاصمة السعودية", "ما هي عاصمة المملكة العربية السعودية"),
+        "عاصمة المملكة العربية السعودية هي الرياض.",
+    ),
+    (
         ("عاصمة السودان", "ما هي عاصمة السودان", "ما عاصمة السودان"),
         "عاصمة السودان هي الخرطوم. تقع عند ملتقى النيل الأزرق والنيل الأبيض، وتشكّل مع أم درمان والخرطوم بحري أكبر تجمع حضري في البلاد.",
     ),
@@ -129,7 +133,34 @@ GENERAL_KNOWLEDGE_PATTERNS = [
         ("عدد أيام الأسبوع", "كم يوم في الأسبوع", "كم عدد ايام الاسبوع", "كم عدد أيام الأسبوع"),
         "عدد أيام الأسبوع سبعة أيام.",
     ),
+    (
+        ("من هو الخديوي", "ما معنى الخديوي", "الخديوي"),
+        "الخديوي لقبٌ كان يُطلق على حاكم مصر في عهد الأسرة العلوية، ولا سيما من إسماعيل باشا سنة 1867 حتى إلغاء اللقب سنة 1914. ومن أشهر من حمله: إسماعيل، وتوفيق، وعباس حلمي الثاني.",
+    ),
 ]
+
+
+def _knowledge_query(question: str) -> str:
+    query = normalize_user_question_text(_extract_user_question(question))
+    query = re.sub(
+        r"^(?:من\s+(?:هو|هي)|ما\s+(?:هو|هي|معنى)|أين\s+تقع|اين\s+تقع|اشرح|فسر|عرّف|عرف)\s+",
+        "",
+        query,
+        flags=re.IGNORECASE,
+    )
+    return query.strip(" ؟?،,.") or normalize_user_question_text(question)
+
+
+def _source_is_relevant(query: str, title: str, summary: str) -> bool:
+    stop_words = {"من", "هو", "هي", "ما", "في", "عن", "على", "إلى", "الى", "the", "is", "of", "and"}
+    query_tokens = {
+        token for token in re.findall(r"[\w\u0600-\u06ff]+", query.lower())
+        if len(token) > 2 and token not in stop_words
+    }
+    if not query_tokens:
+        return True
+    source_text = f"{title} {summary}".lower()
+    return any(token in source_text for token in query_tokens)
 
 PRIVATE_KNOWLEDGE = {
     "الفاتورة الضريبية": "الفاتورة الضريبية مستند رسمي يوضح بيانات البائع والمشتري والسلع أو الخدمات والمبلغ وضريبة القيمة المضافة، وتستخدم لإثبات عملية البيع محاسبيا وضريبيا.",
@@ -498,7 +529,7 @@ def _open_web_search_answer(question: str) -> str | None:
     if not analysis.get("asks_web") and not any(term in normalized for term in general_lookup_terms):
         return None
 
-    query = analysis["normalized_text"]
+    query = _knowledge_query(analysis["normalized_text"])
     query = re.sub(r"\b(ابحث|بحث|في النت|على النت|في الانترنت|في الإنترنت|روابط|مصادر)\b", "", query, flags=re.IGNORECASE).strip()
     if not query:
         return "اكتب موضوع البحث بوضوح، وسأحاول جلب ملخص من مصادر مفتوحة."
@@ -518,7 +549,7 @@ def _open_web_search_answer(question: str) -> str | None:
         abstract = (data.get("AbstractText") or "").strip()
         url = (data.get("AbstractURL") or "").strip()
         title = (data.get("Heading") or "DuckDuckGo").strip()
-        if abstract and url:
+        if abstract and url and _source_is_relevant(query, title, abstract):
             sources.append((title, abstract, url))
     except Exception:
         pass
@@ -554,7 +585,7 @@ def _open_web_search_answer(question: str) -> str | None:
                 extract = (data.get("extract") or "").strip()
                 url = ((data.get("content_urls") or {}).get("desktop") or {}).get("page", "")
                 title = (data.get("title") or page_title).strip()
-                if extract and url:
+                if extract and url and _source_is_relevant(query, title, extract):
                     sources.append((title, extract, url))
             if rows:
                 break
@@ -580,12 +611,18 @@ def _open_web_search_answer(question: str) -> str | None:
             title = (item.get("label") or "").strip()
             summary = (item.get("description") or "").strip()
             entity_id = (item.get("id") or "").strip()
-            if title and summary and entity_id:
+            if title and summary and entity_id and _source_is_relevant(query, title, summary):
                 sources.append((title, summary, f"https://www.wikidata.org/wiki/{entity_id}"))
     except Exception:
         pass
 
+    scholarly_question = analysis.get("asks_web") and any(
+        term in analysis["normalized_text"].lower()
+        for term in ("بحث", "دراسة", "أبحاث", "ابحاث", "ورقة علمية", "مصادر أكاديمية", "research", "study", "paper")
+    )
     try:
+        if not scholarly_question:
+            raise LookupError
         response = requests.get(
             "https://api.openalex.org/works",
             params={"search": query, "per-page": 2},
@@ -597,9 +634,9 @@ def _open_web_search_answer(question: str) -> str | None:
             title = (item.get("title") or "OpenAlex research").strip()
             abstract = (item.get("abstract_inverted_index") and "بحث أكاديمي مفهرس عن الموضوع.") or ""
             url = (item.get("doi") or item.get("id") or "").strip()
-            if title and url:
+            if title and url and _source_is_relevant(query, title, abstract):
                 sources.append((title, abstract, url))
-    except Exception:
+    except (Exception, LookupError):
         pass
 
     if not sources:
