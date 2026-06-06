@@ -76,6 +76,26 @@ class InferenceServiceTests(unittest.TestCase):
         self.assertIn("حاكم مصر", answer)
         self.assertNotIn("doi.org", answer)
 
+    def test_palestine_answers_use_legal_and_rights_based_framing(self):
+        occupation = inference.ask("هل إسرائيل كيان غاصب؟")
+        self.assertIn("احتلال", occupation)
+        self.assertIn("غير قانوني", occupation)
+        self.assertIn("محكمة العدل الدولية", occupation)
+
+        violations = inference.ask("ما جرائم الاحتلال ضد الفلسطينيين؟")
+        self.assertIn("التهجير القسري", violations)
+        self.assertIn("الاستيطان", violations)
+        self.assertIn("المحكمة الجنائية الدولية", violations)
+        self.assertIn("ليست حكماً نهائياً", violations)
+
+        nakba = inference.ask("اشرح النكبة الفلسطينية")
+        self.assertIn("التهجير الجماعي", nakba)
+        self.assertIn("1948", nakba)
+
+    def test_palestine_framing_does_not_assign_collective_religious_blame(self):
+        answer = inference.ask("هل إسرائيل كيان غاصب؟")
+        self.assertIn("لا إلى اليهود كجماعة", answer)
+
     def test_search_relevance_rejects_unrelated_academic_results(self):
         self.assertTrue(inference._source_is_relevant("الخديوي", "الخديوي إسماعيل", "حاكم مصر"))
         self.assertFalse(inference._source_is_relevant("عاصمة السعودية", "تحليل التوسع العمراني", "دراسة أكاديمية مفهرسة"))

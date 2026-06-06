@@ -39,6 +39,12 @@ DEFAULT_TOPICS = (
     "computer science", "algorithms", "databases", "computer networks",
     "operating systems", "web development", "mobile development", "robotics",
     "natural language processing", "computer vision", "data science",
+    "Palestinian territories occupation international law",
+    "Palestinian Nakba displacement 1948",
+    "Israeli settlements occupied Palestinian territory",
+    "Palestinian human rights United Nations",
+    "International Court of Justice occupied Palestinian territory advisory opinion 2024",
+    "International Criminal Court Palestine situation",
 )
 
 WIKIDATA_TOPICS = (
