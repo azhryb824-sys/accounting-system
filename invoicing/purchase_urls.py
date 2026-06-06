@@ -13,4 +13,5 @@ urlpatterns = [
     path('ai/insights/', purchase_views.ai_insights, name='ai_insights'),
     path('ai/assistant/', purchase_views.ai_assistant, name='ai_assistant'),
     path('ai/assistant/command/', purchase_views.ai_assistant_command, name='ai_assistant_command'),
+    path('ai/assistant/tts/', purchase_views.ai_assistant_tts, name='ai_assistant_tts'),
 ]

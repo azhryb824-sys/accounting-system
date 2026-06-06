@@ -1,7 +1,10 @@
 import json
 import logging
+import os
+import requests
 
-from django.http import JsonResponse
+from django.conf import settings
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -21,6 +24,44 @@ from datetime import date
 
 
 logger = logging.getLogger(__name__)
+
+
+@login_required(login_url='login')
+@role_required('view_ai_insights')
+@require_POST
+def ai_assistant_tts(request):
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        payload = request.POST
+    text = (payload.get("text") or "").strip()
+    if not text:
+        return JsonResponse({"ok": False, "message": "لا يوجد نص للقراءة."}, status=400)
+    base_url = (
+        getattr(settings, "PRIVATE_ACCOUNTING_AI_URL", "")
+        or os.environ.get("PRIVATE_ACCOUNTING_AI_URL", "")
+    ).strip().rstrip("/")
+    if not base_url:
+        return JsonResponse({"ok": False, "message": "خدمة الصوت العربي غير مضبوطة."}, status=503)
+    headers = {"Content-Type": "application/json"}
+    api_key = (
+        getattr(settings, "PRIVATE_ACCOUNTING_AI_API_KEY", "")
+        or os.environ.get("PRIVATE_ACCOUNTING_AI_API_KEY", "")
+    ).strip()
+    if api_key:
+        headers["X-Accounting-AI-Key"] = api_key
+    try:
+        response = requests.post(
+            f"{base_url}/tts",
+            json={"text": text[:5000], "speed": float(payload.get("speed") or 1.0)},
+            headers=headers,
+            timeout=90,
+        )
+        response.raise_for_status()
+    except (requests.RequestException, ValueError):
+        logger.exception("Arabic TTS request failed")
+        return JsonResponse({"ok": False, "message": "تعذر توليد الصوت العربي الآن."}, status=503)
+    return HttpResponse(response.content, content_type="audio/wav")
 
 
 def _assistant_without_branch_allowed(user):

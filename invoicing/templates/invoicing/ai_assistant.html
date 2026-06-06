@@ -300,7 +300,7 @@
                     <option value="child">صوت طفولي</option>
                 </select>
                 <select id="assistant-voice-select" class="form-select">
-                    <option value="static::piper-kareem-ar-jo-medium">كريم - صوت عربي احترافي (ar-JO) - معاينة محلية</option>
+                    <option value="static::piper-kareem-ar-jo-medium">كريم - صوت عربي احترافي (ar-JO)</option>
                 </select>
                 <select id="assistant-audio-sample-select" class="form-select d-none"></select>
                 <button class="btn btn-outline-light d-none" type="button" id="assistant-audio-sample-play" title="معاينة ملف صوتي">
@@ -355,6 +355,7 @@
     const referencesList = document.getElementById('assistant-reference-list');
     const actionsBox = document.getElementById('assistant-actions');
     const commandUrl = "{% url 'ai_assistant_command' %}";
+    const ttsUrl = "{% url 'ai_assistant_tts' %}";
     const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const fallbackRecognitionLanguages = ['ar-SA', 'ar-SD', 'en-US', 'ur-PK', 'ar', 'ar-EG'];
@@ -972,6 +973,36 @@
         return staticAudioSamples.find((sample) => sample.id === id) || null;
     }
 
+    async function speakWithServerVoice(text) {
+        setStatus('جاري توليد الرد بصوت كريم...');
+        const response = await fetch(ttsUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken,
+            },
+            body: JSON.stringify({
+                text,
+                speed: Math.max(0.75, Math.min(1.25, Number(voiceRate.value || 1))),
+            }),
+        });
+        if (!response.ok) throw new Error('server-tts-unavailable');
+        const blob = await response.blob();
+        if (audioSamplePlayer) audioSamplePlayer.pause();
+        audioSamplePlayer = new Audio(URL.createObjectURL(blob));
+        assistantIsSpeaking = true;
+        audioSamplePlayer.onended = () => {
+            assistantIsSpeaking = false;
+            resumeLiveConversation();
+        };
+        audioSamplePlayer.onerror = () => {
+            assistantIsSpeaking = false;
+            resumeLiveConversation();
+        };
+        await audioSamplePlayer.play();
+        setStatus('جاري قراءة الرد بصوت كريم.');
+    }
+
     function isArabicSpeechVoice(voice) {
         return Boolean(voice && /^(ar|arb)/i.test(voice.lang || ''));
     }
@@ -1077,6 +1108,19 @@
     }
 
     function speak(text) {
+        if (selectedStaticAudioSample()) {
+            const improvedText = limitSpeechTextByWord(improveSpeechText(normalizeDatesForArabicSpeech(normalizeDialectForSpeech(text))), 5000);
+            stopAssistantSpeech();
+            lastSpokenText = improvedText;
+            speakWithServerVoice(improvedText).catch(() => {
+                setStatus('تعذر تشغيل صوت كريم؛ سيتم استخدام صوت المتصفح.');
+                const savedValue = voiceSelect.value;
+                voiceSelect.value = [...voiceSelect.options].find((option) => !option.value.startsWith('static::'))?.value || '';
+                speak(text);
+                voiceSelect.value = savedValue;
+            });
+            return;
+        }
         if (!('speechSynthesis' in window) || !text) {
             setStatus('المتصفح لا يدعم قراءة الصوت.');
             resumeLiveConversation();
@@ -1445,8 +1489,7 @@
             if (staticSample) {
                 arabicVoice = null;
                 audioSampleSelect.value = staticSample.file;
-                playStaticAudioSample();
-                setStatus(`تم اختيار ${staticSample.label}. هذا ملف معاينة محلي، أما قراءة الردود المتغيرة فتستخدم صوت المتصفح حالياً.`);
+                setStatus(`تم اختيار ${staticSample.label}. ستُقرأ الردود بهذا الصوت.`);
                 return;
             }
             arabicVoice = window.speechSynthesis.getVoices().find((voice) => `${voice.name}::${voice.lang}` === voiceSelect.value && isArabicSpeechVoice(voice)) || null;

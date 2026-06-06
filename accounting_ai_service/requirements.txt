@@ -45,6 +45,7 @@ python-dateutil==2.9.0.post0
 PyYAML==6.0.3
 regex==2026.5.9
 requests==2.34.2
+sherpa-onnx==1.13.2
 rich==15.0.0
 safetensors==0.7.0
 sentencepiece==0.2.1
