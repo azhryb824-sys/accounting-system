@@ -901,6 +901,20 @@
         );
     }
 
+    let staticAudioSamples = [];
+
+    function appendStaticVoicesToMainSelect() {
+        if (!voiceSelect || !staticAudioSamples.length) return;
+        staticAudioSamples.forEach((sample) => {
+            const value = `static::${sample.id}`;
+            if ([...voiceSelect.options].some((option) => option.value === value)) return;
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = `${sample.label} (${sample.language || 'ar'}) - معاينة محلية`;
+            voiceSelect.appendChild(option);
+        });
+    }
+
     async function loadStaticAudioSamples() {
         if (!audioSampleSelect || !audioSamplePlay) return;
         try {
@@ -909,6 +923,7 @@
             const payload = await response.json();
             const samples = (payload.voices || []).filter((voice) => voice.file);
             if (!samples.length) return;
+            staticAudioSamples = samples;
             audioSampleSelect.innerHTML = '';
             samples.forEach((sample) => {
                 const option = document.createElement('option');
@@ -916,6 +931,11 @@
                 option.textContent = `${sample.label} (${sample.profile || 'عام'})`;
                 audioSampleSelect.appendChild(option);
             });
+            appendStaticVoicesToMainSelect();
+            const savedVoice = window.localStorage.getItem('assistantVoice');
+            if (savedVoice && [...voiceSelect.options].some((option) => option.value === savedVoice)) {
+                voiceSelect.value = savedVoice;
+            }
             audioSampleSelect.classList.remove('d-none');
             audioSamplePlay.classList.remove('d-none');
         } catch (error) {
@@ -936,6 +956,12 @@
         audioSamplePlayer.play()
             .then(() => setStatus('جاري تشغيل معاينة الصوت.'))
             .catch(() => setStatus('تعذر تشغيل ملف الصوت.'));
+    }
+
+    function selectedStaticAudioSample() {
+        if (!voiceSelect?.value.startsWith('static::')) return null;
+        const id = voiceSelect.value.slice('static::'.length);
+        return staticAudioSamples.find((sample) => sample.id === id) || null;
     }
 
     function isArabicSpeechVoice(voice) {
@@ -1015,6 +1041,7 @@
                 option.textContent = `${voiceProfileLabel(profile)} - ${voice.name} (${voice.lang})${qualityHint}`;
                 voiceSelect.appendChild(option);
             });
+        appendStaticVoicesToMainSelect();
         if (!voiceSelect.options.length) {
             const option = document.createElement('option');
             option.value = '';
@@ -1023,6 +1050,15 @@
         }
         if (previousValue && [...voiceSelect.options].some((option) => option.value === previousValue)) {
             voiceSelect.value = previousValue;
+        } else {
+            const savedVoice = window.localStorage.getItem('assistantVoice');
+            if (savedVoice && [...voiceSelect.options].some((option) => option.value === savedVoice)) {
+                voiceSelect.value = savedVoice;
+            }
+        }
+        if (voiceSelect.value.startsWith('static::')) {
+            arabicVoice = null;
+            return null;
         }
         arabicVoice =
             voices.find((voice) => `${voice.name}::${voice.lang}` === voiceSelect.value) ||
@@ -1395,6 +1431,15 @@
         loadStaticAudioSamples();
         window.speechSynthesis.onvoiceschanged = loadArabicVoice;
         voiceSelect.addEventListener('change', () => {
+            window.localStorage.setItem('assistantVoice', voiceSelect.value);
+            const staticSample = selectedStaticAudioSample();
+            if (staticSample) {
+                arabicVoice = null;
+                audioSampleSelect.value = staticSample.file;
+                playStaticAudioSample();
+                setStatus(`تم اختيار ${staticSample.label}. هذا ملف معاينة محلي، أما قراءة الردود المتغيرة فتستخدم صوت المتصفح حالياً.`);
+                return;
+            }
             arabicVoice = window.speechSynthesis.getVoices().find((voice) => `${voice.name}::${voice.lang}` === voiceSelect.value && isArabicSpeechVoice(voice)) || null;
             setStatus(arabicVoice ? `تم اختيار صوت: ${arabicVoice.name}` : 'لا يوجد صوت عربي مثبت في المتصفح.');
         });
