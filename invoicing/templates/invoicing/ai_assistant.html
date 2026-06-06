@@ -299,7 +299,9 @@
                     <option value="youth">صوت شبابي</option>
                     <option value="child">صوت طفولي</option>
                 </select>
-                <select id="assistant-voice-select" class="form-select"></select>
+                <select id="assistant-voice-select" class="form-select">
+                    <option value="static::piper-kareem-ar-jo-medium">كريم - صوت عربي احترافي (ar-JO) - معاينة محلية</option>
+                </select>
                 <select id="assistant-audio-sample-select" class="form-select d-none"></select>
                 <button class="btn btn-outline-light d-none" type="button" id="assistant-audio-sample-play" title="معاينة ملف صوتي">
                     <i class="fa-solid fa-play"></i>
@@ -901,7 +903,13 @@
         );
     }
 
-    let staticAudioSamples = [];
+    let staticAudioSamples = [{
+        id: 'piper-kareem-ar-jo-medium',
+        label: 'كريم - صوت عربي احترافي',
+        profile: 'male',
+        language: 'ar-JO',
+        file: '/static/audio/voices/kareem-arabic-preview.wav',
+    }];
 
     function appendStaticVoicesToMainSelect() {
         if (!voiceSelect || !staticAudioSamples.length) return;
@@ -1426,9 +1434,10 @@
         runAssistant(questionInput.value || 'حلل البيانات المعروضة على الشاشة وأجب بدقة', false, payload);
     }
 
+    loadStaticAudioSamples();
+
     if ('speechSynthesis' in window) {
         loadArabicVoice();
-        loadStaticAudioSamples();
         window.speechSynthesis.onvoiceschanged = loadArabicVoice;
         voiceSelect.addEventListener('change', () => {
             window.localStorage.setItem('assistantVoice', voiceSelect.value);

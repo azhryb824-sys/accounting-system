@@ -814,6 +814,8 @@ class InvoiceAccountingTests(TestCase):
         self.assertIn("selectedStaticAudioSample", template)
         self.assertIn("assistantVoice", template)
         self.assertIn("static::", template)
+        self.assertIn("static::piper-kareem-ar-jo-medium", template)
+        self.assertLess(template.index("loadStaticAudioSamples();"), template.index("if ('speechSynthesis' in window)"))
         self.assertIn("/static/audio/voices/voices.json", template)
         self.assertIn("voiceProfile(voice)", template)
         self.assertIn("صوت رجالي", template)
