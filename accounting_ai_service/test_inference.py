@@ -60,6 +60,13 @@ class InferenceServiceTests(unittest.TestCase):
     def test_assistant_identity_is_jameel(self):
         self.assertEqual(inference.MODEL_NAME, "جميل")
         self.assertIn("أنا جميل", inference.ask("إيش اسمك؟"))
+        self.assertIn("خدمة الذكاء الاصطناعي", inference.ask("أين أنت؟"))
+
+    def test_general_geography_fallback_answers_capitals(self):
+        self.assertIn("الخرطوم", inference.ask("ما هي عاصمة السودان"))
+        kazakhstan = inference.ask("ما عاصمة كازاخستان وأين تقع؟")
+        self.assertIn("أستانا", kazakhstan)
+        self.assertIn("آسيا", kazakhstan)
 
 
 if __name__ == "__main__":

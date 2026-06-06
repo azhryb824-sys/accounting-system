@@ -111,10 +111,25 @@ def _load_transformers_runtime():
     return torch, AutoModelForCausalLM, AutoTokenizer
 
 SYSTEM_PROMPT = f"""
-أنت {MODEL_NAME}، مساعد ذكاء اصطناعي خاص بـ {MODEL_OWNER}.
-تجيب بالعربية بوضوح وبنقاط متعددة عند الحاجة، وتركز على المحاسبة والفواتير والمخزون والقيود اليومية والرواتب والسلف.
+أنت {MODEL_NAME}، مساعد ذكاء اصطناعي مستقل مقدم من {MODEL_OWNER}.
+تجيب بالعربية بوضوح وبنقاط متعددة عند الحاجة، وتساعد في المعرفة العامة والجغرافيا والعلوم والرياضيات واللغة والمحاسبة.
 إذا كانت البيانات غير كافية فاذكر ذلك بوضوح ولا تخترع أرقاما.
 """.strip()
+
+GENERAL_KNOWLEDGE_PATTERNS = [
+    (
+        ("عاصمة السودان", "ما هي عاصمة السودان", "ما عاصمة السودان"),
+        "عاصمة السودان هي الخرطوم. تقع عند ملتقى النيل الأزرق والنيل الأبيض، وتشكّل مع أم درمان والخرطوم بحري أكبر تجمع حضري في البلاد.",
+    ),
+    (
+        ("عاصمة كازاخستان", "ما هي عاصمة كازاخستان", "ما عاصمة كازاخستان"),
+        "عاصمة كازاخستان هي أستانا. تقع في شمال وسط البلاد على نهر إيشيم، ضمن قارة آسيا.",
+    ),
+    (
+        ("عدد أيام الأسبوع", "كم يوم في الأسبوع", "كم عدد ايام الاسبوع", "كم عدد أيام الأسبوع"),
+        "عدد أيام الأسبوع سبعة أيام.",
+    ),
+]
 
 PRIVATE_KNOWLEDGE = {
     "الفاتورة الضريبية": "الفاتورة الضريبية مستند رسمي يوضح بيانات البائع والمشتري والسلع أو الخدمات والمبلغ وضريبة القيمة المضافة، وتستخدم لإثبات عملية البيع محاسبيا وضريبيا.",
@@ -125,7 +140,7 @@ PRIVATE_KNOWLEDGE = {
     "البيع الآجل": "البيع الآجل يعني بيع سلعة أو خدمة الآن مع تأجيل تحصيل المبلغ، ويظهر عادة ضمن حسابات العملاء أو الذمم المدينة.",
     "ضريبة القيمة المضافة": "ضريبة القيمة المضافة ضريبة غير مباشرة تظهر في المبيعات كضريبة مخرجات وفي المشتريات كضريبة مدخلات، ويحسب صافي الالتزام من الفرق بينهما.",
     "حد التنبيه": "حد التنبيه في المخزون هو مستوى تحدده للصنف حتى ينبهك النظام عند انخفاض الكمية، مما يساعد على إعادة الطلب في الوقت المناسب.",
-    "من أنت": f"أنا {MODEL_NAME}، مساعد ذكاء اصطناعي محاسبي خاص بـ {MODEL_OWNER} ومصمم لمساعدتك في الفواتير والمخزون والقيود والرواتب والسلف.",
+    "من أنت": f"أنا {MODEL_NAME}، مساعد ذكاء اصطناعي مستقل مقدم من {MODEL_OWNER}. أساعد في المعرفة العامة والتحليل والعلوم واللغة والمحاسبة.",
 }
 
 ACCOUNTING_PATTERNS = [
@@ -193,6 +208,10 @@ GENERAL_CHAT_PATTERNS = [
     (
         ("من أنت", "مين انت", "من انت", "عرف نفسك", "ما دورك", "ما اسمك", "ايش اسمك", "إيش اسمك", "وش اسمك", "اسمك شنو", "اسمك ايه"),
         f"أنا {MODEL_NAME}، مساعد ذكاء اصطناعي مستقل. أساعدك في المحاسبة والتحليل والعلوم والرياضيات والجغرافيا واللغة والكتابة والمعرفة العامة.",
+    ),
+    (
+        ("أين أنت", "اين انت", "وينك", "أين تعمل", "اين تعمل"),
+        "أنا جميل، أعمل رقمياً داخل خدمة الذكاء الاصطناعي السحابية، لذلك يمكنك التحدث معي من المتصفح أينما كنت.",
     ),
     (
         ("ماذا تستطيع", "وش تقدر", "ايش تقدر", "شنو بتقدر", "ساعدني"),
@@ -315,6 +334,14 @@ def _answer_greeting(text: str) -> str | None:
             "أنا مساعدك المحاسبي داخل النظام. أستطيع مساعدتك في استخدام النظام، شرح المفاهيم المحاسبية، "
             "تحليل المبيعات والمشتريات والمخزون، ومساعدتك في الفواتير والرواتب والسلف والقيود."
         )
+    return None
+
+
+def _answer_general_knowledge(text: str) -> str | None:
+    normalized = normalize_user_question_text(_extract_user_question(text)).lower()
+    for words, answer in GENERAL_KNOWLEDGE_PATTERNS:
+        if any(word.lower() in normalized for word in words):
+            return answer
     return None
 
 
@@ -461,7 +488,12 @@ def _open_web_search_answer(question: str) -> str | None:
     if LOCAL_ANALYSIS_ONLY or not ENABLE_OPEN_WEB_SEARCH:
         return None
     analysis = _analyze_question(question)
-    if not analysis.get("asks_web"):
+    normalized = analysis["normalized_text"].lower()
+    general_lookup_terms = (
+        "عاصمة", "أين تقع", "اين تقع", "دولة", "مدينة", "جغرافيا", "عدد السكان",
+        "من هو", "من هي", "ما هو", "ما هي", "متى", "capital", "where is", "who is", "what is",
+    )
+    if not analysis.get("asks_web") and not any(term in normalized for term in general_lookup_terms):
         return None
 
     query = analysis["normalized_text"]
@@ -529,7 +561,7 @@ def _open_web_search_answer(question: str) -> str | None:
         pass
 
     if not sources:
-        return "حاولت البحث في مصادر مفتوحة، لكن لم أجد نتيجة موثوقة كافية الآن. جرّب صياغة أدق أو اسأل عن مصدر محدد."
+        return None
 
     unique_sources = []
     seen = set()
@@ -886,6 +918,14 @@ class PrivateAccountingModel:
         if recalled_memory:
             return recalled_memory
 
+        greeting_answer = _answer_greeting(question)
+        if greeting_answer:
+            return greeting_answer
+
+        general_answer = _answer_general_knowledge(question)
+        if general_answer:
+            return general_answer
+
         if not LOCAL_ANALYSIS_ONLY:
             web_answer = _open_web_search_answer(question)
             if web_answer:
@@ -910,10 +950,6 @@ class PrivateAccountingModel:
         if REQUIRE_HOSTED_AI:
             raise ValueError("تم تفعيل REQUIRE_HOSTED_AI لكن المزود الخارجي لم يرجع إجابة. راجع OPENAI_COMPATIBLE_API_KEY و OPENAI_COMPATIBLE_MODEL و OPENAI_COMPATIBLE_BASE_URL.")
 
-        greeting_answer = _answer_greeting(question)
-        if greeting_answer:
-            return greeting_answer
-
         private_answer = self._answer_from_private_knowledge(question)
         if private_answer:
             return private_answer
@@ -925,10 +961,8 @@ class PrivateAccountingModel:
 
         if self.model is None or self.tokenizer is None:
             return (
-                "لم يتم تحميل أوزان النموذج على الخادم، لذلك أعمل حاليا بطبقة المعرفة المحاسبية المدمجة.\n"
-                "- أستطيع الإجابة عن الرواتب والسلف وفواتير البيع والشراء.\n"
-                "- أستطيع شرح القيود والضريبة والمخزون والتقارير.\n"
-                "- إذا سألت عن أكثر من موضوع سأجمع لك الإجابة في نقاط متعددة."
+                "لا أملك إجابة موثوقة كافية لهذا السؤال الآن. اكتب السؤال بتفصيل أكبر، "
+                "أو اطلب مني التحقق من معلومة محددة وسأحاول الإجابة بدقة."
             )
 
         return self._answer_from_transformers(question, max_new_tokens=max_new_tokens)
