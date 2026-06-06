@@ -41,7 +41,7 @@ class InferenceServiceTests(unittest.TestCase):
 
         answer = inference.ask("ابحث في النت عن VAT", max_new_tokens=120)
 
-        self.assertIn("الخلاصة", answer)
+        self.assertIn("Value-added tax is a consumption tax", answer)
         self.assertIn("روابط التحقق", answer)
         self.assertIn("https://example.test/vat", answer)
 
@@ -78,6 +78,23 @@ class InferenceServiceTests(unittest.TestCase):
     def test_search_relevance_rejects_unrelated_academic_results(self):
         self.assertTrue(inference._source_is_relevant("الخديوي", "الخديوي إسماعيل", "حاكم مصر"))
         self.assertFalse(inference._source_is_relevant("عاصمة السعودية", "تحليل التوسع العمراني", "دراسة أكاديمية مفهرسة"))
+
+    def test_web_source_ranking_prefers_official_and_exact_sources(self):
+        official = inference._web_source_score(
+            "ضريبة القيمة المضافة",
+            "ضريبة القيمة المضافة",
+            "الدليل الرسمي لضريبة القيمة المضافة ومتطلبات الامتثال.",
+            "https://example.gov.sa/vat",
+            "official",
+        )
+        weak = inference._web_source_score(
+            "ضريبة القيمة المضافة",
+            "موضوع اقتصادي عام",
+            "مقتطف قصير.",
+            "https://example.com/article",
+            "duckduckgo",
+        )
+        self.assertGreater(official, weak)
 
     def test_jameel_chat_keeps_composer_inside_viewport(self):
         template = (Path(__file__).resolve().parent / "templates" / "jameel.html").read_text(encoding="utf-8")

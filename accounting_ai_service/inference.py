@@ -162,6 +162,26 @@ def _source_is_relevant(query: str, title: str, summary: str) -> bool:
     source_text = f"{title} {summary}".lower()
     return any(token in source_text for token in query_tokens)
 
+
+def _web_source_score(query: str, title: str, summary: str, url: str, source_type: str) -> int:
+    query_tokens = set(re.findall(r"[\w\u0600-\u06ff]+", query.lower()))
+    title_tokens = set(re.findall(r"[\w\u0600-\u06ff]+", title.lower()))
+    summary_text = summary.lower()
+    overlap = len(query_tokens & title_tokens)
+    score = {"official": 100, "wikidata": 82, "wikipedia": 78, "duckduckgo": 60, "openalex": 55}.get(source_type, 40)
+    score += overlap * 12
+    if query.lower() in title.lower():
+        score += 25
+    if any(token in summary_text for token in query_tokens if len(token) > 2):
+        score += 10
+    if len(summary.strip()) >= 80:
+        score += 8
+    if any(domain in url.lower() for domain in (".gov.", ".gov/", ".edu.", "who.int", "un.org", "worldbank.org")):
+        score += 30
+    if len(summary.strip()) < 25:
+        score -= 20
+    return score
+
 PRIVATE_KNOWLEDGE = {
     "الفاتورة الضريبية": "الفاتورة الضريبية مستند رسمي يوضح بيانات البائع والمشتري والسلع أو الخدمات والمبلغ وضريبة القيمة المضافة، وتستخدم لإثبات عملية البيع محاسبيا وضريبيا.",
     "المخزون عند البيع": "عند البيع تنخفض كمية الصنف من المخزون بمقدار الكمية المباعة، ويظهر أثر العملية في تكلفة البضاعة المباعة والإيراد حسب طريقة التسجيل المحاسبي.",
@@ -534,7 +554,7 @@ def _open_web_search_answer(question: str) -> str | None:
     if not query:
         return "اكتب موضوع البحث بوضوح، وسأحاول جلب ملخص من مصادر مفتوحة."
 
-    sources: list[tuple[str, str, str]] = []
+    sources: list[dict[str, str]] = []
     headers = {"User-Agent": "AccountingAIService/1.1 (+open web research)"}
 
     try:
@@ -550,7 +570,7 @@ def _open_web_search_answer(question: str) -> str | None:
         url = (data.get("AbstractURL") or "").strip()
         title = (data.get("Heading") or "DuckDuckGo").strip()
         if abstract and url and _source_is_relevant(query, title, abstract):
-            sources.append((title, abstract, url))
+            sources.append({"title": title, "summary": abstract, "url": url, "type": "duckduckgo"})
     except Exception:
         pass
 
@@ -586,7 +606,7 @@ def _open_web_search_answer(question: str) -> str | None:
                 url = ((data.get("content_urls") or {}).get("desktop") or {}).get("page", "")
                 title = (data.get("title") or page_title).strip()
                 if extract and url and _source_is_relevant(query, title, extract):
-                    sources.append((title, extract, url))
+                    sources.append({"title": title, "summary": extract, "url": url, "type": "wikipedia"})
             if rows:
                 break
         except Exception:
@@ -612,7 +632,12 @@ def _open_web_search_answer(question: str) -> str | None:
             summary = (item.get("description") or "").strip()
             entity_id = (item.get("id") or "").strip()
             if title and summary and entity_id and _source_is_relevant(query, title, summary):
-                sources.append((title, summary, f"https://www.wikidata.org/wiki/{entity_id}"))
+                sources.append({
+                    "title": title,
+                    "summary": summary,
+                    "url": f"https://www.wikidata.org/wiki/{entity_id}",
+                    "type": "wikidata",
+                })
     except Exception:
         pass
 
@@ -635,7 +660,7 @@ def _open_web_search_answer(question: str) -> str | None:
             abstract = (item.get("abstract_inverted_index") and "بحث أكاديمي مفهرس عن الموضوع.") or ""
             url = (item.get("doi") or item.get("id") or "").strip()
             if title and url and _source_is_relevant(query, title, abstract):
-                sources.append((title, abstract, url))
+                sources.append({"title": title, "summary": abstract, "url": url, "type": "openalex"})
     except (Exception, LookupError):
         pass
 
@@ -644,22 +669,35 @@ def _open_web_search_answer(question: str) -> str | None:
 
     unique_sources = []
     seen = set()
-    for title, summary, url in sources:
+    for source in sources:
+        title, summary, url = source["title"], source["summary"], source["url"]
         if url in seen:
             continue
         seen.add(url)
-        unique_sources.append((title, summary, url))
+        source["score"] = _web_source_score(query, title, summary, url, source["type"])
+        unique_sources.append(source)
+    unique_sources.sort(key=lambda item: item["score"], reverse=True)
 
-    lines = ["الخلاصة:"]
-    for index, (title, summary, url) in enumerate(unique_sources[:4], start=1):
-        concise = re.sub(r"\s+", " ", summary).strip()
-        if len(concise) > 420:
-            concise = concise[:417].rstrip() + "..."
-        lines.append(f"{index}. {title}: {concise or 'مصدر مفيد للمراجعة.'}")
+    best = unique_sources[0]
+    concise = re.sub(r"\s+", " ", best["summary"]).strip()
+    if len(concise) > 700:
+        concise = concise[:697].rstrip() + "..."
+    lines = [concise]
+    supporting = [
+        source for source in unique_sources[1:4]
+        if source["score"] >= best["score"] - 25 and source["summary"].strip() != best["summary"].strip()
+    ]
+    if supporting:
+        lines.extend(["", "معلومات مكملة:"])
+        for source in supporting[:2]:
+            detail = re.sub(r"\s+", " ", source["summary"]).strip()
+            if len(detail) > 260:
+                detail = detail[:257].rstrip() + "..."
+            lines.append(f"- {detail}")
     lines.append("")
     lines.append("روابط التحقق:")
-    for title, _summary, url in unique_sources[:4]:
-        lines.append(f"- {title}: {url}")
+    for source in unique_sources[:3]:
+        lines.append(f"- {source['title']}: {source['url']}")
     return "\n".join(lines)
 
 
