@@ -2,7 +2,7 @@ import json
 from io import StringIO
 from pathlib import Path
 from decimal import Decimal
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
@@ -12,12 +12,37 @@ from django.utils import timezone
 
 from core.models import Branch, Company
 from invoicing.models import AIInteractionLearning, AIKnowledgeEntry, AIKnowledgeSource, Customer, Invoice, InvoiceItem, Item, PurchaseInvoice, PurchaseItem, Quote, QuoteItem, Supplier, Tax
-from invoicing.ai_services import _polish_answer, analyze_and_route_user_request, answer_financial_question, handle_ai_management_command, normalize_user_question_text, record_ai_interaction_learning
+from invoicing.ai_services import _is_geography_question, _nominatim_geography_facts, _polish_answer, analyze_and_route_user_request, answer_financial_question, handle_ai_management_command, normalize_user_question_text, record_ai_interaction_learning
 from invoicing.purchase_views import post_purchase_invoice
 from invoicing.views import post_sales_invoice
 
 
 class InvoiceAccountingTests(TestCase):
+    def test_geography_questions_are_detected(self):
+        self.assertTrue(_is_geography_question("ما عاصمة المملكة العربية السعودية؟"))
+        self.assertTrue(_is_geography_question("أين تقع مدينة الإسكندرية؟"))
+        self.assertTrue(_is_geography_question("What are the coordinates of Cairo?"))
+        self.assertFalse(_is_geography_question("كم إجمالي المبيعات؟"))
+
+    @patch("invoicing.ai_services.requests.get")
+    def test_geography_facts_use_structured_map_data(self, requests_get):
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = [{
+            "display_name": "القاهرة، مصر",
+            "lat": "30.0444",
+            "lon": "31.2357",
+            "type": "city",
+        }]
+        requests_get.return_value = response
+
+        result = _nominatim_geography_facts("أين تقع مدينة القاهرة؟")
+
+        self.assertEqual(result["kind"], "geography")
+        self.assertIn("30.0444", result["extract"])
+        self.assertIn("31.2357", result["extract"])
+        self.assertEqual(requests_get.call_args.kwargs["params"]["q"], "القاهرة")
+
     def setUp(self):
         self.user = get_user_model().objects.create_user(username="tester", password="pass")
         self.user.is_staff = True

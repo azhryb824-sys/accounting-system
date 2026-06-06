@@ -2393,6 +2393,76 @@ def _question_needs_current_source_warning(question):
     return any(marker in normalized for marker in current_markers)
 
 
+GEOGRAPHY_TERMS = (
+    "جغرافيا", "جغرافي", "دولة", "الدول", "بلد", "مدينة", "قرية", "عاصمة", "قارة",
+    "موقع", "أين تقع", "اين تقع", "حدود", "تحدها", "مساحة", "سكان", "تضاريس",
+    "مناخ", "إقليم", "محافظة", "منطقة", "بحر", "محيط", "نهر", "جبل", "جزيرة",
+    "إحداثيات", "احداثيات", "خط العرض", "خط الطول",
+    "geography", "country", "city", "capital", "continent", "location", "border",
+    "population", "area", "climate", "river", "mountain", "island", "coordinates",
+    "latitude", "longitude",
+)
+
+
+def _is_geography_question(question):
+    normalized = normalize_user_question_text(question or "").strip().lower()
+    return any(term in normalized for term in GEOGRAPHY_TERMS)
+
+
+def _clean_geography_place_query(question):
+    query = normalize_user_question_text(question or "").strip()
+    patterns = (
+        r"^(?:ما|ماذا|أين|اين|كم|اذكر|اشرح|عرّف|عرف)\s+",
+        r"\b(?:هي|هو|تقع|موقع|عاصمة|دولة|مدينة|بلد|عدد سكان|مساحة|حدود|إحداثيات|احداثيات)\b",
+        r"\b(?:what|where|is|the|capital|country|city|population|area|borders|coordinates|of)\b",
+    )
+    for pattern in patterns:
+        query = re.sub(pattern, " ", query, flags=re.IGNORECASE)
+    query = re.sub(r"\s+", " ", query).strip(" ؟?،,.")
+    return query or _clean_general_web_query(question)
+
+
+def _nominatim_geography_facts(question):
+    if not _free_web_answers_enabled() or not _is_geography_question(question):
+        return {}
+    query = _clean_geography_place_query(question)
+    try:
+        response = requests.get(
+            "https://nominatim.openstreetmap.org/search",
+            params={
+                "q": query,
+                "format": "jsonv2",
+                "addressdetails": 1,
+                "limit": 1,
+                "accept-language": _wikipedia_language(question),
+            },
+            headers={"User-Agent": "AccountingSystemAI/1.0 geographic assistant"},
+            timeout=7,
+        )
+        response.raise_for_status()
+        rows = response.json()
+    except (requests.RequestException, ValueError, TypeError):
+        return {}
+    if not rows:
+        return {}
+    row = rows[0]
+    display_name = (row.get("display_name") or query).strip()
+    latitude = row.get("lat")
+    longitude = row.get("lon")
+    place_type = row.get("type") or row.get("category") or "مكان"
+    details = [f"{display_name}؛ التصنيف الجغرافي: {place_type}"]
+    if latitude and longitude:
+        details.append(f"الإحداثيات التقريبية: خط العرض {latitude}، وخط الطول {longitude}")
+    return {
+        "title": display_name,
+        "extract": "، ".join(details) + ".",
+        "source_url": f"https://www.openstreetmap.org/?mlat={latitude}&mlon={longitude}" if latitude and longitude else "",
+        "source_name": "OpenStreetMap Nominatim",
+        "license": "OpenStreetMap data, ODbL",
+        "kind": "geography",
+    }
+
+
 def _source_reliability_score(source):
     name = (source.get("source_name") or "").lower()
     url = (source.get("source_url") or "").lower()
@@ -2403,6 +2473,8 @@ def _source_reliability_score(source):
         score += 12
     if "openalex" in name:
         score += 18
+    if "openstreetmap" in name or "nominatim" in name:
+        score += 20
     if "duckduckgo" in name:
         score += 8
     if ".gov" in url or "zatca.gov.sa" in url:
@@ -2639,6 +2711,16 @@ def _synthesize_free_web_answer(question, sources):
         key=lambda source: _source_reliability_score(source),
         reverse=True,
     )
+    geography_question = _is_geography_question(question)
+    if geography_question:
+        ranked_sources.sort(
+            key=lambda source: (
+                source.get("kind") == "geography",
+                "wikipedia" in (source.get("source_name") or "").lower(),
+                _source_reliability_score(source),
+            ),
+            reverse=True,
+        )
     primary = ranked_sources[0]
     answer_lines = [
         "الخلاصة:",
@@ -2647,7 +2729,16 @@ def _synthesize_free_web_answer(question, sources):
         answer_lines.append(f"- {primary['extract']}")
     else:
         answer_lines.append("- المعلومة المتاحة محدودة، لذلك الأفضل تضييق السؤال أو الرجوع لجهة رسمية متخصصة.")
-    if len(ranked_sources) > 1:
+    if geography_question and len(ranked_sources) > 1:
+        useful_facts = []
+        for source in ranked_sources[1:4]:
+            extract = (source.get("extract") or "").strip()
+            if extract and extract != primary.get("extract"):
+                useful_facts.append(extract)
+        if useful_facts:
+            answer_lines.extend(["", "معلومات جغرافية مكملة:"])
+            answer_lines.extend(f"- {fact}" for fact in useful_facts)
+    elif len(ranked_sources) > 1:
         answer_lines.extend(["", "توضيح مهني:", "- تمت موازنة أكثر من نتيجة مرتبطة بالسؤال لتقليل الاعتماد على خلاصة منفردة أو غير مكتملة."])
         if any((source.get("source_name") or "").lower() == "openalex" for source in ranked_sources):
             answer_lines.append("- توجد إشارات بحثية أو أكاديمية مرتبطة بالموضوع؛ عند قرار مهم اقرأ المرجع الأصلي أو المصدر الرسمي.")
@@ -2684,12 +2775,14 @@ def free_web_general_answer(question):
         return cached_answer
 
     sources = []
-    search_jobs = (
+    search_jobs = [
         ("duckduckgo", _duckduckgo_web_search),
         ("wikipedia", _wikipedia_summary),
         ("wikidata", _wikidata_facts),
         ("openalex", _openalex_research),
-    )
+    ]
+    if _is_geography_question(question):
+        search_jobs.append(("nominatim", _nominatim_geography_facts))
     with ThreadPoolExecutor(max_workers=len(search_jobs)) as executor:
         futures = {executor.submit(func, question): name for name, func in search_jobs}
         for future in as_completed(futures):
