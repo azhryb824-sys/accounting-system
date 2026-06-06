@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import inference
+import app
 
 
 class InferenceServiceTests(unittest.TestCase):
@@ -96,12 +97,29 @@ class InferenceServiceTests(unittest.TestCase):
         )
         self.assertGreater(official, weak)
 
+    def test_math_engine_handles_arithmetic_equations_and_calculus(self):
+        self.assertIn("14.0000000000000", inference.ask("احسب 2 + 3 * 4"))
+        self.assertIn("x = 4", inference.ask("حل المعادلة 2x + 2 = 10"))
+        self.assertIn("2*x", inference.ask("اشتق x^2"))
+        self.assertIn("x**3/3", inference.ask("تكامل x^2"))
+
+    def test_api_separates_references_from_answer(self):
+        answer, references = app._separate_references(
+            "إجابة مباشرة.\nروابط التحقق:\n- مصدر رسمي: https://example.gov/test"
+        )
+        self.assertEqual(answer, "إجابة مباشرة.")
+        self.assertEqual(references[0]["title"], "مصدر رسمي")
+        self.assertEqual(references[0]["url"], "https://example.gov/test")
+
     def test_jameel_chat_keeps_composer_inside_viewport(self):
         template = (Path(__file__).resolve().parent / "templates" / "jameel.html").read_text(encoding="utf-8")
         self.assertIn("height:100dvh", template)
         self.assertIn("grid-template-rows:72px minmax(0,1fr) auto", template)
         self.assertIn("#messages{min-height:0;overflow-y:auto", template)
         self.assertIn("main{min-width:0;min-height:0;overflow:hidden", template)
+        self.assertIn("محادثة مباشرة", template)
+        self.assertIn("addReferences", template)
+        self.assertIn("resumeLive", template)
 
 
 if __name__ == "__main__":

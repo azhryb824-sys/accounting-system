@@ -1,6 +1,7 @@
 import json
 import os
 import io
+import re
 import wave
 from functools import lru_cache
 from pathlib import Path
@@ -36,6 +37,20 @@ class AnswerResponse(BaseModel):
     owner: str
     answer: str
     data: dict[str, Any] | None = None
+    references: list[dict[str, str]] = []
+
+
+def _separate_references(answer: str) -> tuple[str, list[dict[str, str]]]:
+    marker = "\nروابط التحقق:"
+    if marker not in answer:
+        return answer.strip(), []
+    clean_answer, raw_references = answer.split(marker, 1)
+    references = []
+    for line in raw_references.splitlines():
+        match = re.match(r"^\s*-\s*(.*?):\s*(https?://\S+)\s*$", line)
+        if match:
+            references.append({"title": match.group(1).strip(), "url": match.group(2).strip()})
+    return clean_answer.strip(), references
 
 
 class SpeechRequest(BaseModel):
@@ -132,4 +147,5 @@ def ask_question(request: QuestionRequest, x_accounting_ai_key: str | None = Hea
             detail="تعذر تشغيل محرك الإجابة الآن. حاول مرة أخرى بعد قليل.",
         ) from exc
 
-    return AnswerResponse(model="جميل", owner=MODEL_OWNER, answer=answer)
+    answer, references = _separate_references(answer)
+    return AnswerResponse(model="جميل", owner=MODEL_OWNER, answer=answer, references=references)

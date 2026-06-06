@@ -11,6 +11,13 @@ from pathlib import Path
 from typing import Any
 
 import requests
+import sympy as sp
+from sympy.parsing.sympy_parser import (
+    convert_xor,
+    implicit_multiplication_application,
+    parse_expr,
+    standard_transformations,
+)
 
 try:
     from PIL import Image, ImageEnhance, ImageFilter, ImageOps
@@ -43,6 +50,7 @@ ENABLE_OPEN_WEB_SEARCH = (
     and os.environ.get("ENABLE_OPEN_WEB_SEARCH", "true").strip().lower() not in {"0", "false", "no", "off"}
 )
 USER_MEMORY: list[str] = []
+MATH_TRANSFORMATIONS = standard_transformations + (implicit_multiplication_application, convert_xor)
 
 
 SPEECH_NORMALIZATION_REPLACEMENTS = {
@@ -78,6 +86,56 @@ def normalize_user_question_text(question: str) -> str:
         text = re.sub(rf"(?<!\w){re.escape(old)}(?!\w)", new, text, flags=re.IGNORECASE)
     text = re.sub(r"[؟?]{2,}", "؟", text)
     return text.strip()
+
+
+def _math_answer(question: str) -> str | None:
+    original = normalize_user_question_text(question)
+    normalized = original.lower().replace("×", "*").replace("÷", "/").replace("−", "-")
+    normalized = re.sub(r"(\d+(?:\.\d+)?)\s*%", r"(\1/100)", normalized)
+    percent_match = re.search(r"\(?(\d+(?:\.\d+)?)/100\)?\s*(?:من|of)\s*(\d+(?:\.\d+)?)", normalized)
+    if percent_match:
+        result = sp.Rational(percent_match.group(1)) * sp.Rational(percent_match.group(2)) / 100
+        return f"الناتج:\n{sp.N(result)}"
+    math_markers = (
+        "احسب", "حل المعادلة", "حلل المعادلة", "حل:", "بسط", "بسّط", "اشتق", "المشتقة",
+        "تكامل", "الجذر", "calculate", "solve", "simplify", "differentiate", "integrate",
+    )
+    if not any(marker in normalized for marker in math_markers) and not re.fullmatch(
+        r"[\d\s+\-*/().,^%=x]+", normalized
+    ):
+        return None
+    try:
+        expression_text = normalized
+        for marker in math_markers:
+            expression_text = expression_text.replace(marker, " ")
+        expression_text = re.sub(r"\s+", " ", expression_text).strip(" :؟?")
+        allowed = {"x": sp.Symbol("x"), "y": sp.Symbol("y"), "z": sp.Symbol("z")}
+        if "حل" in normalized or "solve" in normalized or "=" in expression_text:
+            if "=" in expression_text:
+                left, right = expression_text.split("=", 1)
+            else:
+                left, right = expression_text, "0"
+            equation = sp.Eq(
+                parse_expr(left, local_dict=allowed, transformations=MATH_TRANSFORMATIONS),
+                parse_expr(right, local_dict=allowed, transformations=MATH_TRANSFORMATIONS),
+            )
+            symbols = sorted(equation.free_symbols, key=lambda item: item.name)
+            if not symbols:
+                return f"نتيجة التحقق: {'صحيحة' if bool(equation) else 'غير صحيحة'}."
+            result = sp.solve(equation, symbols[0])
+            return f"حل المعادلة بالنسبة إلى {symbols[0]}:\n{symbols[0]} = {', '.join(map(str, result))}"
+        expression = parse_expr(expression_text, local_dict=allowed, transformations=MATH_TRANSFORMATIONS)
+        variable = next(iter(sorted(expression.free_symbols, key=lambda item: item.name)), sp.Symbol("x"))
+        if any(marker in normalized for marker in ("اشتق", "المشتقة", "differentiate")):
+            return f"المشتقة بالنسبة إلى {variable}:\n{sp.diff(expression, variable)}"
+        if any(marker in normalized for marker in ("تكامل", "integrate")):
+            return f"التكامل غير المحدد بالنسبة إلى {variable}:\n{sp.integrate(expression, variable)} + C"
+        if any(marker in normalized for marker in ("بسط", "بسّط", "simplify")):
+            return f"الصيغة المبسطة:\n{sp.simplify(expression)}"
+        result = sp.N(expression) if not expression.free_symbols else sp.simplify(expression)
+        return f"الناتج:\n{result}"
+    except Exception:
+        return None
 
 
 def _analyze_question(question: str) -> dict[str, Any]:
@@ -181,6 +239,39 @@ def _web_source_score(query: str, title: str, summary: str, url: str, source_typ
     if len(summary.strip()) < 25:
         score -= 20
     return score
+
+
+def _arabic_web_synthesis(question: str, summaries: list[str]) -> str | None:
+    if not OPENAI_COMPATIBLE_API_KEY or not OPENAI_COMPATIBLE_MODEL or not summaries:
+        return None
+    evidence = "\n".join(f"- {item}" for item in summaries[:4])
+    payload = {
+        "model": OPENAI_COMPATIBLE_MODEL,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "أنت محرر بحث عربي دقيق. أجب بالعربية الفصحى مباشرة اعتمادا فقط على الأدلة المرسلة. "
+                    "لا تذكر أنك بحثت، ولا تضف روابط أو مراجع داخل الإجابة، ولا تخترع معلومات."
+                ),
+            },
+            {"role": "user", "content": f"السؤال: {question}\n\nالأدلة:\n{evidence}"},
+        ],
+        "temperature": 0.1,
+        "max_tokens": 700,
+    }
+    try:
+        response = requests.post(
+            f"{OPENAI_COMPATIBLE_BASE_URL}/chat/completions",
+            json=payload,
+            headers={"Authorization": f"Bearer {OPENAI_COMPATIBLE_API_KEY}", "Content-Type": "application/json"},
+            timeout=45,
+        )
+        response.raise_for_status()
+        answer = (((response.json().get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
+    except Exception:
+        return None
+    return answer if sum("\u0600" <= char <= "\u06ff" for char in answer) >= 20 else None
 
 PRIVATE_KNOWLEDGE = {
     "الفاتورة الضريبية": "الفاتورة الضريبية مستند رسمي يوضح بيانات البائع والمشتري والسلع أو الخدمات والمبلغ وضريبة القيمة المضافة، وتستخدم لإثبات عملية البيع محاسبيا وضريبيا.",
@@ -679,10 +770,11 @@ def _open_web_search_answer(question: str) -> str | None:
     unique_sources.sort(key=lambda item: item["score"], reverse=True)
 
     best = unique_sources[0]
+    synthesized = _arabic_web_synthesis(question, [source["summary"] for source in unique_sources])
     concise = re.sub(r"\s+", " ", best["summary"]).strip()
     if len(concise) > 700:
         concise = concise[:697].rstrip() + "..."
-    lines = [concise]
+    lines = [synthesized or concise]
     supporting = [
         source for source in unique_sources[1:4]
         if source["score"] >= best["score"] - 25 and source["summary"].strip() != best["summary"].strip()
@@ -1034,6 +1126,10 @@ class PrivateAccountingModel:
         recalled_memory = _answer_from_user_memory(question)
         if recalled_memory:
             return recalled_memory
+
+        math_answer = _math_answer(question)
+        if math_answer:
+            return math_answer
 
         greeting_answer = _answer_greeting(question)
         if greeting_answer:
