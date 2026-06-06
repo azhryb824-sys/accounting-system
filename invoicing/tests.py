@@ -833,11 +833,13 @@ class InvoiceAccountingTests(TestCase):
 
         self.assertIn("Piper TTS", readme)
         self.assertIn("phonemizer", readme)
+        self.assertIn("sherpa-onnx", requirements)
         self.assertIn("librosa", requirements)
         self.assertIn("soundfile", requirements)
         self.assertIn("faster-whisper", requirements)
         self.assertIn("requirements-audio.txt", readme)
         self.assertIn("Do not commit large voice/STT model files", readme)
+        self.assertTrue(Path("static/audio/voices/kareem-arabic-preview.wav").exists())
 
     @patch("invoicing.ai_services.free_web_general_answer")
     @patch("invoicing.ai_services._model_answer_financial_question")

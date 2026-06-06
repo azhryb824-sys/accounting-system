@@ -1,6 +1,9 @@
 # Optional open-source audio stack for local/server-side speech features.
 # Install only on the AI service environment when you want advanced TTS/STT/audio processing.
 
+# Offline ONNX speech runtime used with Piper-compatible Arabic voices.
+sherpa-onnx
+
 # Audio loading, analysis, resampling, and feature extraction.
 librosa
 soundfile
@@ -10,7 +13,8 @@ soxr
 pydub
 
 # Speech activity detection for live voice sessions.
-webrtcvad-wheels
+# Python 3.14 on Windows needs Visual C++ to build this extension.
+webrtcvad-wheels; python_version < "3.14"
 
 # Optional offline speech-to-text. Large models are downloaded separately.
 faster-whisper

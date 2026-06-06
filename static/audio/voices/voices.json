@@ -8,6 +8,15 @@
       "license": "Apache-2.0 model repository; verify individual audio file terms before production use",
       "source": "https://huggingface.co/silma-ai/silma-tts",
       "file": ""
+    },
+    {
+      "id": "piper-kareem-ar-jo-medium",
+      "label": "كريم - صوت عربي احترافي",
+      "profile": "male",
+      "language": "ar-JO",
+      "license": "MIT voice model; sherpa-onnx runtime is Apache-2.0",
+      "source": "https://huggingface.co/rhasspy/piper-voices",
+      "file": "/static/audio/voices/kareem-arabic-preview.wav"
     }
   ],
   "notes": [

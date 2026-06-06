@@ -87,6 +87,7 @@ python -m pip install --no-index --find-links .audio_wheelhouse -r accounting_ai
 
 Included libraries:
 
+- `sherpa-onnx`: offline ONNX runtime for Piper-compatible Arabic TTS voices.
 - Piper TTS: use it as an external open-source system binary or service when available for your server OS/Python. Download compatible Arabic voice models separately and verify each voice license.
 - `phonemizer` or `espeak-ng`: install as external tools when available for the server OS; use them for phoneme/text preprocessing in TTS pipelines.
 - `librosa`, `soundfile`, `soxr`: audio loading, resampling, and signal processing.
@@ -102,6 +103,18 @@ accounting_ai_service/models/stt/
 ```
 
 Do not commit large voice/STT model files to Git. Store them on the server, a mounted disk, or an artifact store, then point the service to them with environment variables when server-side TTS/STT is enabled.
+
+The local development installation currently uses the Piper-compatible Arabic model:
+
+```text
+accounting_ai_service/models/voices/vits-piper-ar_JO-kareem-medium/
+```
+
+Its generated browser preview is:
+
+```text
+static/audio/voices/kareem-arabic-preview.wav
+```
 
 ## Photographed invoice OCR
 
