@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException, Response
+from fastapi.responses import HTMLResponse
 import numpy as np
 from pydantic import BaseModel, Field
 
@@ -17,9 +18,9 @@ PRIVATE_ACCOUNTING_AI_API_KEY = os.environ.get("PRIVATE_ACCOUNTING_AI_API_KEY", 
 
 
 app = FastAPI(
-    title=MODEL_NAME,
-    description=f"واجهة خاصة لتشغيل نموذج الذكاء الاصطناعي المحاسبي الخاص بـ {MODEL_OWNER}.",
-    version="1.1.0",
+    title="جميل",
+    description=f"واجهة جميل المستقلة للذكاء الاصطناعي، مقدمة من {MODEL_OWNER}.",
+    version="2.0.0",
 )
 
 
@@ -68,11 +69,18 @@ def _wav_bytes(samples, sample_rate):
     return output.getvalue()
 
 
-@app.get("/")
-def home() -> dict[str, str]:
+@app.get("/", response_class=HTMLResponse)
+@app.get("/jameel", response_class=HTMLResponse)
+def jameel_interface() -> HTMLResponse:
+    interface_path = Path(__file__).resolve().parent / "templates" / "jameel.html"
+    return HTMLResponse(interface_path.read_text(encoding="utf-8"))
+
+
+@app.get("/api-info")
+def api_info() -> dict[str, str]:
     status = runtime_status()
     return {
-        "message": f"{MODEL_NAME} يعمل الآن كنموذج خاص.",
+        "message": "جميل يعمل الآن كمساعد ذكاء اصطناعي مستقل.",
         "owner": MODEL_OWNER,
         "backend": str(status.get("backend", "")),
         "ollama_model": str(status.get("ollama_model", "")),
@@ -109,7 +117,7 @@ def ask_question(request: QuestionRequest, x_accounting_ai_key: str | None = Hea
                 media_type=request.media_type,
             )
             return AnswerResponse(
-                model=MODEL_NAME,
+                model="جميل",
                 owner=MODEL_OWNER,
                 answer=json.dumps(data, ensure_ascii=False),
                 data=data,
@@ -119,4 +127,4 @@ def ask_question(request: QuestionRequest, x_accounting_ai_key: str | None = Hea
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    return AnswerResponse(model=MODEL_NAME, owner=MODEL_OWNER, answer=answer)
+    return AnswerResponse(model="جميل", owner=MODEL_OWNER, answer=answer)

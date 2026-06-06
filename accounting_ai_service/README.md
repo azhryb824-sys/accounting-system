@@ -1,5 +1,18 @@
 # Accounting AI Service
 
+## Jameel standalone interface
+
+The service includes an independent Arabic chat interface named **Jameel (جميل)**.
+
+- Main interface: `/`
+- Alternate interface path: `/jameel`
+- API information: `/api-info`
+- Interactive API documentation: `/docs`
+
+The interface talks directly to `/ask` and `/tts`. If `PRIVATE_ACCOUNTING_AI_API_KEY`
+is enabled, enter the key in the interface sidebar; it is stored only in the browser
+session.
+
 This folder contains the source code for the private accounting AI service used by the Django system.
 
 Run locally:
