@@ -52,6 +52,15 @@ class InferenceServiceTests(unittest.TestCase):
         self.assertIn("تم حفظ", saved)
         self.assertIn("شركة النور", recalled)
 
+    def test_incomplete_model_directory_does_not_break_service(self):
+        model = inference.PrivateAccountingModel(Path(__file__).resolve().parent / "models" / "my_model")
+        self.assertIsNone(model.model)
+        self.assertIsNone(model.tokenizer)
+
+    def test_assistant_identity_is_jameel(self):
+        self.assertEqual(inference.MODEL_NAME, "جميل")
+        self.assertIn("أنا جميل", inference.ask("إيش اسمك؟"))
+
 
 if __name__ == "__main__":
     unittest.main()

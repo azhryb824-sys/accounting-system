@@ -26,7 +26,7 @@ except ImportError:
     pytesseract = None
 
 
-MODEL_NAME = "نموذج عبدالرحمن المحاسبي"
+MODEL_NAME = "جميل"
 MODEL_OWNER = "عبدالرحمن"
 MODEL_PATH = Path(os.environ.get("ACCOUNTING_AI_MODEL_PATH") or Path(__file__).resolve().parent / "models" / "my_model")
 AI_BACKEND = os.environ.get("ACCOUNTING_AI_BACKEND", "auto").strip().lower()
@@ -191,8 +191,8 @@ GENERAL_CHAT_PATTERNS = [
         "العفو، هذا من ذوقك. خلينا نكمل الشغل بهدوء: إذا عندك فاتورة، قيد، راتب، سلفة، أو سؤال محاسبي عام أرسله لي وسأرتبه لك بشكل واضح.",
     ),
     (
-        ("من أنت", "مين انت", "من انت", "عرف نفسك", "ما دورك"),
-        f"أنا {MODEL_NAME}، مساعد محاسبي ودود داخل النظام. أساعدك في فهم المحاسبة، قراءة مؤشرات شركتك، متابعة الفواتير والمخزون والرواتب والسلف، وتوجيهك للخطوة المناسبة داخل النظام.",
+        ("من أنت", "مين انت", "من انت", "عرف نفسك", "ما دورك", "ما اسمك", "ايش اسمك", "إيش اسمك", "وش اسمك", "اسمك شنو", "اسمك ايه"),
+        f"أنا {MODEL_NAME}، مساعد ذكاء اصطناعي مستقل. أساعدك في المحاسبة والتحليل والعلوم والرياضيات والجغرافيا واللغة والكتابة والمعرفة العامة.",
     ),
     (
         ("ماذا تستطيع", "وش تقدر", "ايش تقدر", "شنو بتقدر", "ساعدني"),
@@ -818,7 +818,12 @@ class PrivateAccountingModel:
         self.model_path = Path(model_path)
         self.tokenizer = None
         self.model = None
-        if not self.model_path.exists():
+        model_markers = (
+            self.model_path / "config.json",
+            self.model_path / "model.safetensors",
+            self.model_path / "pytorch_model.bin",
+        )
+        if not self.model_path.exists() or not any(path.exists() for path in model_markers):
             return
 
         torch_runtime, model_cls, tokenizer_cls = _load_transformers_runtime()
@@ -827,8 +832,15 @@ class PrivateAccountingModel:
 
         self.torch = torch_runtime
 
-        self.tokenizer = tokenizer_cls.from_pretrained(self.model_path)
-        self.model = model_cls.from_pretrained(self.model_path)
+        try:
+            self.tokenizer = tokenizer_cls.from_pretrained(self.model_path)
+            self.model = model_cls.from_pretrained(self.model_path)
+        except Exception:
+            self.tokenizer = None
+            self.model = None
+            if REQUIRE_LOCAL_MODEL:
+                raise
+            return
 
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token

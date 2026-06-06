@@ -126,5 +126,10 @@ def ask_question(request: QuestionRequest, x_accounting_ai_key: str | None = Hea
         answer = ask(request.question, max_new_tokens=request.max_new_tokens)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="تعذر تشغيل محرك الإجابة الآن. حاول مرة أخرى بعد قليل.",
+        ) from exc
 
     return AnswerResponse(model="جميل", owner=MODEL_OWNER, answer=answer)
