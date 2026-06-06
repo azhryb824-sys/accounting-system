@@ -68,6 +68,13 @@ class InferenceServiceTests(unittest.TestCase):
         self.assertIn("أستانا", kazakhstan)
         self.assertIn("آسيا", kazakhstan)
 
+    def test_jameel_chat_keeps_composer_inside_viewport(self):
+        template = (Path(__file__).resolve().parent / "templates" / "jameel.html").read_text(encoding="utf-8")
+        self.assertIn("height:100dvh", template)
+        self.assertIn("grid-template-rows:72px minmax(0,1fr) auto", template)
+        self.assertIn("#messages{min-height:0;overflow-y:auto", template)
+        self.assertIn("main{min-width:0;min-height:0;overflow:hidden", template)
+
 
 if __name__ == "__main__":
     unittest.main()
