@@ -13,6 +13,11 @@ The interface talks directly to `/ask` and `/tts`. If `PRIVATE_ACCOUNTING_AI_API
 is enabled, enter the key in the interface sidebar; it is stored only in the browser
 session.
 
+Jameel's broad knowledge layer uses open web retrieval for general questions. It
+searches Wikipedia article indexes before fetching summaries, supplements factual
+matches with Wikidata, and can include OpenAlex research metadata. Stable high-use
+facts remain available locally when external sources are temporarily unavailable.
+
 This folder contains the source code for the private accounting AI service used by the Django system.
 
 Run locally:

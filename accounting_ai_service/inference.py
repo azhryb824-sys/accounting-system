@@ -492,6 +492,8 @@ def _open_web_search_answer(question: str) -> str | None:
     general_lookup_terms = (
         "عاصمة", "أين تقع", "اين تقع", "دولة", "مدينة", "جغرافيا", "عدد السكان",
         "من هو", "من هي", "ما هو", "ما هي", "متى", "capital", "where is", "who is", "what is",
+        "كيف", "لماذا", "هل", "كم", "اشرح", "فسر", "عرّف", "عرف", "تاريخ", "علوم", "فيزياء", "كيمياء", "أحياء",
+        "فلك", "هندسة", "رياضيات", "اقتصاد", "لغة", "أدب", "قانون", "تقنية", "برمجة",
     )
     if not analysis.get("asks_web") and not any(term in normalized for term in general_lookup_terms):
         return None
@@ -521,25 +523,65 @@ def _open_web_search_answer(question: str) -> str | None:
     except Exception:
         pass
 
+    for language in ("ar", "en"):
+        try:
+            search_response = requests.get(
+                f"https://{language}.wikipedia.org/w/api.php",
+                params={
+                    "action": "query",
+                    "list": "search",
+                    "srsearch": query,
+                    "srlimit": 2,
+                    "format": "json",
+                },
+                headers=headers,
+                timeout=10,
+            )
+            search_response.raise_for_status()
+            rows = search_response.json().get("query", {}).get("search", [])
+            for row in rows[:2]:
+                page_title = (row.get("title") or "").strip()
+                if not page_title:
+                    continue
+                response = requests.get(
+                    f"https://{language}.wikipedia.org/api/rest_v1/page/summary/"
+                    + requests.utils.quote(page_title),
+                    headers=headers,
+                    timeout=10,
+                )
+                response.raise_for_status()
+                data = response.json()
+                extract = (data.get("extract") or "").strip()
+                url = ((data.get("content_urls") or {}).get("desktop") or {}).get("page", "")
+                title = (data.get("title") or page_title).strip()
+                if extract and url:
+                    sources.append((title, extract, url))
+            if rows:
+                break
+        except Exception:
+            continue
+
     try:
         response = requests.get(
-            "https://ar.wikipedia.org/api/rest_v1/page/summary/" + requests.utils.quote(query),
+            "https://www.wikidata.org/w/api.php",
+            params={
+                "action": "wbsearchentities",
+                "search": query,
+                "language": "ar",
+                "uselang": "ar",
+                "format": "json",
+                "limit": 3,
+            },
             headers=headers,
-            timeout=12,
+            timeout=10,
         )
-        if response.status_code == 404:
-            response = requests.get(
-                "https://en.wikipedia.org/api/rest_v1/page/summary/" + requests.utils.quote(query),
-                headers=headers,
-                timeout=12,
-            )
         response.raise_for_status()
-        data = response.json()
-        extract = (data.get("extract") or "").strip()
-        url = ((data.get("content_urls") or {}).get("desktop") or {}).get("page", "")
-        title = (data.get("title") or "Wikipedia").strip()
-        if extract and url:
-            sources.append((title, extract, url))
+        for item in (response.json().get("search") or [])[:3]:
+            title = (item.get("label") or "").strip()
+            summary = (item.get("description") or "").strip()
+            entity_id = (item.get("id") or "").strip()
+            if title and summary and entity_id:
+                sources.append((title, summary, f"https://www.wikidata.org/wiki/{entity_id}"))
     except Exception:
         pass
 
@@ -571,7 +613,7 @@ def _open_web_search_answer(question: str) -> str | None:
         seen.add(url)
         unique_sources.append((title, summary, url))
 
-    lines = [f"نتيجة بحث مفتوح عن: {query}", "", "الخلاصة:"]
+    lines = ["الخلاصة:"]
     for index, (title, summary, url) in enumerate(unique_sources[:4], start=1):
         concise = re.sub(r"\s+", " ", summary).strip()
         if len(concise) > 420:

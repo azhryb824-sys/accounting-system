@@ -23,17 +23,38 @@ DEFAULT_TOPICS = (
     "artificial intelligence", "machine learning", "data analysis", "cybersecurity",
     "cloud computing", "software as a service", "e-commerce", "digital marketing",
     "economics", "finance", "statistics", "operations management", "entrepreneurship",
+    "algebra", "geometry", "calculus", "probability theory", "number theory",
+    "classical mechanics", "electromagnetism", "thermodynamics", "quantum mechanics",
+    "organic chemistry", "inorganic chemistry", "biochemistry", "molecular biology",
+    "genetics", "ecology", "human anatomy", "medicine", "public health",
+    "astronomy", "astrophysics", "cosmology", "solar system", "space exploration",
+    "civil engineering", "mechanical engineering", "electrical engineering",
+    "industrial engineering", "software engineering", "architecture",
+    "geography", "physical geography", "human geography", "world history",
+    "Saudi Arabia history", "Arab history", "Islamic civilization",
+    "Arabic grammar", "Arabic literature", "English grammar", "linguistics",
+    "philosophy", "psychology", "sociology", "political science",
+    "constitutional law", "international law", "environmental science",
+    "climate change", "renewable energy", "agriculture", "food science",
+    "computer science", "algorithms", "databases", "computer networks",
+    "operating systems", "web development", "mobile development", "robotics",
+    "natural language processing", "computer vision", "data science",
 )
 
 WIKIDATA_TOPICS = (
     "accounting", "financial statement", "cash flow", "inventory", "tax",
     "business", "project management", "artificial intelligence", "economics",
+    "mathematics", "physics", "chemistry", "biology", "astronomy", "engineering",
+    "geography", "history", "language", "computer science", "medicine",
 )
 
 OPENALEX_TOPICS = (
     "accounting information systems", "financial accounting", "inventory management",
     "small business performance", "Saudi Arabia VAT", "electronic invoicing",
     "cash flow forecasting", "retail analytics", "business intelligence",
+    "mathematics education", "physics education", "astronomy", "engineering design",
+    "Arabic natural language processing", "geographic information science",
+    "renewable energy", "machine learning", "public health",
 )
 
 

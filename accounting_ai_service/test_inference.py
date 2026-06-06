@@ -41,7 +41,7 @@ class InferenceServiceTests(unittest.TestCase):
 
         answer = inference.ask("ابحث في النت عن VAT", max_new_tokens=120)
 
-        self.assertIn("نتيجة بحث مفتوح", answer)
+        self.assertIn("الخلاصة", answer)
         self.assertIn("روابط التحقق", answer)
         self.assertIn("https://example.test/vat", answer)
 
