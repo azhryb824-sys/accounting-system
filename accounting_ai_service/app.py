@@ -15,7 +15,15 @@ from fastapi.responses import HTMLResponse
 import numpy as np
 from pydantic import BaseModel, Field
 
-from inference import MODEL_NAME, MODEL_OWNER, ask, extract_invoice_data, runtime_status
+from inference import (
+    MODEL_NAME,
+    MODEL_OWNER,
+    _open_web_search_answer,
+    ask,
+    extract_invoice_data,
+    runtime_status,
+)
+from intelligence import assess_answer, plan_query, resolve_followup
 from knowledge_store import initialize as initialize_knowledge, status as knowledge_status
 from knowledge_updater import update as update_knowledge
 
@@ -57,6 +65,7 @@ class AnswerResponse(BaseModel):
     used_web: bool = False
     elapsed_ms: int = 0
     response_variant: int = 0
+    intelligence: dict[str, Any] = Field(default_factory=dict)
 
 
 def _normalized_question(value: str) -> str:
@@ -242,7 +251,9 @@ def ask_question(request: QuestionRequest, x_accounting_ai_key: str | None = Hea
                 data=data,
             )
 
-        contextual_question = _question_with_history(request.question, request.history)
+        resolved_question = resolve_followup(request.question, request.history)
+        query_plan = plan_query(resolved_question)
+        contextual_question = _question_with_history(resolved_question, request.history)
         try:
             answer = ask(contextual_question, max_new_tokens=request.max_new_tokens)
         except Exception:
@@ -260,8 +271,14 @@ def ask_question(request: QuestionRequest, x_accounting_ai_key: str | None = Hea
         ) from exc
 
     answer, references = _separate_references(answer)
+    initial_quality = assess_answer(resolved_question, answer, references)
+    if initial_quality["level"] == "low":
+        recovered = _open_web_search_answer(resolved_question)
+        if recovered:
+            answer, references = _separate_references(recovered)
     variant = _response_variant(request.question, request.history)
     answer = _vary_answer_style(answer, variant)
+    quality = assess_answer(resolved_question, answer, references)
     return AnswerResponse(
         model="جميل",
         owner=MODEL_OWNER,
@@ -270,6 +287,7 @@ def ask_question(request: QuestionRequest, x_accounting_ai_key: str | None = Hea
         used_web=bool(references),
         elapsed_ms=round((time.perf_counter() - started_at) * 1000),
         response_variant=variant,
+        intelligence={"plan": query_plan.to_dict(), "quality": quality},
     )
 
 
