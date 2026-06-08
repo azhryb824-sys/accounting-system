@@ -92,6 +92,7 @@ class InferenceServiceTests(unittest.TestCase):
         self.assertIn("تسجيلها", accounting)
         self.assertIn("القوائم المالية", accounting)
         self.assertIn("ملتقى النيل الأزرق والنيل الأبيض", khartoum)
+        self.assertIn("ملتقى النيل الأزرق والنيل الأبيض", inference.ask("الخرطوم"))
 
     def test_palestine_answers_use_legal_and_rights_based_framing(self):
         occupation = inference.ask("هل إسرائيل كيان غاصب؟")
@@ -178,7 +179,8 @@ class InferenceServiceTests(unittest.TestCase):
         self.assertIn("addReferences", template)
         self.assertIn("addActions", template)
         self.assertIn("requestAnswer", template)
-        self.assertIn("يعيد الاتصال بالخادم", template)
+        self.assertIn("الخادم يستعيد جاهزيته", template)
+        self.assertIn("محاولة ${attempt+2} من 4", template)
         self.assertIn("conversation.slice", template)
         self.assertIn("إعادة الإجابة", template)
         self.assertIn("resumeLive", template)
