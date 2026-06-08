@@ -196,6 +196,29 @@ class InferenceServiceTests(unittest.TestCase):
         self.assertIn("حدثني عن السعودية", contextual)
         self.assertTrue(contextual.endswith("سؤال المستخدم: وماذا عن مساحتها؟"))
 
+    def test_repeated_questions_receive_different_fact_preserving_styles(self):
+        history = [
+            {"role": "user", "content": "ما هي الخصوم؟"},
+            {"role": "assistant", "content": "إجابة سابقة"},
+        ]
+        variant = app._response_variant("ما هي الخصوم؟", history)
+        original = "الخصوم هي مبالغ مستحقة على المنشأة، مثل الموردين والقروض."
+        varied = app._vary_answer_style(original, variant)
+        self.assertEqual(variant, 1)
+        self.assertNotEqual(varied, original)
+        self.assertIn("الخصوم", varied)
+        self.assertIn("الموردين", varied)
+        self.assertIn("القروض", varied)
+
+    def test_response_variation_cycles_across_repeated_questions(self):
+        history = [
+            {"role": "user", "content": "ما هي المحاسبة؟"},
+            {"role": "assistant", "content": "أ"},
+            {"role": "user", "content": "ماهي المحاسبة"},
+            {"role": "assistant", "content": "ب"},
+        ]
+        self.assertEqual(app._response_variant("ما هي المحاسبة؟", history), 2)
+
     @patch("inference._open_web_search_answer", return_value="إجابة حديثة من الإنترنت")
     @patch("inference._answer_general_knowledge", return_value="إجابة محلية قديمة")
     def test_current_questions_prioritize_web_over_local_knowledge(self, local_answer, web_answer):

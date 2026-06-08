@@ -56,6 +56,55 @@ class AnswerResponse(BaseModel):
     references: list[dict[str, str]] = Field(default_factory=list)
     used_web: bool = False
     elapsed_ms: int = 0
+    response_variant: int = 0
+
+
+def _normalized_question(value: str) -> str:
+    value = re.sub(r"[^\w\s]+", " ", value.lower())
+    value = value.replace("ماهي", "ما هي").replace("ماهو", "ما هو")
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def _response_variant(question: str, history: list[dict[str, str]]) -> int:
+    target = _normalized_question(question)
+    if not target:
+        return 0
+    repeats = sum(
+        1
+        for item in history
+        if str(item.get("role", "")).lower() == "user"
+        and _normalized_question(str(item.get("content", ""))) == target
+    )
+    return repeats % 4
+
+
+def _vary_answer_style(answer: str, variant: int) -> str:
+    if not answer or variant == 0:
+        return answer
+    substitutions = (
+        (("هي", "تعني"), ("مثل", "ومن أمثلتها"), ("عادة", "في الغالب")),
+        (("هي", "يمكن تعريفها بأنها"), ("يساعد", "يسهم"), ("تشمل", "تتضمن")),
+        (("يعني", "يقصد به"), ("يجب", "من الضروري"), ("مثل", "على سبيل المثال")),
+    )
+    varied = answer
+    for source, replacement in substitutions[(variant - 1) % len(substitutions)]:
+        varied = re.sub(rf"(?<!\w){re.escape(source)}(?!\w)", replacement, varied, count=1)
+
+    sentences = [
+        part.strip()
+        for part in re.split(r"(?<=[.!؟])\s+", varied)
+        if part.strip()
+    ]
+    if variant >= 2 and len(sentences) > 1:
+        sentences = sentences[1:] + sentences[:1]
+        varied = " ".join(sentences)
+
+    introductions = (
+        "بصياغة أخرى:",
+        "من زاوية أوضح:",
+        "يمكن تلخيص الفكرة هكذا:",
+    )
+    return f"{introductions[(variant - 1) % len(introductions)]}\n{varied}"
 
 
 def _question_with_history(question: str, history: list[dict[str, str]]) -> str:
@@ -211,6 +260,8 @@ def ask_question(request: QuestionRequest, x_accounting_ai_key: str | None = Hea
         ) from exc
 
     answer, references = _separate_references(answer)
+    variant = _response_variant(request.question, request.history)
+    answer = _vary_answer_style(answer, variant)
     return AnswerResponse(
         model="جميل",
         owner=MODEL_OWNER,
@@ -218,6 +269,7 @@ def ask_question(request: QuestionRequest, x_accounting_ai_key: str | None = Hea
         references=references,
         used_web=bool(references),
         elapsed_ms=round((time.perf_counter() - started_at) * 1000),
+        response_variant=variant,
     )
 
 
