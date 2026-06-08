@@ -86,6 +86,13 @@ class InferenceServiceTests(unittest.TestCase):
         self.assertIn("حاكم مصر", answer)
         self.assertNotIn("doi.org", answer)
 
+    def test_basic_definition_questions_always_have_direct_answers(self):
+        accounting = inference.ask("ما هي المحاسبة؟")
+        khartoum = inference.ask("ما هي الخرطوم؟")
+        self.assertIn("تسجيلها", accounting)
+        self.assertIn("القوائم المالية", accounting)
+        self.assertIn("ملتقى النيل الأزرق والنيل الأبيض", khartoum)
+
     def test_palestine_answers_use_legal_and_rights_based_framing(self):
         occupation = inference.ask("هل إسرائيل كيان غاصب؟")
         self.assertIn("احتلال", occupation)
@@ -170,6 +177,8 @@ class InferenceServiceTests(unittest.TestCase):
         self.assertIn("محادثة مباشرة", template)
         self.assertIn("addReferences", template)
         self.assertIn("addActions", template)
+        self.assertIn("requestAnswer", template)
+        self.assertIn("يعيد الاتصال بالخادم", template)
         self.assertIn("conversation.slice", template)
         self.assertIn("إعادة الإجابة", template)
         self.assertIn("resumeLive", template)

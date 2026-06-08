@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import io
 import re
@@ -19,6 +20,7 @@ from knowledge_store import initialize as initialize_knowledge, status as knowle
 from knowledge_updater import update as update_knowledge
 
 
+LOGGER = logging.getLogger("jameel")
 JAMEEL_API_KEY = (
     os.environ.get("JAMEEL_API_KEY")
     or os.environ.get("PRIVATE_ACCOUNTING_AI_API_KEY", "")
@@ -192,10 +194,17 @@ def ask_question(request: QuestionRequest, x_accounting_ai_key: str | None = Hea
             )
 
         contextual_question = _question_with_history(request.question, request.history)
-        answer = ask(contextual_question, max_new_tokens=request.max_new_tokens)
+        try:
+            answer = ask(contextual_question, max_new_tokens=request.max_new_tokens)
+        except Exception:
+            if not request.history:
+                raise
+            LOGGER.exception("Contextual answer failed; retrying without conversation history.")
+            answer = ask(request.question, max_new_tokens=request.max_new_tokens)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
+        LOGGER.exception("Jameel answer endpoint failed.")
         raise HTTPException(
             status_code=503,
             detail="تعذر تشغيل محرك الإجابة الآن. حاول مرة أخرى بعد قليل.",
