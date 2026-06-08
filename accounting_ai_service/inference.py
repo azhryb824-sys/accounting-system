@@ -259,9 +259,12 @@ def _source_is_relevant(query: str, title: str, summary: str) -> bool:
         return True
     title_tokens = set(re.findall(r"[\w\u0600-\u06ff]+", title.lower()))
     source_tokens = set(re.findall(r"[\w\u0600-\u06ff]+", f"{title} {summary}".lower()))
-    if query_tokens & title_tokens:
+    title_overlap = len(query_tokens & title_tokens)
+    if title_overlap:
         return True
-    required_overlap = 1 if len(query_tokens) == 1 else min(2, len(query_tokens))
+    if len(query_tokens) == 1:
+        return False
+    required_overlap = max(2, (len(query_tokens) + 1) // 2)
     return len(query_tokens & source_tokens) >= required_overlap
 
 
@@ -578,6 +581,7 @@ def _answer_independent_knowledge(question: str) -> str | None:
     complementary = [
         row["summary"] for row in rows[1:]
         if row["summary"] != primary["summary"]
+        and row.get("relevance_score", 0) >= primary.get("relevance_score", 0) - 1
     ]
     if complementary:
         lines.extend(["", "معلومات مكملة:"])
@@ -1223,48 +1227,49 @@ class PrivateAccountingModel:
             raise ValueError("السؤال لا يمكن أن يكون فارغا.")
 
         question = normalize_user_question_text(question)
+        current_question = normalize_user_question_text(_extract_user_question(question))
 
-        memory_answer = _remember_user_information(question)
+        memory_answer = _remember_user_information(current_question)
         if memory_answer:
             return memory_answer
 
-        recalled_memory = _answer_from_user_memory(question)
+        recalled_memory = _answer_from_user_memory(current_question)
         if recalled_memory:
             return recalled_memory
 
-        math_answer = _math_answer(question)
+        math_answer = _math_answer(current_question)
         if math_answer:
             return math_answer
 
-        business_answer = _answer_business_ideation(question)
+        business_answer = _answer_business_ideation(current_question)
         if business_answer:
             return business_answer
 
-        greeting_answer = _answer_greeting(question)
+        greeting_answer = _answer_greeting(current_question)
         if greeting_answer:
             return greeting_answer
 
-        analysis = _analyze_question(question)
+        analysis = _analyze_question(current_question)
         if analysis.get("asks_accounting"):
-            private_answer = self._answer_from_private_knowledge(question)
+            private_answer = self._answer_from_private_knowledge(current_question)
             if private_answer:
                 return private_answer
 
         if analysis.get("asks_web") and not LOCAL_ANALYSIS_ONLY:
-            web_answer = _open_web_search_answer(question)
+            web_answer = _open_web_search_answer(current_question)
             if web_answer:
                 return web_answer
 
-        general_answer = _answer_general_knowledge(question)
+        general_answer = _answer_general_knowledge(current_question)
         if general_answer:
             return general_answer
 
-        independent_answer = _answer_independent_knowledge(question)
+        independent_answer = _answer_independent_knowledge(current_question)
         if independent_answer:
             return independent_answer
 
         if not LOCAL_ANALYSIS_ONLY and not analysis.get("asks_web"):
-            web_answer = _open_web_search_answer(question)
+            web_answer = _open_web_search_answer(current_question)
             if web_answer:
                 return web_answer
 
@@ -1287,7 +1292,7 @@ class PrivateAccountingModel:
         if REQUIRE_HOSTED_AI:
             raise ValueError("تم تفعيل REQUIRE_HOSTED_AI لكن المزود الخارجي لم يرجع إجابة. راجع OPENAI_COMPATIBLE_API_KEY و OPENAI_COMPATIBLE_MODEL و OPENAI_COMPATIBLE_BASE_URL.")
 
-        private_answer = self._answer_from_private_knowledge(question)
+        private_answer = self._answer_from_private_knowledge(current_question)
         if private_answer:
             return private_answer
 

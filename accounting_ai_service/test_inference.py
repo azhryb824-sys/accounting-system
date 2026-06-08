@@ -109,6 +109,25 @@ class InferenceServiceTests(unittest.TestCase):
         )
         search_knowledge.assert_called_once_with("الخرطوم", limit=3)
 
+    @patch("inference._answer_general_knowledge", return_value="الإجابة الحالية")
+    @patch("inference._answer_greeting", return_value=None)
+    @patch("inference._answer_business_ideation", return_value=None)
+    @patch("inference._math_answer", return_value=None)
+    def test_all_deterministic_routing_uses_only_current_question(
+        self, math_answer, business_answer, greeting_answer, general_answer
+    ):
+        contextual = (
+            "سياق المحادثة السابقة:\n"
+            "المستخدم: اشرح الفيزياء والرياضيات\n"
+            "جميل: شرح سابق.\n\n"
+            "سؤال المستخدم: اشرح موضوعا جديدا"
+        )
+        self.assertEqual(inference.ask(contextual), "الإجابة الحالية")
+        math_answer.assert_called_once_with("اشرح موضوعا جديدا")
+        business_answer.assert_called_once_with("اشرح موضوعا جديدا")
+        greeting_answer.assert_called_once_with("اشرح موضوعا جديدا")
+        general_answer.assert_called_once_with("اشرح موضوعا جديدا")
+
     def test_palestine_answers_use_legal_and_rights_based_framing(self):
         occupation = inference.ask("هل إسرائيل كيان غاصب؟")
         self.assertIn("احتلال", occupation)
@@ -132,6 +151,7 @@ class InferenceServiceTests(unittest.TestCase):
     def test_search_relevance_rejects_unrelated_academic_results(self):
         self.assertTrue(inference._source_is_relevant("الخديوي", "الخديوي إسماعيل", "حاكم مصر"))
         self.assertFalse(inference._source_is_relevant("عاصمة السعودية", "تحليل التوسع العمراني", "دراسة أكاديمية مفهرسة"))
+        self.assertFalse(inference._source_is_relevant("الخرطوم", "رياضيات", "دراسة المادة والحركة والأعداد"))
 
     def test_web_source_ranking_prefers_official_and_exact_sources(self):
         official = inference._web_source_score(

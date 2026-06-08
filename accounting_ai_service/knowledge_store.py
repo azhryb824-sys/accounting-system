@@ -93,9 +93,15 @@ def search(question, limit=4):
         body_tokens = _tokens(f"{row['topic']} {row['title']} {row['summary']}")
         title_overlap = len(tokens & title_tokens)
         body_overlap = len(tokens & body_tokens)
-        required_overlap = 1 if len(tokens) == 1 else min(2, len(tokens))
-        if title_overlap or body_overlap >= required_overlap:
-            ranked.append((title_overlap * 4 + body_overlap, dict(row)))
+        if len(tokens) == 1:
+            relevant = title_overlap == 1
+        else:
+            required_overlap = max(2, (len(tokens) + 1) // 2)
+            relevant = title_overlap > 0 or body_overlap >= required_overlap
+        if relevant:
+            item = dict(row)
+            item["relevance_score"] = title_overlap * 4 + body_overlap
+            ranked.append((item["relevance_score"], item))
     ranked.sort(key=lambda item: item[0], reverse=True)
     return [row for _score, row in ranked[:limit]]
 
