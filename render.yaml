@@ -17,5 +17,9 @@ services:
         value: "false"
       - key: ENABLE_OPEN_WEB_SEARCH
         value: "true"
+      - key: JAMEEL_KNOWLEDGE_UPDATE_INTERVAL_HOURS
+        value: "24"
+      - key: JAMEEL_API_KEY
+        sync: false
       - key: PYTHONUNBUFFERED
         value: "1"

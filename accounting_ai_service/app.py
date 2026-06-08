@@ -3,6 +3,8 @@ import os
 import io
 import re
 import wave
+import threading
+import time
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -13,9 +15,17 @@ import numpy as np
 from pydantic import BaseModel, Field
 
 from inference import MODEL_NAME, MODEL_OWNER, ask, extract_invoice_data, runtime_status
+from knowledge_store import initialize as initialize_knowledge, status as knowledge_status
+from knowledge_updater import update as update_knowledge
 
 
-PRIVATE_ACCOUNTING_AI_API_KEY = os.environ.get("PRIVATE_ACCOUNTING_AI_API_KEY", "").strip()
+JAMEEL_API_KEY = (
+    os.environ.get("JAMEEL_API_KEY")
+    or os.environ.get("PRIVATE_ACCOUNTING_AI_API_KEY", "")
+).strip()
+KNOWLEDGE_UPDATE_INTERVAL_HOURS = max(
+    0, int(os.environ.get("JAMEEL_KNOWLEDGE_UPDATE_INTERVAL_HOURS", "24") or 0)
+)
 
 
 app = FastAPI(
@@ -37,7 +47,7 @@ class AnswerResponse(BaseModel):
     owner: str
     answer: str
     data: dict[str, Any] | None = None
-    references: list[dict[str, str]] = []
+    references: list[dict[str, str]] = Field(default_factory=list)
 
 
 def _separate_references(answer: str) -> tuple[str, list[dict[str, str]]]:
@@ -51,6 +61,27 @@ def _separate_references(answer: str) -> tuple[str, list[dict[str, str]]]:
         if match:
             references.append({"title": match.group(1).strip(), "url": match.group(2).strip()})
     return clean_answer.strip(), references
+
+
+def _require_api_key(api_key):
+    if JAMEEL_API_KEY and api_key != JAMEEL_API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid Jameel API key.")
+
+
+def _knowledge_update_loop():
+    while KNOWLEDGE_UPDATE_INTERVAL_HOURS:
+        try:
+            update_knowledge()
+        except Exception:
+            pass
+        time.sleep(KNOWLEDGE_UPDATE_INTERVAL_HOURS * 3600)
+
+
+@app.on_event("startup")
+def start_independent_services():
+    initialize_knowledge()
+    if KNOWLEDGE_UPDATE_INTERVAL_HOURS:
+        threading.Thread(target=_knowledge_update_loop, daemon=True).start()
 
 
 class SpeechRequest(BaseModel):
@@ -106,13 +137,12 @@ def api_info() -> dict[str, str]:
 
 @app.get("/health")
 def health() -> dict[str, Any]:
-    return {"status": "ready", **runtime_status()}
+    return {"status": "ready", "knowledge": knowledge_status(), **runtime_status()}
 
 
 @app.post("/tts")
 def synthesize_speech(request: SpeechRequest, x_accounting_ai_key: str | None = Header(default=None)) -> Response:
-    if PRIVATE_ACCOUNTING_AI_API_KEY and x_accounting_ai_key != PRIVATE_ACCOUNTING_AI_API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid accounting AI key.")
+    _require_api_key(x_accounting_ai_key)
     try:
         audio = _arabic_tts().generate(request.text.strip(), speed=request.speed)
     except Exception as exc:
@@ -122,8 +152,7 @@ def synthesize_speech(request: SpeechRequest, x_accounting_ai_key: str | None = 
 
 @app.post("/ask", response_model=AnswerResponse)
 def ask_question(request: QuestionRequest, x_accounting_ai_key: str | None = Header(default=None)) -> AnswerResponse:
-    if PRIVATE_ACCOUNTING_AI_API_KEY and x_accounting_ai_key != PRIVATE_ACCOUNTING_AI_API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid accounting AI key.")
+    _require_api_key(x_accounting_ai_key)
     try:
         if request.image_base64:
             data = extract_invoice_data(
@@ -149,3 +178,15 @@ def ask_question(request: QuestionRequest, x_accounting_ai_key: str | None = Hea
 
     answer, references = _separate_references(answer)
     return AnswerResponse(model="جميل", owner=MODEL_OWNER, answer=answer, references=references)
+
+
+@app.get("/knowledge/status")
+def get_knowledge_status(x_accounting_ai_key: str | None = Header(default=None)):
+    _require_api_key(x_accounting_ai_key)
+    return {"ok": True, **knowledge_status()}
+
+
+@app.post("/knowledge/update")
+def run_knowledge_update(x_accounting_ai_key: str | None = Header(default=None)):
+    _require_api_key(x_accounting_ai_key)
+    return {"ok": True, "processed": update_knowledge(), **knowledge_status()}

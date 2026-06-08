@@ -9,14 +9,40 @@ The service includes an independent Arabic chat interface named **Jameel (جمي
 - API information: `/api-info`
 - Interactive API documentation: `/docs`
 
-The interface talks directly to `/ask` and `/tts`. If `PRIVATE_ACCOUNTING_AI_API_KEY`
-is enabled, enter the key in the interface sidebar; it is stored only in the browser
-session.
+The interface talks directly to `/ask` and `/tts`. If `JAMEEL_API_KEY` is enabled,
+enter the key in the interface sidebar; it is stored only in the browser session.
+`PRIVATE_ACCOUNTING_AI_API_KEY` remains supported for backward compatibility.
 
 Jameel's broad knowledge layer uses open web retrieval for general questions. It
 searches Wikipedia article indexes before fetching summaries, supplements factual
 matches with Wikidata, and can include OpenAlex research metadata. Stable high-use
 facts remain available locally when external sources are temporarily unavailable.
+
+## Independent knowledge development
+
+Jameel maintains its own SQLite knowledge store and does not require Django or the
+accounting database. On startup it refreshes selected Arabic and English topics from
+Wikipedia and Wikidata, then repeats the update every 24 hours by default.
+
+Run an update manually:
+
+```powershell
+cd accounting_ai_service
+python knowledge_updater.py
+```
+
+Administration endpoints:
+
+- `GET /knowledge/status`: entry count and last update time.
+- `POST /knowledge/update`: run an immediate update.
+
+Both endpoints use the same `JAMEEL_API_KEY` header protection as `/ask`. Configure
+the key in the `X-Accounting-AI-Key` header. Set
+`JAMEEL_KNOWLEDGE_UPDATE_INTERVAL_HOURS=0` to disable automatic updates.
+
+The default database is `data/jameel_knowledge.sqlite3`. On platforms with an
+ephemeral filesystem, mount persistent storage and set `JAMEEL_KNOWLEDGE_DB` to a
+path on that disk if knowledge must survive redeployments.
 
 This folder contains the source code for the private accounting AI service used by the Django system.
 

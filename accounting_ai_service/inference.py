@@ -18,6 +18,7 @@ from sympy.parsing.sympy_parser import (
     parse_expr,
     standard_transformations,
 )
+from knowledge_store import search as search_independent_knowledge
 
 try:
     from PIL import Image, ImageEnhance, ImageFilter, ImageOps
@@ -548,6 +549,32 @@ def _answer_business_ideation(text: str) -> str | None:
         "عالجها بعقد واضح وصلاحيات محدودة ونسخ احتياطية.\n\n"
         "لإعداد دراسة أدق، حدّد المدينة والميزانية وخبرتك والوقت المتاح يومياً."
     )
+
+
+def _answer_independent_knowledge(question: str) -> str | None:
+    try:
+        rows = search_independent_knowledge(question, limit=3)
+    except Exception:
+        return None
+    if not rows:
+        return None
+    primary = rows[0]
+    lines = [primary["summary"]]
+    complementary = [
+        row["summary"] for row in rows[1:]
+        if row["summary"] != primary["summary"]
+    ]
+    if complementary:
+        lines.extend(["", "معلومات مكملة:"])
+        lines.extend(f"- {summary}" for summary in complementary[:2])
+    references = [
+        (row["title"], row["source_url"]) for row in rows
+        if row.get("source_url")
+    ]
+    if references:
+        lines.extend(["", "روابط التحقق:"])
+        lines.extend(f"- {title}: {url}" for title, url in references)
+    return "\n".join(lines)
 
 
 SYSTEM_USAGE_PATTERNS = [
@@ -1205,6 +1232,10 @@ class PrivateAccountingModel:
         general_answer = _answer_general_knowledge(question)
         if general_answer:
             return general_answer
+
+        independent_answer = _answer_independent_knowledge(question)
+        if independent_answer:
+            return independent_answer
 
         if not LOCAL_ANALYSIS_ONLY:
             web_answer = _open_web_search_answer(question)

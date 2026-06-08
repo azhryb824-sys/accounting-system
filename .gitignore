@@ -15,6 +15,7 @@ data.json
 .DS_Store
 Thumbs.db
 accounting_ai_service/models/**/*
+accounting_ai_service/data/*.sqlite3
 !accounting_ai_service/models/voices/
 !accounting_ai_service/models/voices/vits-piper-ar_JO-kareem-medium/
 !accounting_ai_service/models/voices/vits-piper-ar_JO-kareem-medium/**/*
