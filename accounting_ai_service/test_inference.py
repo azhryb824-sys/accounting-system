@@ -62,6 +62,16 @@ class InferenceServiceTests(unittest.TestCase):
         self.assertEqual(inference.MODEL_NAME, "جميل")
         self.assertIn("أنا جميل", inference.ask("إيش اسمك؟"))
         self.assertIn("خدمة الذكاء الاصطناعي", inference.ask("أين أنت؟"))
+        greeting = inference.ask("هلا")
+        self.assertIn("أنا جميل", greeting)
+        self.assertNotIn("مساعدك المحاسبي داخل النظام", greeting)
+
+    def test_business_idea_request_returns_actionable_plan(self):
+        answer = inference.ask("حلل لي فكرة مشروع صغير")
+        self.assertIn("العملاء المستهدفون", answer)
+        self.assertIn("اختبار السوق خلال 14 يوماً", answer)
+        self.assertIn("نموذج فاتورة", answer)
+        self.assertNotIn("لا أملك إجابة موثوقة", answer)
 
     def test_general_geography_fallback_answers_capitals(self):
         self.assertIn("الخرطوم", inference.ask("ما هي عاصمة السودان"))
