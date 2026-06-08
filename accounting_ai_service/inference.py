@@ -257,8 +257,12 @@ def _source_is_relevant(query: str, title: str, summary: str) -> bool:
     }
     if not query_tokens:
         return True
-    source_text = f"{title} {summary}".lower()
-    return any(token in source_text for token in query_tokens)
+    title_tokens = set(re.findall(r"[\w\u0600-\u06ff]+", title.lower()))
+    source_tokens = set(re.findall(r"[\w\u0600-\u06ff]+", f"{title} {summary}".lower()))
+    if query_tokens & title_tokens:
+        return True
+    required_overlap = 1 if len(query_tokens) == 1 else min(2, len(query_tokens))
+    return len(query_tokens & source_tokens) >= required_overlap
 
 
 def _web_source_score(query: str, title: str, summary: str, url: str, source_type: str) -> int:
@@ -563,7 +567,8 @@ def _answer_business_ideation(text: str) -> str | None:
 
 def _answer_independent_knowledge(question: str) -> str | None:
     try:
-        rows = search_independent_knowledge(question, limit=3)
+        current_question = _extract_user_question(question)
+        rows = search_independent_knowledge(current_question, limit=3)
     except Exception:
         return None
     if not rows:

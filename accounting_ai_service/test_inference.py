@@ -93,6 +93,21 @@ class InferenceServiceTests(unittest.TestCase):
         self.assertIn("القوائم المالية", accounting)
         self.assertIn("ملتقى النيل الأزرق والنيل الأبيض", khartoum)
         self.assertIn("ملتقى النيل الأزرق والنيل الأبيض", inference.ask("الخرطوم"))
+        contextual = (
+            "سياق المحادثة السابقة:\n"
+            "المستخدم: اشرح الرياضيات والفيزياء\n"
+            "جميل: الرياضيات علم الأعداد والأنماط.\n\n"
+            "سؤال المستخدم: الخرطوم"
+        )
+        self.assertIn("ملتقى النيل الأزرق والنيل الأبيض", inference.ask(contextual))
+
+    @patch("inference.search_independent_knowledge")
+    def test_independent_search_receives_only_current_question(self, search_knowledge):
+        search_knowledge.return_value = []
+        inference._answer_independent_knowledge(
+            "سياق المحادثة السابقة:\nالمستخدم: الرياضيات والفيزياء\n\nسؤال المستخدم: الخرطوم"
+        )
+        search_knowledge.assert_called_once_with("الخرطوم", limit=3)
 
     def test_palestine_answers_use_legal_and_rights_based_framing(self):
         occupation = inference.ask("هل إسرائيل كيان غاصب؟")

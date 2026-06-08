@@ -11,6 +11,18 @@ STORE_PATH = Path(
     or Path(__file__).resolve().parent / "data" / "jameel_knowledge.sqlite3"
 )
 _LOCK = threading.Lock()
+_STOP_WORDS = {
+    "ما", "ماذا", "من", "هو", "هي", "عن", "في", "على", "إلى", "الى",
+    "اشرح", "عرف", "تعريف", "the", "is", "of", "and", "what", "who",
+}
+
+
+def _tokens(text):
+    return {
+        token
+        for token in re.findall(r"[\w\u0600-\u06ff]+", (text or "").lower())
+        if len(token) > 2 and token not in _STOP_WORDS
+    }
 
 
 def _connect():
@@ -68,10 +80,7 @@ def upsert(topic, title, summary, source_url="", source_name="", language="ar"):
 
 def search(question, limit=4):
     initialize()
-    tokens = {
-        token for token in re.findall(r"[\w\u0600-\u06ff]+", (question or "").lower())
-        if len(token) > 2
-    }
+    tokens = _tokens(question)
     if not tokens:
         return []
     with _connect() as connection:
@@ -80,11 +89,13 @@ def search(question, limit=4):
         ).fetchall()
     ranked = []
     for row in rows:
-        title = row["title"].lower()
-        body = f"{row['topic']} {row['title']} {row['summary']}".lower()
-        overlap = sum(3 if token in title else 1 for token in tokens if token in body)
-        if overlap:
-            ranked.append((overlap, dict(row)))
+        title_tokens = _tokens(row["title"])
+        body_tokens = _tokens(f"{row['topic']} {row['title']} {row['summary']}")
+        title_overlap = len(tokens & title_tokens)
+        body_overlap = len(tokens & body_tokens)
+        required_overlap = 1 if len(tokens) == 1 else min(2, len(tokens))
+        if title_overlap or body_overlap >= required_overlap:
+            ranked.append((title_overlap * 4 + body_overlap, dict(row)))
     ranked.sort(key=lambda item: item[0], reverse=True)
     return [row for _score, row in ranked[:limit]]
 
@@ -95,4 +106,3 @@ def status():
         count = connection.execute("SELECT COUNT(*) FROM knowledge").fetchone()[0]
         latest = connection.execute("SELECT MAX(updated_at) FROM knowledge").fetchone()[0]
     return {"entries": count, "last_updated_at": latest or "", "path": str(STORE_PATH)}
-
