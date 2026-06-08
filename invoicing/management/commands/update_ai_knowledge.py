@@ -69,6 +69,21 @@ def _clean_text(text, limit=900):
     return clean[:limit]
 
 
+def _is_relevant_result(topic, title, description=""):
+    stop_words = {
+        "the", "and", "for", "with", "from", "into", "using", "analysis",
+        "system", "science", "management", "education", "research",
+    }
+    topic_tokens = {
+        token for token in re.findall(r"[a-z0-9]+", (topic or "").lower())
+        if len(token) > 2 and token not in stop_words
+    }
+    if not topic_tokens:
+        return True
+    candidate = f"{title} {description}".lower()
+    return any(token in candidate for token in topic_tokens)
+
+
 class Command(BaseCommand):
     help = "Update the AI knowledge base from configured free and official internet sources."
 
@@ -125,6 +140,8 @@ class Command(BaseCommand):
                 for row in rows[:limit]:
                     title = row.get("title") or topic
                     summary = _clean_text(re.sub("<[^>]+>", " ", row.get("snippet") or ""))
+                    if not _is_relevant_result(topic, title, summary):
+                        continue
                     page_url = f"https://en.wikipedia.org/wiki/{quote(title.replace(' ', '_'))}"
                     upsert_ai_knowledge_entry(wiki_source, title, summary, page_url, topic=topic)
                     created_or_updated += 1
@@ -161,6 +178,8 @@ class Command(BaseCommand):
                 for row in response.json().get("search", [])[:limit]:
                     title = row.get("label") or topic
                     description = row.get("description") or "Structured public knowledge entry."
+                    if not _is_relevant_result(topic, title, description):
+                        continue
                     entity_id = row.get("id") or ""
                     page_url = f"https://www.wikidata.org/wiki/{entity_id}" if entity_id else "https://www.wikidata.org/"
                     upsert_ai_knowledge_entry(wikidata_source, title, _clean_text(description), page_url, topic=topic)
@@ -191,6 +210,8 @@ class Command(BaseCommand):
                 response.raise_for_status()
                 for row in response.json().get("results", [])[:limit]:
                     title = row.get("title") or topic
+                    if not _is_relevant_result(topic, title):
+                        continue
                     year = row.get("publication_year") or "unknown year"
                     cited = row.get("cited_by_count") or 0
                     source_url = row.get("doi") or row.get("id") or "https://openalex.org/"

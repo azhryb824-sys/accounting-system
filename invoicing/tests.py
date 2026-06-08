@@ -15,9 +15,17 @@ from invoicing.models import AIInteractionLearning, AIKnowledgeEntry, AIKnowledg
 from invoicing.ai_services import _is_geography_question, _nominatim_geography_facts, _polish_answer, analyze_and_route_user_request, answer_financial_question, handle_ai_management_command, normalize_user_question_text, record_ai_interaction_learning
 from invoicing.purchase_views import post_purchase_invoice
 from invoicing.views import post_sales_invoice
+from invoicing.management.commands.update_ai_knowledge import _is_relevant_result
 
 
 class InvoiceAccountingTests(TestCase):
+    def test_knowledge_updater_rejects_unrelated_academic_results(self):
+        self.assertTrue(_is_relevant_result("machine learning", "Random Forests for machine learning"))
+        self.assertFalse(_is_relevant_result(
+            "Arabic natural language processing",
+            "Development and Distortion of Malaysian Public-Private Partnerships",
+        ))
+
     def test_geography_questions_are_detected(self):
         self.assertTrue(_is_geography_question("ما عاصمة المملكة العربية السعودية؟"))
         self.assertTrue(_is_geography_question("أين تقع مدينة الإسكندرية؟"))
