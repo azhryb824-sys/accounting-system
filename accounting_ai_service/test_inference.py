@@ -141,6 +141,26 @@ class InferenceServiceTests(unittest.TestCase):
         self.assertEqual(references[0]["title"], "مصدر رسمي")
         self.assertEqual(references[0]["url"], "https://example.gov/test")
 
+    def test_api_includes_recent_conversation_context(self):
+        contextual = app._question_with_history(
+            "وماذا عن مساحتها؟",
+            [
+                {"role": "user", "content": "حدثني عن السعودية"},
+                {"role": "assistant", "content": "السعودية دولة عربية تقع في آسيا."},
+            ],
+        )
+        self.assertIn("سياق المحادثة السابقة", contextual)
+        self.assertIn("حدثني عن السعودية", contextual)
+        self.assertTrue(contextual.endswith("سؤال المستخدم: وماذا عن مساحتها؟"))
+
+    @patch("inference._open_web_search_answer", return_value="إجابة حديثة من الإنترنت")
+    @patch("inference._answer_general_knowledge", return_value="إجابة محلية قديمة")
+    def test_current_questions_prioritize_web_over_local_knowledge(self, local_answer, web_answer):
+        answer = inference.ask("ما أحدث معلومات اليوم عن الموضوع؟")
+        self.assertEqual(answer, "إجابة حديثة من الإنترنت")
+        web_answer.assert_called_once()
+        local_answer.assert_not_called()
+
     def test_jameel_chat_keeps_composer_inside_viewport(self):
         template = (Path(__file__).resolve().parent / "templates" / "jameel.html").read_text(encoding="utf-8")
         self.assertIn("height:100dvh", template)
@@ -149,6 +169,9 @@ class InferenceServiceTests(unittest.TestCase):
         self.assertIn("main{min-width:0;min-height:0;overflow:hidden", template)
         self.assertIn("محادثة مباشرة", template)
         self.assertIn("addReferences", template)
+        self.assertIn("addActions", template)
+        self.assertIn("conversation.slice", template)
+        self.assertIn("إعادة الإجابة", template)
         self.assertIn("resumeLive", template)
 
 

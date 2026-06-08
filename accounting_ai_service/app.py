@@ -38,6 +38,10 @@ app = FastAPI(
 class QuestionRequest(BaseModel):
     question: str = Field(..., min_length=1, description="السؤال المطلوب إجابته.")
     max_new_tokens: int = Field(420, ge=20, le=1800, description="الحد الأعلى لطول الإجابة.")
+    history: list[dict[str, str]] = Field(
+        default_factory=list,
+        description="آخر رسائل المحادثة للحفاظ على سياق الأسئلة المتتابعة.",
+    )
     image_base64: str | None = Field(None, description="صورة أو ملف فاتورة مشفر Base64.")
     media_type: str | None = Field(None, description="نوع الملف المرفق مثل image/jpeg أو application/pdf.")
 
@@ -48,6 +52,25 @@ class AnswerResponse(BaseModel):
     answer: str
     data: dict[str, Any] | None = None
     references: list[dict[str, str]] = Field(default_factory=list)
+    used_web: bool = False
+    elapsed_ms: int = 0
+
+
+def _question_with_history(question: str, history: list[dict[str, str]]) -> str:
+    clean_history = []
+    for item in history[-8:]:
+        role = str(item.get("role", "")).strip().lower()
+        content = re.sub(r"\s+", " ", str(item.get("content", ""))).strip()[:1200]
+        if role in {"user", "assistant"} and content:
+            clean_history.append((role, content))
+    if not clean_history:
+        return question
+    lines = ["سياق المحادثة السابقة:"]
+    for role, content in clean_history:
+        label = "المستخدم" if role == "user" else "جميل"
+        lines.append(f"{label}: {content}")
+    lines.extend(["", f"سؤال المستخدم: {question}"])
+    return "\n".join(lines)
 
 
 def _separate_references(answer: str) -> tuple[str, list[dict[str, str]]]:
@@ -153,6 +176,7 @@ def synthesize_speech(request: SpeechRequest, x_accounting_ai_key: str | None = 
 @app.post("/ask", response_model=AnswerResponse)
 def ask_question(request: QuestionRequest, x_accounting_ai_key: str | None = Header(default=None)) -> AnswerResponse:
     _require_api_key(x_accounting_ai_key)
+    started_at = time.perf_counter()
     try:
         if request.image_base64:
             data = extract_invoice_data(
@@ -167,7 +191,8 @@ def ask_question(request: QuestionRequest, x_accounting_ai_key: str | None = Hea
                 data=data,
             )
 
-        answer = ask(request.question, max_new_tokens=request.max_new_tokens)
+        contextual_question = _question_with_history(request.question, request.history)
+        answer = ask(contextual_question, max_new_tokens=request.max_new_tokens)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
@@ -177,7 +202,14 @@ def ask_question(request: QuestionRequest, x_accounting_ai_key: str | None = Hea
         ) from exc
 
     answer, references = _separate_references(answer)
-    return AnswerResponse(model="جميل", owner=MODEL_OWNER, answer=answer, references=references)
+    return AnswerResponse(
+        model="جميل",
+        owner=MODEL_OWNER,
+        answer=answer,
+        references=references,
+        used_web=bool(references),
+        elapsed_ms=round((time.perf_counter() - started_at) * 1000),
+    )
 
 
 @app.get("/knowledge/status")

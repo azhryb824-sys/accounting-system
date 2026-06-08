@@ -1229,6 +1229,12 @@ class PrivateAccountingModel:
         if greeting_answer:
             return greeting_answer
 
+        analysis = _analyze_question(question)
+        if analysis.get("asks_web") and not LOCAL_ANALYSIS_ONLY:
+            web_answer = _open_web_search_answer(question)
+            if web_answer:
+                return web_answer
+
         general_answer = _answer_general_knowledge(question)
         if general_answer:
             return general_answer
@@ -1237,7 +1243,7 @@ class PrivateAccountingModel:
         if independent_answer:
             return independent_answer
 
-        if not LOCAL_ANALYSIS_ONLY:
+        if not LOCAL_ANALYSIS_ONLY and not analysis.get("asks_web"):
             web_answer = _open_web_search_answer(question)
             if web_answer:
                 return web_answer
